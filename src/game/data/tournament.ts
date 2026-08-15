@@ -1,0 +1,81 @@
+import type { HouseDef } from "../types";
+import { COLORS } from "../config";
+
+export const TOURNAMENT_HOUSE: HouseDef = {
+  id: "rudis",
+  name: "The Rudis",
+  latinName: "The Rudis",
+  animalName: "Freedom",
+  colors: { primary: COLORS.gold, secondary: 0x1a1210, accent: 0xe8dcc8 },
+  philosophy: "Win three bouts. Take the wooden sword. Walk free.",
+  preferredWeapons: ["malleus", "securis", "dual_blades"],
+  difficulty: 9,
+  arenaId: "sand_arena",
+  championId: "tourney_3",
+  bannerTex: "tile-banner-red",
+  crowdTint: COLORS.gold,
+  titleColor: "#e8c96a",
+  arenaLabel: "THE RUDIS",
+  fighters: [
+    {
+      id: "tourney_1",
+      name: "Scaeva",
+      title: "Dust Crown",
+      weapon: "dual_blades",
+      aiStyle: "elite",
+      isChampion: false,
+      color: 0x4a5c6e,
+      scale: 1.06,
+      stats: { maxHealth: 190, maxStamina: 110, attack: 18, defense: 7, agility: 16 },
+      intro: [
+        "The editor's first blade walks out without a house banner.",
+        '"Three bouts. Survive me and you may still die standing."',
+      ],
+      victory: ["Scaeva sheathes both, breathing hard.", '"The Beam is next. Do not dance."'],
+      defeat: ["Two cuts. The stands do not cheer.", '"Freedom is not for the slow."'],
+      rewards: { denarii: 280, xp: 600 },
+    },
+    {
+      id: "tourney_2",
+      name: "Balbus",
+      title: "The Beam",
+      weapon: "securis",
+      aiStyle: "champion",
+      isChampion: false,
+      color: 0x5a3a18,
+      scale: 1.2,
+      stats: { maxHealth: 240, maxStamina: 100, attack: 21, defense: 14, agility: 5 },
+      intro: [
+        "A heavy man with an axe like a fallen timber.",
+        '"The Hammer waits. I am only the door."',
+      ],
+      victory: ["The axe stays in the sand.", '"Go. He will not miss."'],
+      defeat: ["The yard tilts.", '"The door stays shut."'],
+      rewards: { denarii: 340, xp: 750 },
+    },
+    {
+      id: "tourney_3",
+      name: 'Malleolus "The Hammer"',
+      title: "Executioner of the City",
+      weapon: "malleus",
+      aiStyle: "champion",
+      isChampion: true,
+      color: 0x1c1410,
+      scale: 1.22,
+      stats: { maxHealth: 268, maxStamina: 108, attack: 24, defense: 12, agility: 7 },
+      intro: [
+        "No beast. No banner but gold.",
+        "The war hammer rests on his shoulder as if it were light.",
+        '"Win, and the rudis is yours. Fall, and the city keeps your name."',
+      ],
+      victory: [
+        "The hammer drops. The stands roar once, then go still.",
+        '"Take the wood. Walk. You are no one\'s property."',
+      ],
+      defeat: ["Malleolus does not gloat.", '"The city still owns the sand."'],
+      rewards: { denarii: 600, xp: 1200, unlockWeapon: "malleus" },
+    },
+  ],
+};
+
+export const TOURNAMENT_ORDER = ["tourney_1", "tourney_2", "tourney_3"] as const;
