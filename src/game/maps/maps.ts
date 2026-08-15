@@ -124,15 +124,20 @@ export function buildLudus(): BuiltMap {
   props.push({ kind: "barrel", ...cell(46, 11) });
 
   addRect(tiles, solids, "tile-wood", 1, 14, 8, 19);
+  addRect(tiles, solids, "tile-straw", 3, 16, 6, 17);
   addRect(tiles, solids, "tile-wall", 1, 14, 8, 14, true);
+  addRect(tiles, solids, yardBanner, 4, 14, 5, 14, true);
   addRect(tiles, solids, "tile-wall", 8, 14, 8, 19, true);
   addRect(tiles, solids, "tile-wall", 1, 19, 8, 19, true);
   addRect(tiles, solids, "tile-wood", 8, 16, 8, 17);
   solids.push(...popSolids(solids, 8, 16, 8, 17));
   spawns.pal = cell(4, 16);
   props.push({ kind: "perch", ...cell(3, 15) });
-  props.push({ kind: "hay", ...cell(7, 15) });
-  props.push({ kind: "hay", ...cell(2, 18) });
+  props.push({ kind: "nest", ...cell(4, 16) });
+  props.push({ kind: "bowl", ...cell(6, 15) });
+  props.push({ kind: "trough", ...cell(2, 18) });
+  props.push({ kind: "hay", ...cell(7, 18) });
+  props.push({ kind: "hook", ...cell(7, 15) });
 
   addRect(tiles, solids, "tile-wood-pale", 35, 14, 46, 21);
   addRect(tiles, solids, "tile-mosaic", 38, 16, 43, 19);
@@ -142,6 +147,7 @@ export function buildLudus(): BuiltMap {
   addRect(tiles, solids, "tile-wood-pale", 35, 17, 35, 18);
   solids.push(...popSolids(solids, 35, 17, 35, 18));
   props.push({ kind: "dice", ...cell(40, 18) });
+  spawns.rufusHall = cell(44, 17);
 
   addRect(tiles, solids, "tile-dirt", 17, 14, 30, 23);
   addRect(tiles, solids, "tile-fence", 16, 13, 31, 13, true);

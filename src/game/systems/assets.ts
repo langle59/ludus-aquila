@@ -1438,6 +1438,17 @@ function makeDecor(scene: Phaser.Scene): void {
 function makeInteriorProps(scene: Phaser.Scene): void {
   makeRug(scene, "tile-rug-armory", 0x6a2420, 0x3a1410, COLORS.gold);
   makeRug(scene, "tile-rug-quarters", 0x5a4a38, 0x3a3024, 0xe8dcc8);
+  canvasTex(scene, "tile-straw", 32, 32, (ctx) => {
+    px(ctx, 0, 0, 32, 32, 0x6b4424);
+    px(ctx, 0, 0, 32, 1, 0x8a6240, 0.35);
+    for (let i = 0; i < 22; i++) {
+      const x = (i * 11) % 30;
+      const y = 3 + ((i * 7) % 26);
+      px(ctx, x, y, 7 + (i % 3), 1, i % 2 ? 0xc4a66e : 0xa8884c, 0.72);
+    }
+    px(ctx, 8, 14, 10, 1, 0xd8c08a, 0.4);
+    px(ctx, 18, 22, 8, 1, 0x8a6a44, 0.5);
+  });
   canvasTex(scene, "prop-anvil", 36, 28, (ctx) => {
     px(ctx, 12, 18, 12, 10, 0x5a3a18);
     px(ctx, 10, 16, 16, 4, 0x6b4a28);
@@ -1497,6 +1508,50 @@ function makeInteriorProps(scene: Phaser.Scene): void {
     px(ctx, 0, 14, 8, 4, 0x4a3018);
     px(ctx, 28, 14, 8, 4, 0x4a3018);
     px(ctx, 12, 2, 12, 4, COLORS.gold, 0.7);
+  });
+  canvasTex(scene, "prop-perch", 40, 44, (ctx) => {
+    px(ctx, 8, 18, 5, 24, 0x5a3a18);
+    px(ctx, 27, 20, 5, 22, 0x4a2c10);
+    px(ctx, 6, 40, 10, 4, 0x3a2414);
+    px(ctx, 25, 40, 10, 4, 0x3a2414);
+    px(ctx, 4, 16, 32, 5, 0x6b4a2f);
+    px(ctx, 5, 16, 30, 2, 0x8a6a44);
+    px(ctx, 10, 12, 20, 5, 0xc4a66e, 0.85);
+    px(ctx, 12, 10, 16, 3, 0xd8c08a, 0.7);
+    px(ctx, 14, 8, 4, 1, 0xa8884c, 0.8);
+    px(ctx, 22, 9, 5, 1, 0xc4a66e, 0.75);
+  });
+  canvasTex(scene, "prop-trough", 40, 24, (ctx) => {
+    px(ctx, 2, 10, 36, 12, 0x5a3a18);
+    px(ctx, 2, 10, 36, 3, 0x8a6a44);
+    px(ctx, 4, 12, 32, 8, 0x3a2a18);
+    oval(ctx, 20, 16, 13, 5, 0x3a6a78);
+    oval(ctx, 20, 15, 10, 3, 0x6a9aaa, 0.7);
+    px(ctx, 4, 20, 4, 4, 0x4a2c10);
+    px(ctx, 32, 20, 4, 4, 0x4a2c10);
+  });
+  canvasTex(scene, "prop-feed-bowl", 22, 14, (ctx) => {
+    oval(ctx, 11, 8, 10, 5, 0x6a3e24);
+    oval(ctx, 11, 7, 8, 3, 0x8a5a32);
+    oval(ctx, 11, 7, 5, 2, 0xc4a66e, 0.8);
+    px(ctx, 8, 6, 2, 1, 0xa8884c);
+    px(ctx, 12, 6, 2, 1, 0xd8c08a);
+  });
+  canvasTex(scene, "prop-nest", 52, 26, (ctx) => {
+    oval(ctx, 26, 16, 24, 9, 0x6b4a2f);
+    oval(ctx, 26, 15, 20, 7, 0xc4a66e, 0.9);
+    oval(ctx, 26, 14, 12, 4, 0x8a6240, 0.7);
+    for (let i = 0; i < 10; i++) {
+      px(ctx, 6 + i * 4, 10 + (i % 3), 6, 1, i % 2 ? 0xd8c08a : 0xa8884c, 0.75);
+    }
+  });
+  canvasTex(scene, "prop-collar-hook", 16, 28, (ctx) => {
+    px(ctx, 6, 2, 4, 6, 0x4a4038);
+    circ(ctx, 8, 10, 4, 0x8a8478);
+    circ(ctx, 8, 10, 2, 0x2a2218);
+    px(ctx, 7, 14, 2, 10, 0x6a6458);
+    circ(ctx, 8, 24, 3, 0x8a8478);
+    px(ctx, 4, 22, 8, 2, COLORS.gold, 0.65);
   });
   canvasTex(scene, "prop-trophy-empty", 28, 36, (ctx) => {
     px(ctx, 2, 8, 24, 26, 0x5a3a18);

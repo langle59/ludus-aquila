@@ -190,6 +190,9 @@ export interface SaveData {
   playerHouse: string | null;
   tournamentWins: number;
   freedomWon: boolean;
+  nightKind: "exhibition" | "weapon" | null;
+  nightOpponent: string | null;
+  nightWins: number;
   tunic: TunicColor;
   level: number;
   xp: number;

@@ -8,6 +8,7 @@ import { SHOP_ITEMS, shopUnlocked } from "../data/shop";
 import { grantPalPoint, grantPalXp, palAnimalName, palBrought, palTier, palTitle, palUnlocked } from "../data/pal";
 import { recordWeaponWin } from "../data/weapons";
 import { bus } from "./bus";
+import { completeNight, ensureNight, arenaWeapon } from "./nights";
 
 const REP_ORDER: ReputationTier[] = [
   "Unknown",
@@ -227,7 +228,7 @@ function grantWeapon(id: WeaponId): void {
   if (!gameState.save.unlockedWeapons.includes(id)) gameState.save.unlockedWeapons.push(id);
 }
 
-export function applyArenaVictory(opponentId: string): { denarii: number; xp: number; unlocked?: WeaponId; leveled: boolean; palNote?: string } {
+export function applyArenaVictory(opponentId: string): { denarii: number; xp: number; unlocked?: WeaponId; leveled: boolean; palNote?: string; nightNote?: string } {
   const found = getRival(opponentId);
   if (!found) return { denarii: 0, xp: 0, leveled: false };
   const { house, fighter } = found;
@@ -236,11 +237,21 @@ export function applyArenaVictory(opponentId: string): { denarii: number; xp: nu
   if (firstWin) s.defeatedOpponents.push(opponentId);
   const rawXp = firstWin ? fighter.rewards.xp : Math.round(fighter.rewards.xp * 0.5);
   const bond = palUnlocked(s) ? (palBrought(s) ? 0.9 : 1.15) : 1;
-  const xp = Math.round(rawXp * bond);
-  const denarii = firstWin ? fighter.rewards.denarii : Math.round(fighter.rewards.denarii * 0.5);
+  let xp = Math.round(rawXp * bond);
+  let denarii = firstWin ? fighter.rewards.denarii : Math.round(fighter.rewards.denarii * 0.5);
+  let nightNote: string | undefined;
+  const finishedNight = completeNight(opponentId);
+  if (finishedNight) {
+    denarii += finishedNight.bonusDenarii;
+    xp += finishedNight.bonusXp;
+    nightNote =
+      finishedNight.kind === "weapon"
+        ? `Weapon night. The editor pays extra. +${finishedNight.bonusDenarii} denarii.`
+        : `Exhibition. The editor pays extra. +${finishedNight.bonusDenarii} denarii.`;
+  }
   addDenarii(denarii);
   const { leveled } = addXp(xp);
-  recordWeaponWin(s.equippedWeapon);
+  recordWeaponWin(arenaWeapon());
   const unlocked: WeaponId[] = [];
   let palNote: string | undefined;
   if (firstWin && fighter.rewards.unlockWeapon) {
@@ -292,6 +303,7 @@ export function applyArenaVictory(opponentId: string): { denarii: number; xp: nu
       if (s.palUnlocked && palTier(s) > beforeTier) {
         palNote = `Your ${palAnimalName(s).toLowerCase()} becomes ${palTitle(palTier(s), s)}.`;
       }
+      ensureNight();
     }
   }
   if (palUnlocked(s) && palBrought(s)) {
@@ -311,6 +323,7 @@ export function applyArenaVictory(opponentId: string): { denarii: number; xp: nu
     unlocked: firstWin ? unlocked[0] : undefined,
     leveled,
     palNote,
+    nightNote,
   };
 }
 

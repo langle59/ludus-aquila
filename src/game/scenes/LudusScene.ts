@@ -3,7 +3,7 @@ import { TILE_SIZE, HUD_CAM_PAD } from "../config";
 import { gameState } from "../state/GameState";
 import { bus } from "../systems/bus";
 import { audio } from "../systems/audio";
-import { paintMap, labelMap, animateFountain } from "../systems/worldRender";
+import { paintMap, labelMap, animateFountain, animateTrough } from "../systems/worldRender";
 import { buildLudus, LUDUS_META } from "../maps/maps";
 import { Fighter, attachHpBar } from "../entities/Fighter";
 import { NpcActor, TrainingDummy, WorldProp } from "../entities/World";
@@ -18,6 +18,7 @@ import { palCombatStats, palDisplayName, palTexture, palUnlocked } from "../data
 import { getHouse } from "../data/houses";
 import { bodyStyleFor } from "../systems/assets";
 import { CombatInput } from "../systems/input";
+import { ensureNight, rufusAtTable } from "../systems/nights";
 
 function mixTint(a: number, b: number, t: number): number {
   const ar = (a >> 16) & 255;
@@ -42,6 +43,10 @@ export class LudusScene extends Phaser.Scene {
   private interactables: { kind: string; x: number; y: number; id?: string }[] = [];
   private palSprite?: Phaser.GameObjects.Image;
   private palNameTag?: Phaser.GameObjects.Text;
+  private palShadow?: Phaser.GameObjects.Image;
+  private roostGfx: Phaser.GameObjects.GameObject[] = [];
+  private palHome = { x: 0, y: 0 };
+  private roostIdleArmed = false;
   private nearestHint?: Phaser.GameObjects.Text;
   private sparring: { enemy: Fighter; ai: CombatAI; npcId: string } | null = null;
   private hiddenNpc?: NpcActor;
@@ -84,8 +89,9 @@ export class LudusScene extends Phaser.Scene {
 
     this.spawnNpcs();
     this.spawnProps();
-    this.spawnPalRoost();
+    this.refreshRoost();
     this.refreshHall();
+    if (gameState.save.freedomWon) ensureNight();
 
     this.nearestHint = this.add
       .text(0, 0, "", { fontFamily: "Georgia", fontSize: "14px", color: "#d4a84b", stroke: "#1a1210", strokeThickness: 4 })
@@ -114,6 +120,8 @@ export class LudusScene extends Phaser.Scene {
       gameState.restoreVitals();
       bus.emit("minimap-scene", "ludus");
       this.refreshHall();
+      this.refreshRoost();
+      if (gameState.save.freedomWon) ensureNight();
       if (gameState.save.freedomWon && !gameState.save.dialogueFlags.freedomSpeech) {
         gameState.save.dialogueFlags.freedomSpeech = true;
         gameState.persist();
@@ -150,6 +158,7 @@ export class LudusScene extends Phaser.Scene {
       bus.emit("spar-available", { show: false });
       bus.emit("talk-available", { show: false });
       bus.emit("minimap-scene", "none");
+      audio.setHall(false);
     });
 
     this.setupDebug();
@@ -247,8 +256,18 @@ export class LudusScene extends Phaser.Scene {
       } else if (p.kind === "hay") {
         this.add.image(p.x, p.y, "prop-hay").setDepth(2);
       } else if (p.kind === "perch") {
-        this.add.image(p.x, p.y, "prop-hay").setDepth(2);
-        this.interactables.push({ kind: "pal", x: p.x, y: p.y });
+        const perch = new WorldProp(this, p.x, p.y + 4, "perch", "prop-perch", true);
+        this.physics.add.collider(this.player, perch);
+      } else if (p.kind === "nest") {
+        this.add.image(p.x, p.y + 6, "prop-nest").setDepth(2);
+      } else if (p.kind === "bowl") {
+        this.add.image(p.x, p.y + 4, "prop-feed-bowl").setDepth(p.y + 2);
+      } else if (p.kind === "trough") {
+        const trough = new WorldProp(this, p.x, p.y, "trough", "prop-trough", true);
+        this.physics.add.collider(this.player, trough);
+        animateTrough(this, p.x, p.y);
+      } else if (p.kind === "hook") {
+        this.add.image(p.x, p.y - 8, "prop-collar-hook").setDepth(p.y);
       } else if (p.kind === "bench") {
         const b = new WorldProp(this, p.x, p.y, "bench", "prop-bench", true);
         this.physics.add.collider(this.player, b);
@@ -278,6 +297,7 @@ export class LudusScene extends Phaser.Scene {
     this.trophyGfx = [];
     this.interactables = this.interactables.filter((it) => it.kind !== "trophy");
     this.tableLock?.setVisible(!gameState.save.freedomWon);
+    this.seatRufus();
 
     const houses = rivalHouses();
     const north = houses.slice(0, 4);
@@ -319,34 +339,139 @@ export class LudusScene extends Phaser.Scene {
     place(south, this.hallSlotCols(south.length), 20);
   }
 
-  private spawnPalRoost(): void {
+  private seatRufus(): void {
+    const npc = this.npcs.find((n) => n.npcId === "rufus");
+    const hall = this.built.spawns.rufusHall;
+    const yard = this.built.spawns.rufus;
+    if (!npc || !hall || !yard) return;
+    const pos = rufusAtTable() ? hall : yard;
+    npc.place(pos.x, pos.y);
+    const it = this.interactables.find((item) => item.kind === "npc" && item.id === "rufus");
+    if (it) {
+      it.x = pos.x;
+      it.y = pos.y;
+    }
+  }
+
+  private npcCanSpar(id: string): boolean {
+    if (id === "rufus" && rufusAtTable()) return false;
+    return getNpc(id).canSpar;
+  }
+
+  private clearRoostGfx(): void {
+    for (const g of this.roostGfx) g.destroy();
+    this.roostGfx = [];
+    this.palSprite = undefined;
+    this.palNameTag = undefined;
+    this.palShadow = undefined;
+  }
+
+  private refreshRoost(): void {
     const pos = this.built.spawns.pal;
     if (!pos) return;
+    this.palHome = { x: pos.x, y: pos.y };
+    this.clearRoostGfx();
+    this.interactables = this.interactables.filter((it) => it.kind !== "pal");
     this.interactables.push({ kind: "pal", x: pos.x, y: pos.y });
-    if (!palUnlocked()) return;
-    const stats = palCombatStats();
-    this.add.image(pos.x, pos.y + 10, "char-shadow").setDepth(1).setScale(0.85);
-    const img = this.add.image(pos.x, pos.y - 12, palTexture()).setDepth(pos.y).setScale(stats.visScale);
-    if (stats.tint) img.setTint(stats.tint);
-    this.palSprite = img;
+
+    const home = palUnlocked();
+    const stats = home ? palCombatStats() : null;
+
+    const nestGlow = this.add.image(pos.x, pos.y - 4, "fx-glow").setDepth(3).setAlpha(0.22).setScale(0.7).setBlendMode(Phaser.BlendModes.ADD);
+    this.roostGfx.push(nestGlow);
     this.tweens.add({
-      targets: img,
-      y: pos.y - 18,
-      duration: 900,
+      targets: nestGlow,
+      alpha: { from: 0.12, to: 0.28 },
+      scale: { from: 0.6, to: 0.85 },
+      duration: 1400,
       yoyo: true,
       repeat: -1,
-      ease: "Sine.easeInOut",
     });
-    this.palNameTag = this.add
-      .text(pos.x, pos.y - 38, palDisplayName(), {
-        fontFamily: "Cinzel, Georgia",
-        fontSize: "11px",
-        color: "#e8c96a",
-        stroke: "#1a1210",
-        strokeThickness: 4,
-      })
-      .setOrigin(0.5)
-      .setDepth(pos.y + 2);
+
+    if (home && stats) {
+      const shadow = this.add.image(pos.x, pos.y + 10, "char-shadow").setDepth(1).setScale(0.85);
+      this.palShadow = shadow;
+      this.roostGfx.push(shadow);
+      const img = this.add.image(pos.x, pos.y - 14, palTexture()).setDepth(pos.y).setScale(stats.visScale);
+      if (stats.tint) img.setTint(stats.tint);
+      this.palSprite = img;
+      this.roostGfx.push(img);
+      this.tweens.add({
+        targets: img,
+        y: pos.y - 20,
+        duration: 980,
+        yoyo: true,
+        repeat: -1,
+        ease: "Sine.easeInOut",
+      });
+      const tag = this.add
+        .text(pos.x, pos.y - 42, palDisplayName(), {
+          fontFamily: "Cinzel, Georgia",
+          fontSize: "11px",
+          color: "#e8c96a",
+          stroke: "#1a1210",
+          strokeThickness: 4,
+        })
+        .setOrigin(0.5)
+        .setDepth(pos.y + 2);
+      this.palNameTag = tag;
+      this.roostGfx.push(tag);
+    } else {
+      const tag = this.add
+        .text(pos.x, pos.y - 28, "Empty perch", {
+          fontFamily: "Cinzel, Georgia",
+          fontSize: "11px",
+          color: "#8a7a68",
+          stroke: "#1a1210",
+          strokeThickness: 4,
+        })
+        .setOrigin(0.5)
+        .setDepth(pos.y + 2);
+      this.palNameTag = tag;
+      this.roostGfx.push(tag);
+    }
+
+    if (!this.roostIdleArmed) {
+      this.roostIdleArmed = true;
+      this.time.addEvent({
+        delay: 2600,
+        loop: true,
+        callback: () => this.roostIdle(),
+      });
+    }
+  }
+
+  private roostIdle(): void {
+    const pos = this.palHome;
+    if (this.palSprite?.active) {
+      const near = this.player && Phaser.Math.Distance.Between(this.player.x, this.player.y, pos.x, pos.y) < 96;
+      if (!near && Math.random() < 0.45) this.palSprite.setFlipX(!this.palSprite.flipX);
+      if (Math.random() < 0.35) {
+        const hop = this.palSprite;
+        this.tweens.add({
+          targets: hop,
+          x: pos.x + Phaser.Math.Between(-6, 6),
+          duration: 180,
+          yoyo: true,
+          ease: "Sine.easeOut",
+        });
+      }
+    }
+    for (let i = 0; i < 3; i++) {
+      const bit = this.add
+        .image(pos.x + Phaser.Math.Between(-18, 18), pos.y + Phaser.Math.Between(-4, 8), "fx-mote")
+        .setDepth(pos.y + 3)
+        .setTint(0xc4a66e)
+        .setAlpha(0.55)
+        .setScale(0.8);
+      this.tweens.add({
+        targets: bit,
+        y: bit.y - 16,
+        alpha: 0,
+        duration: 520,
+        onComplete: () => bit.destroy(),
+      });
+    }
   }
 
   private nearest(): { kind: string; x: number; y: number; id?: string; dist: number } | null {
@@ -431,7 +556,7 @@ export class LudusScene extends Phaser.Scene {
               markTutorial("readyForArena");
             }
           }
-          if (def.canSpar) {
+          if (n.id && this.npcCanSpar(n.id)) {
             this.awaitingSpar = n.id ?? null;
             bus.emit("toast", "Click SPAR to start a match");
             bus.emit("spar-available", { show: true, yield: false });
@@ -444,12 +569,12 @@ export class LudusScene extends Phaser.Scene {
   private onSparRequest = (): void => {
     if (this.uiLocked() || this.sparring) return;
     const n = this.nearest();
-    if (n?.kind === "npc" && n.id && getNpc(n.id).canSpar) {
+    if (n?.kind === "npc" && n.id && this.npcCanSpar(n.id)) {
       this.startSpar(n.id);
       return;
     }
     const nearby = this.npcs.find((npc) => {
-      if (!getNpc(npc.npcId).canSpar) return false;
+      if (!this.npcCanSpar(npc.npcId)) return false;
       return Phaser.Math.Distance.Between(this.player.x, this.player.y, npc.x, npc.y) < 90;
     });
     if (nearby) this.startSpar(nearby.npcId);
@@ -533,13 +658,7 @@ export class LudusScene extends Phaser.Scene {
   };
 
   private onRoostChanged = (): void => {
-    if (!this.palSprite || !palUnlocked()) return;
-    const stats = palCombatStats();
-    this.palSprite.setTexture(palTexture());
-    this.palSprite.setScale(stats.visScale);
-    if (stats.tint) this.palSprite.setTint(stats.tint);
-    else this.palSprite.clearTint();
-    this.palNameTag?.setText(palDisplayName());
+    this.refreshRoost();
   };
 
   private onSkillsChanged = (): void => {
@@ -557,12 +676,16 @@ export class LudusScene extends Phaser.Scene {
     gameState.save.position = { x: this.player.x, y: this.player.y, scene: "ludus" };
     gameState.persist();
     bus.emit("minimap-scene", "none");
+    audio.setHall(false);
     this.scene.sleep();
     this.scene.launch("ArenaScene");
   };
 
   update(_t: number, delta: number): void {
     if (!this.player) return;
+    const tx = Math.floor(this.player.x / TILE_SIZE);
+    const ty = Math.floor(this.player.y / TILE_SIZE);
+    audio.setHall(tx >= 35 && tx <= 46 && ty >= 14 && ty <= 21);
     if (this.uiLocked()) {
       this.player.setVelocity(0, 0);
       this.player.syncVisuals(this.time.now);
@@ -658,6 +781,10 @@ export class LudusScene extends Phaser.Scene {
     this.npcs.forEach((npc) => {
       if (npc.visual.visible) npc.visual.setFlipX(this.player.x < npc.x);
     });
+    if (this.palSprite?.active) {
+      const near = Phaser.Math.Distance.Between(this.player.x, this.player.y, this.palHome.x, this.palHome.y) < 96;
+      if (near) this.palSprite.setFlipX(this.player.x < this.palSprite.x);
+    }
     gameState.save.health = this.player.health;
     gameState.save.stamina = this.player.stamina;
     gameState.save.stats = { ...this.player.stats, ...gameState.save.stats };
@@ -674,7 +801,7 @@ export class LudusScene extends Phaser.Scene {
     } else if (this.sparring) {
       bus.emit("spar-available", { show: true, yield: true });
       bus.emit("talk-available", { show: false });
-    } else if (n?.kind === "npc" && n.id && getNpc(n.id).canSpar) {
+    } else if (n?.kind === "npc" && n.id && this.npcCanSpar(n.id)) {
       bus.emit("spar-available", { show: true, yield: false });
     } else {
       bus.emit("spar-available", { show: false });
@@ -698,7 +825,7 @@ export class LudusScene extends Phaser.Scene {
                     : "TALK";
       bus.emit("talk-available", { show: true, label: talkLabel });
       this.nearestHint!.setVisible(true).setPosition(this.player.x, this.player.y + 28);
-      const canSpar = n.kind === "npc" && n.id ? getNpc(n.id).canSpar : false;
+      const canSpar = n.kind === "npc" && n.id ? this.npcCanSpar(n.id) : false;
       const label =
         n.kind === "npc"
           ? canSpar
@@ -720,7 +847,7 @@ export class LudusScene extends Phaser.Scene {
                         : "E  Locked"
                       : "";
       this.nearestHint!.setText(label);
-      this.npcs.forEach((npc) => npc.setPrompt(n.id === npc.npcId, getNpc(npc.npcId).canSpar ? "SPAR / E" : "E  Talk"));
+      this.npcs.forEach((npc) => npc.setPrompt(n.id === npc.npcId, this.npcCanSpar(npc.npcId) ? "SPAR / E" : "E  Talk"));
     } else {
       if (!this.sparring && (gameState.paused || gameState.inMenu || !n)) {
         bus.emit("talk-available", { show: false });
@@ -797,6 +924,8 @@ export class LudusScene extends Phaser.Scene {
         gameState.save.palBrought = true;
         gameState.setObjective("next_house");
         gameState.persist();
+        this.refreshRoost();
+        this.refreshHall();
         bus.emit("toast", `${first.animalName} beaten — next house open`);
       }
     });
@@ -814,6 +943,8 @@ export class LudusScene extends Phaser.Scene {
       gameState.save.palBrought = true;
       gameState.setObjective("tournament_1");
       gameState.persist();
+      this.refreshRoost();
+      this.refreshHall();
       bus.emit("toast", "Circuit beaten — Rudis open");
     });
     this.add

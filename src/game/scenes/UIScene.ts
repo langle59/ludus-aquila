@@ -7,6 +7,7 @@ import { WEAPON_ORDER, getWeapon, masteryHint, masteryLevel, weaponIconKey } fro
 import { getHouse, houseTitleColor, isTournamentId } from "../data/houses";
 import { TOURNAMENT_HOUSE } from "../data/tournament";
 import { isOpponentUnlocked, canUnlockSkill, unlockSkill, hasSkill, buyCosmetic, buyUnguent, isHouseUnlocked, houseLockHint, rivalHouses, tournamentUnlocked, clearInjury, playerCombatStats } from "../systems/progression";
+import { currentNight, enterNight, ensureNight, arenaWeapon } from "../systems/nights";
 import { TABLE_BETS, TABLE_GAMES, takeTableBet, settleTakenBet, rollAleaDice, aleaOutcome, freshDeck, drawCard, handTotal, isNatural, dealerShouldHit, blackjackCompare, cardTex, type AleaResult, type Card, type BlackjackOutcome } from "../systems/gambling";
 import { audio } from "../systems/audio";
 import { makeBodyTexture } from "../systems/assets";
@@ -374,8 +375,8 @@ export class UIScene extends Phaser.Scene {
     const pts = s.statPoints > 0 ? `  ·  ${s.statPoints} skill` : "";
     this.levelLabel.setText(`Lv ${s.level}   ${Math.floor(s.xp)}/${s.xpToNext} XP${pts}`);
     const vialKey = prettyKey(mergedKeybinds().unguent);
-    this.weaponLabel.setText(`${getWeapon(s.equippedWeapon).name}  ·  ${vialKey} unguent  ${s.unguent ?? 0}/${UNGUENT_MAX}`);
-    this.setNetButton(s.equippedWeapon === "trident_net");
+    this.weaponLabel.setText(`${getWeapon(arenaWeapon()).name}  ·  ${vialKey} unguent  ${s.unguent ?? 0}/${UNGUENT_MAX}`);
+    this.setNetButton(arenaWeapon() === "trident_net");
     this.denariiLabel.setText(`${s.denarii} denarii`);
     this.titleLabel.setText(displayTitle());
     this.objectiveLabel.setText(currentObjectiveText());
@@ -1374,7 +1375,7 @@ export class UIScene extends Phaser.Scene {
     c.add(this.add.rectangle(0, -178, 460, 8, 0x6a2420, 0.9));
     c.add(
       this.add
-        .text(0, -140, "Free men play. Pick a game.", {
+        .text(0, -140, gameState.save.freedomWon ? "Free men play. Rufus leans on the rail." : "Free men play. Pick a game.", {
           fontFamily: "Georgia",
           fontSize: "16px",
           color: "#e8dcc8",
@@ -1542,7 +1543,7 @@ export class UIScene extends Phaser.Scene {
   private dumpBowl(faces: [number, number], onLanded: () => void): void {
     const c = this.overlay;
     if (!c) return;
-    audio.sfx("ui");
+    audio.sfx("dice");
     this.aleaDice.forEach((d) => d.destroy());
     const rest = [
       { x: -16, y: -36 },
@@ -1742,7 +1743,7 @@ export class UIScene extends Phaser.Scene {
       onDone();
       return;
     }
-    audio.sfx("ui");
+    audio.sfx("card");
     const img = this.add.image(this.bjDeck.x, this.bjDeck.y, faceDown ? "card-back" : cardTex(card)).setScale(1.35);
     c.add(img);
     const list = row === "player" ? this.bjPlayerCards : this.bjHouseCards;
@@ -1775,6 +1776,7 @@ export class UIScene extends Phaser.Scene {
       return;
     }
     s.holeHidden = false;
+    audio.sfx("card");
     this.tweens.add({
       targets: hole,
       scaleX: 0,
@@ -2115,14 +2117,56 @@ export class UIScene extends Phaser.Scene {
     const rivals = rivalHouses();
     const showTourney = tournamentUnlocked() || gameState.save.freedomWon;
     if (!this.gateHouse) {
-      const c = this.box(720, 600, "ARENA GATE");
-      c.add(this.add.text(0, -250, "Choose a house", { fontFamily: "Georgia", fontSize: "18px", color: "#e8dcc8" }).setOrigin(0.5));
+      if (gameState.save.freedomWon) ensureNight();
+      const night = currentNight();
+      const c = this.box(720, 640, "ARENA GATE");
+      if (night) {
+        const label =
+          night.kind === "weapon"
+            ? `Tonight  ·  Weapon night  ·  ${night.weaponName}`
+            : "Tonight  ·  Exhibition";
+        c.add(
+          this.add
+            .text(0, -268, label, { fontFamily: "Cinzel, Georgia", fontSize: "15px", color: "#e8c96a" })
+            .setOrigin(0.5),
+        );
+        c.add(
+          this.add
+            .text(0, -246, `${night.fighterName} of ${night.houseName}  ·  +${night.bonusDenarii} denarii`, {
+              fontFamily: "Georgia",
+              fontSize: "14px",
+              color: "#e8dcc8",
+            })
+            .setOrigin(0.5),
+        );
+        this.addBtn(c, 0, -210, "Enter tonight", () => {
+          const ok = enterNight();
+          if (ok === "locked") {
+            this.toast("The armory still lacks that steel.");
+            return;
+          }
+          if (ok !== "ok") {
+            this.toast("The editor has no bout tonight.");
+            return;
+          }
+          this.gateHouse = null;
+          this.closeOverlay();
+          bus.emit("enter-arena", night.opponentId);
+        }, 220);
+        c.add(
+          this.add
+            .text(0, -168, "Or rematch a house", { fontFamily: "Georgia", fontSize: "14px", color: "#c4b49a" })
+            .setOrigin(0.5),
+        );
+      } else {
+        c.add(this.add.text(0, -250, "Choose a house", { fontFamily: "Georgia", fontSize: "18px", color: "#e8dcc8" }).setOrigin(0.5));
+      }
       rivals.forEach((h, i) => {
         const unlocked = isHouseUnlocked(h.id);
         const col = i % 2;
         const row = Math.floor(i / 2);
         const x = col === 0 ? -170 : 170;
-        const y = -200 + row * 72;
+        const y = (night ? -134 : -200) + row * 72;
         const beaten = gameState.save.defeatedHouses.includes(h.id);
         c.add(this.add.text(x, y, `${h.latinName}${beaten ? "  (beaten)" : ""}`, { fontFamily: "Georgia", fontSize: "15px", color: unlocked ? "#e8dcc8" : "#6a5a4a" }).setOrigin(0.5));
         this.addBtn(c, x, y + 24, unlocked ? (beaten ? "Rematches" : "Enter") : "Locked", () => {
@@ -2135,7 +2179,7 @@ export class UIScene extends Phaser.Scene {
         }, 160);
       });
       if (showTourney) {
-        this.addBtn(c, 0, 130, gameState.save.freedomWon ? "The Rudis (done)" : "The Rudis", () => {
+        this.addBtn(c, 0, night ? 170 : 130, gameState.save.freedomWon ? "The Rudis (done)" : "The Rudis", () => {
           if (gameState.save.freedomWon) {
             this.toast("The wooden sword is already yours.");
             return;
@@ -2144,7 +2188,7 @@ export class UIScene extends Phaser.Scene {
           this.openGate();
         }, 220);
       }
-      this.addBtn(c, 0, 250, "Stay at the ludus", () => {
+      this.addBtn(c, 0, night ? 250 : 250, "Stay at the ludus", () => {
         this.gateHouse = null;
         this.closeOverlay();
       });

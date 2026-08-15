@@ -260,7 +260,7 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
     const hitMs = kind === "heavy" ? 120 : 90;
     this.animDuration = windup + hitMs + recover;
     this.nextAttackAt = this.scene.time.now + Math.round(w.attackSpeed * move.speedMult);
-    audio.sfx(kind === "heavy" ? "special" : "swing");
+    if (kind === "heavy") audio.sfx("swing");
     if (move.lunge) {
       this.setVelocity(this.facing.x * move.lunge, this.facing.y * move.lunge);
       this.scene.time.delayedCall(90, () => this.setVelocity(0, 0));
@@ -385,7 +385,6 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
     this.parryStartedAt = this.scene.time.now;
     this.parriedThisWindow = false;
     this.setVelocity(0, 0);
-    audio.sfx("block");
     this.scene.time.delayedCall(240, () => {
       if (this.combat === "parry") this.combat = "idle";
     });

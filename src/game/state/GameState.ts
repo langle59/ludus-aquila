@@ -36,6 +36,9 @@ export function createNewSave(playerName: string, tunic: TunicColor, playerHouse
     playerHouse,
     tournamentWins: 0,
     freedomWon: false,
+    nightKind: null,
+    nightOpponent: null,
+    nightWins: 0,
     tunic,
     level: 1,
     xp: 0,
@@ -110,6 +113,8 @@ class GameState {
   inDialogue = false;
   inMenu = false;
   pendingArenaOpponent: string | null = null;
+  pendingNight = false;
+  pendingForcedWeapon: WeaponId | null = null;
   lastResult: {
     kind: "win" | "lose" | "spar";
     title: string;
@@ -226,6 +231,8 @@ class GameState {
   startNew(name: string, tunic: TunicColor, playerHouse: string | null = null): void {
     this.save = createNewSave(name.trim() || "Gladiator", tunic, playerHouse);
     this.pendingArenaOpponent = null;
+    this.pendingNight = false;
+    this.pendingForcedWeapon = null;
     this.lastResult = null;
     this.persist();
   }
@@ -286,6 +293,9 @@ class GameState {
     this.save.playerHouse = parsed.playerHouse ?? null;
     this.save.tournamentWins = parsed.tournamentWins ?? 0;
     this.save.freedomWon = parsed.freedomWon ?? false;
+    this.save.nightKind = parsed.nightKind === "weapon" || parsed.nightKind === "exhibition" ? parsed.nightKind : null;
+    this.save.nightOpponent = parsed.nightOpponent ?? null;
+    this.save.nightWins = parsed.nightWins ?? 0;
     this.save.version = 2;
     const legacyObj = parsed.currentObjective as string;
     const known: SaveData["currentObjective"][] = [

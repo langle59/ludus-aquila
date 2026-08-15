@@ -95,6 +95,8 @@ function paintDecor(scene: Phaser.Scene, built: BuiltMap, mood: "ludus" | "arena
       { x: 44, y: 14 },
       { x: 37, y: 21 },
       { x: 44, y: 21 },
+      { x: 2, y: 14 },
+      { x: 7, y: 14 },
       { x: 21, y: 31 },
       { x: 26, y: 31 },
     ];
@@ -104,6 +106,7 @@ function paintDecor(scene: Phaser.Scene, built: BuiltMap, mood: "ludus" | "arena
     scene.add.image(10 * TILE_SIZE + 16, 8 * TILE_SIZE + 22, "prop-lintel").setDepth(8 * TILE_SIZE + 6);
     scene.add.image(37 * TILE_SIZE + 16, 8 * TILE_SIZE + 22, "prop-lintel").setDepth(8 * TILE_SIZE + 6);
     scene.add.image(35 * TILE_SIZE + 16, 17 * TILE_SIZE + 22, "prop-lintel").setDepth(17 * TILE_SIZE + 6);
+    scene.add.image(8 * TILE_SIZE + 16, 16 * TILE_SIZE + 22, "prop-lintel").setDepth(16 * TILE_SIZE + 6);
     placeLamp(scene, 5 * TILE_SIZE + 8, 6 * TILE_SIZE + 18);
     placeLamp(scene, 42 * TILE_SIZE + 16, 6 * TILE_SIZE + 18);
   } else {
@@ -227,6 +230,28 @@ export function animateFountain(scene: Phaser.Scene, x: number, y: number): void
         y: y + 6,
         alpha: 0,
         duration: 420,
+        onComplete: () => drop.destroy(),
+      });
+    },
+  });
+}
+
+export function animateTrough(scene: Phaser.Scene, x: number, y: number): void {
+  scene.time.addEvent({
+    delay: 520,
+    loop: true,
+    callback: () => {
+      const drop = scene.add
+        .image(x + Phaser.Math.Between(-5, 5), y - 8, "fx-water")
+        .setDepth(y + 4)
+        .setAlpha(0.55)
+        .setScale(0.55)
+        .setTint(0x8ab4c4);
+      scene.tweens.add({
+        targets: drop,
+        y: y + 4,
+        alpha: 0,
+        duration: 380,
         onComplete: () => drop.destroy(),
       });
     },

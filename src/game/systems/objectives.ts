@@ -3,6 +3,7 @@ import { OBJECTIVE_TEXT } from "../data/dialogue";
 import { gameState } from "../state/GameState";
 import { getRival } from "../data/houses";
 import { nextUnlockedOpponent } from "./progression";
+import { nightObjective } from "./nights";
 
 const ORDER: ObjectiveId[] = [
   "speak_lanista",
@@ -35,6 +36,10 @@ export function currentObjectiveText(): string {
       }
       return `Defeat ${found.fighter.name} of ${found.house.latinName}.`;
     }
+  }
+  if (id === "free") {
+    const night = nightObjective();
+    if (night) return night;
   }
   return OBJECTIVE_TEXT[id] ?? OBJECTIVE_TEXT.free;
 }

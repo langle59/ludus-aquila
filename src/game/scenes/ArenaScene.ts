@@ -16,6 +16,7 @@ import { applyArenaVictory, applyArenaDefeat, nextHouseAfter, nextUnlockedOppone
 import { getWeapon } from "../data/weapons";
 import { palBrought, palCombatStats, palKind } from "../data/pal";
 import { CombatInput } from "../systems/input";
+import { arenaWeapon, clearNightEntry } from "../systems/nights";
 
 type Spectator = {
   img: Phaser.GameObjects.Image;
@@ -109,7 +110,7 @@ export class ArenaScene extends Phaser.Scene {
       scar: look.scar,
       crest: look.crest,
       stats: { ...playerCombatStats() },
-      weapon: gameState.save.equippedWeapon,
+          weapon: arenaWeapon(),
       team: "player",
     });
     this.player.revive(true);
@@ -175,7 +176,8 @@ export class ArenaScene extends Phaser.Scene {
     bus.emit("favor-show", { them: houseTint });
     bus.emit("favor", this.favor);
     if (this.pal) bus.emit("pal-hp-show");
-    audio.sfx("crowd");
+    audio.setCrowd(true);
+    audio.roar("hit");
     bus.on("player-attack", this.doAttack, this);
     bus.on("player-special", this.doSpecial, this);
     bus.on("skills-changed", this.onSkillsChanged, this);
@@ -206,6 +208,7 @@ export class ArenaScene extends Phaser.Scene {
       bus.off("cosmetics-changed", this.onCosmeticsChanged, this);
       bus.off("player-snared", this.onPlayerSnared, this);
       bus.off("judgment-pick", this.onJudgmentPick, this);
+      audio.setCrowd(false);
     });
   }
 
@@ -259,6 +262,7 @@ export class ArenaScene extends Phaser.Scene {
   private swellCrowd(ms = 700, side?: "north" | "south"): void {
     const now = this.time.now;
     this.cheerUntil = Math.max(this.cheerUntil, now + ms);
+    audio.roar(ms >= 1400 ? "big" : ms >= 700 ? "hit" : "chip");
     const chance = 0.28 + this.favor / 240;
     for (const s of this.spectators) {
       if (side && s.side !== side) continue;
@@ -461,6 +465,7 @@ export class ArenaScene extends Phaser.Scene {
       if (!this.firstBlood) {
         this.firstBlood = true;
         this.addFavor(12);
+        audio.roar("big");
       }
     }
     if (attacker === this.enemy && onYou && kind === "hit") this.addFavor(-8);
@@ -762,6 +767,7 @@ export class ArenaScene extends Phaser.Scene {
         if (r.unlocked) extra += `\nUnlocked: ${getWeapon(r.unlocked).name}`;
       } else if (r.unlocked) extra = `\nUnlocked: ${getWeapon(r.unlocked).name}`;
       if (r.palNote) extra += `\n\n${r.palNote}`;
+      if (r.nightNote) extra += `\n\n${r.nightNote}`;
       const missioLine = missio
         ? followed
           ? "The crowd called missio. You stepped off. They live.\n\n"
@@ -802,6 +808,7 @@ export class ArenaScene extends Phaser.Scene {
       }
     }
     gameState.pendingArenaOpponent = null;
+    clearNightEntry();
     gameState.restoreVitals();
     gameState.persist();
     bus.emit("return-ludus");

@@ -58,6 +58,8 @@ export class WorldProp extends Phaser.Physics.Arcade.Image {
     if (kind === "chest") this.setSize(22, 12);
     if (kind === "shieldstand") this.setSize(24, 12);
     if (kind === "dice") this.setSize(56, 18);
+    if (kind === "trough") this.setSize(28, 14);
+    if (kind === "perch") this.setSize(18, 12);
     if (solid) this.refreshBody();
     if (!solid) this.disableBody();
   }
@@ -68,6 +70,8 @@ export class NpcActor extends Phaser.Physics.Arcade.Sprite {
   visual: Phaser.GameObjects.Image;
   label: Phaser.GameObjects.Text;
   prompt?: Phaser.GameObjects.Text;
+  private shadow: Phaser.GameObjects.Image;
+  private bobFrom = 0;
 
   constructor(scene: Phaser.Scene, x: number, y: number, npcId: string, name: string, tunic: number, accent: number, scale: number) {
     super(scene, x, y, "char-shadow");
@@ -78,16 +82,10 @@ export class NpcActor extends Phaser.Physics.Arcade.Sprite {
     this.setSize(18, 16);
     const key = `npc-${npcId}`;
     makeBodyTexture(scene, key, tunic, accent, scale, bodyStyleFor(npcId));
-    scene.add.image(x, y + 10, "char-shadow").setDepth(1);
+    this.shadow = scene.add.image(x, y + 10, "char-shadow").setDepth(1);
     this.visual = scene.add.image(x, y - 10, key).setDepth(y);
-    scene.tweens.add({
-      targets: this.visual,
-      y: y - 12,
-      duration: 1400 + Math.random() * 400,
-      yoyo: true,
-      repeat: -1,
-      ease: "Sine.easeInOut",
-    });
+    this.bobFrom = y;
+    this.startBob();
     this.label = scene.add
       .text(x, y - 40, name, {
         fontFamily: "Cinzel, Georgia",
@@ -111,6 +109,32 @@ export class NpcActor extends Phaser.Physics.Arcade.Sprite {
       .setVisible(false);
   }
 
+  place(x: number, y: number): void {
+    this.setPosition(x, y);
+    const body = this.body as Phaser.Physics.Arcade.StaticBody | undefined;
+    body?.updateFromGameObject();
+    this.refreshBody();
+    this.shadow.setPosition(x, y + 10);
+    this.visual.setPosition(x, y - 10).setDepth(y);
+    this.label.setPosition(x, y - 40).setDepth(y + 2);
+    this.prompt?.setPosition(x, y + 18).setDepth(y + 2);
+    this.bobFrom = y;
+    this.startBob();
+  }
+
+  private startBob(): void {
+    this.scene.tweens.killTweensOf(this.visual);
+    this.visual.y = this.bobFrom - 10;
+    this.scene.tweens.add({
+      targets: this.visual,
+      y: this.bobFrom - 12,
+      duration: 1400 + Math.random() * 400,
+      yoyo: true,
+      repeat: -1,
+      ease: "Sine.easeInOut",
+    });
+  }
+
   setPrompt(show: boolean, text = "E  Talk"): void {
     this.prompt?.setText(text);
     this.prompt?.setVisible(show);
@@ -120,6 +144,7 @@ export class NpcActor extends Phaser.Physics.Arcade.Sprite {
     this.visual?.destroy();
     this.label?.destroy();
     this.prompt?.destroy();
+    this.shadow?.destroy();
     super.destroy(fromScene);
   }
 }

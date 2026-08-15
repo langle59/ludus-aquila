@@ -8,6 +8,7 @@ import {
   rivalHouses,
 } from "../systems/progression";
 import { palAnimalName, palBrought, palNextHint, palTier, palTitle, palUnlocked } from "./pal";
+import { ensureNight } from "../systems/nights";
 
 type LineFn = () => string[];
 
@@ -45,6 +46,20 @@ export const DIALOGUE: Record<string, LineFn> = {
   lanista: () => {
     const s = gameState.save;
     if (s.freedomWon) {
+      const night = ensureNight();
+      if (night?.kind === "weapon") {
+        return [
+          `"The rudis is yours. The editor still pays."`,
+          `"Tonight is steel. ${night.fighterName} of ${night.houseName}. You fight with the ${night.weaponName}."`,
+          `"Take the south gate. The yard is still yours after."`,
+        ];
+      }
+      if (night) {
+        return [
+          `"The rudis is yours. The editor still wants a name on the sand."`,
+          `"Tonight: ${night.fighterName} of ${night.houseName}. A purse fight. Come back heavier."`,
+        ];
+      }
       return [
         `"The rudis is yours. Wood, not steel. That is the point."`,
         `"You may still train. You may still fight. But no man here owns your name."`,
@@ -180,7 +195,10 @@ export const DIALOGUE: Record<string, LineFn> = {
     const home = consumeWelcome("rufus");
     if (home) return [`"You beat ${home} and you still look surprised. Yard. You and me. Unless you are scared of a friend."`];
     if (gameState.save.freedomWon) {
-      return [`"Free. Fine. I still want that rematch. I mean it more now."`];
+      return [
+        `"Free. Fine. Sit. I still want that rematch, but dice first."`,
+        `"If you lose your purse I will laugh. If you win I will still want the yard."`,
+      ];
     }
     if (allRivalsBeaten()) {
       return [`"You beat the circuit. Fine. I still want that rematch before you take the wood."`];
@@ -285,16 +303,16 @@ export const OBJECTIVE_TEXT: Record<ObjectiveId, string> = {
   tournament_1: "The Rudis is open. Take the south gate and fight for your freedom.",
   tournament_2: "The Rudis continues. Defeat Balbus, the Beam.",
   tournament_3: "The last bout. Defeat Malleolus for the rudis.",
-  free: "The rudis is yours. Train. The yard is still yours.",
+  free: "The rudis is yours. Train. The editor still pays at the south gate.",
 };
 
 export const AREA_HINTS: Record<string, string> = {
   dummy: "Training dummy — light attack (Space) or heavy (G).",
   rack: "Weapon rack — press E to open the armory.",
   shop: "Quarters — press E for cloth, dye, and unguent.",
-  pal: "The roost. Press E to feed, train, or change how it looks.",
+  pal: "The roost. Straw, water, and a perch. Press E.",
   gate: "Arena gate — press E to choose a match.",
   fountain: "A stone basin. The water is warm.",
   trophy: "A mount on the wall. Press E to inspect it.",
-  dice: "The oval table. Free men play. Press E.",
+  dice: "The oval table. Rufus keeps a seat. Press E.",
 };
