@@ -95,6 +95,8 @@ export class MenuScene extends Phaser.Scene {
       this.showControls();
     });
 
+    this.addMuteChip(GAME_WIDTH - 130, 42);
+
     this.add
       .text(GAME_WIDTH / 2, 690, "A top-down gladiator action-adventure", {
         fontFamily: "Georgia",
@@ -141,6 +143,33 @@ export class MenuScene extends Phaser.Scene {
     void inner;
   }
 
+  private addMuteChip(x: number, y: number): void {
+    const bg = this.add
+      .rectangle(x, y, 220, 40, 0x2a1c16)
+      .setStrokeStyle(2, COLORS.gold)
+      .setInteractive({ useHandCursor: true });
+    const t = this.add
+      .text(x, y, audio.musicMuteLabel(), {
+        fontFamily: "Cinzel, Georgia",
+        fontSize: "16px",
+        color: "#e8dcc8",
+      })
+      .setOrigin(0.5);
+    bg.on("pointerover", () => {
+      bg.setFillStyle(0x4a3020);
+      t.setColor("#f4e2b0");
+    });
+    bg.on("pointerout", () => {
+      bg.setFillStyle(0x2a1c16);
+      t.setColor("#e8dcc8");
+    });
+    bg.on("pointerdown", () => {
+      audio.toggleMusicMute();
+      t.setText(audio.musicMuteLabel());
+      audio.sfx("ui");
+    });
+  }
+
   private clearExtras(): void {
     this.extras.forEach((o) => o.destroy());
     this.extras = [];
@@ -178,7 +207,7 @@ export class MenuScene extends Phaser.Scene {
       .text(
         GAME_WIDTH / 2,
         GAME_HEIGHT / 2 - 40,
-        `SETTINGS\n\nMusic  [ - ]  ${Math.round(s.musicVolume * 100)}%  [ + ]\nSound  [ [ ]  ${Math.round(s.sfxVolume * 100)}%  [ ] ]\nScreen shake: ${s.screenShake ? "On" : "Off"}  (press S)\nFullscreen: ${s.fullscreen ? "On" : "Off"}  (press F)\n\nEsc to close`,
+        this.settingsBody(),
         { fontFamily: "Georgia", fontSize: "20px", color: "#e8dcc8", align: "center" },
       )
       .setOrigin(0.5);
@@ -190,6 +219,7 @@ export class MenuScene extends Phaser.Scene {
       if (ev.key === "-") s.musicVolume = Math.max(0, s.musicVolume - 0.1);
       if (ev.key === "]") s.sfxVolume = Math.min(1, s.sfxVolume + 0.1);
       if (ev.key === "[") s.sfxVolume = Math.max(0, s.sfxVolume - 0.1);
+      if (ev.key.toLowerCase() === "n") audio.toggleMusicMute();
       if (ev.key.toLowerCase() === "s") s.screenShake = !s.screenShake;
       if (ev.key.toLowerCase() === "f") {
         s.fullscreen = !s.fullscreen;
@@ -203,12 +233,15 @@ export class MenuScene extends Phaser.Scene {
         return;
       }
       gameState.persistSettings();
-      t.setText(
-        `SETTINGS\n\nMusic  [ - ]  ${Math.round(s.musicVolume * 100)}%  [ + ]\nSound  [ [ ]  ${Math.round(s.sfxVolume * 100)}%  [ ] ]\nScreen shake: ${s.screenShake ? "On" : "Off"}  (press S)\nFullscreen: ${s.fullscreen ? "On" : "Off"}  (press F)\n\nEsc to close`,
-      );
+      t.setText(this.settingsBody());
     };
     window.addEventListener("keydown", onKey);
     void keys;
+  }
+
+  private settingsBody(): string {
+    const s = gameState.settings;
+    return `SETTINGS\n\nMusic  [ - ]  ${Math.round(s.musicVolume * 100)}%  [ + ]\nMusic muted: ${s.musicMuted ? "Yes" : "No"}  (press N)\nSound  [ [ ]  ${Math.round(s.sfxVolume * 100)}%  [ ] ]\nScreen shake: ${s.screenShake ? "On" : "Off"}  (press S)\nFullscreen: ${s.fullscreen ? "On" : "Off"}  (press F)\n\nEsc to close`;
   }
 
   private showFiles(mode: "new" | "load"): void {

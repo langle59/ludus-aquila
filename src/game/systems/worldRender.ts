@@ -71,12 +71,14 @@ function paintDecor(scene: Phaser.Scene, built: BuiltMap, mood: "ludus" | "arena
 
   if (mood === "ludus") {
     const ringX = 24 * TILE_SIZE;
-    const ringY = 18 * TILE_SIZE;
+    const ringY = 19 * TILE_SIZE;
     const g = scene.add.graphics().setDepth(2);
-    g.lineStyle(3, 0xc4a66e, 0.55);
-    g.strokeCircle(ringX + 16, ringY + 8, 78);
-    g.lineStyle(2, 0x6b4a28, 0.35);
-    g.strokeCircle(ringX + 16, ringY + 8, 72);
+    g.lineStyle(3, 0xc4a66e, 0.6);
+    g.strokeCircle(ringX, ringY, 64);
+    g.lineStyle(2, 0x6b4a28, 0.4);
+    g.strokeCircle(ringX, ringY, 58);
+    g.lineStyle(1, 0xe8c96a, 0.25);
+    g.strokeCircle(ringX, ringY, 22);
 
     const torches = [
       { x: 4, y: 2 },
@@ -86,9 +88,13 @@ function paintDecor(scene: Phaser.Scene, built: BuiltMap, mood: "ludus" | "arena
       { x: 39, y: 6 },
       { x: 44, y: 6 },
       { x: 12, y: 14 },
-      { x: 35, y: 14 },
+      { x: 33, y: 14 },
       { x: 12, y: 24 },
-      { x: 35, y: 24 },
+      { x: 33, y: 24 },
+      { x: 37, y: 14 },
+      { x: 44, y: 14 },
+      { x: 37, y: 21 },
+      { x: 44, y: 21 },
       { x: 21, y: 31 },
       { x: 26, y: 31 },
     ];
@@ -97,6 +103,7 @@ function paintDecor(scene: Phaser.Scene, built: BuiltMap, mood: "ludus" | "arena
     }
     scene.add.image(10 * TILE_SIZE + 16, 8 * TILE_SIZE + 22, "prop-lintel").setDepth(8 * TILE_SIZE + 6);
     scene.add.image(37 * TILE_SIZE + 16, 8 * TILE_SIZE + 22, "prop-lintel").setDepth(8 * TILE_SIZE + 6);
+    scene.add.image(35 * TILE_SIZE + 16, 17 * TILE_SIZE + 22, "prop-lintel").setDepth(17 * TILE_SIZE + 6);
     placeLamp(scene, 5 * TILE_SIZE + 8, 6 * TILE_SIZE + 18);
     placeLamp(scene, 42 * TILE_SIZE + 16, 6 * TILE_SIZE + 18);
   } else {

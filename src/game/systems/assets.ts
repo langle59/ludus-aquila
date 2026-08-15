@@ -243,6 +243,8 @@ export function generatePlaceholderAssets(scene: Phaser.Scene): void {
   makeFountain(scene);
   makeCrate(scene);
   makeInteriorProps(scene);
+  makeTrophySkeletons(scene);
+  makeTableGames(scene);
   makeShadow(scene);
   makeParticles(scene);
   makeUiPanel(scene);
@@ -409,13 +411,13 @@ function makeColumnTile(scene: Phaser.Scene): void {
 
 function makeGateTile(scene: Phaser.Scene): void {
   canvasTex(scene, "tile-gate", 32, 32, (ctx) => {
-    px(ctx, 0, 0, 32, 32, 0x4a4038);
-    px(ctx, 4, 6, 24, 26, 0x2a2218);
-    px(ctx, 6, 8, 9, 24, 0x3a2e24);
-    px(ctx, 17, 8, 9, 24, 0x3a2e24);
-    px(ctx, 15, 8, 2, 24, 0x1a1410);
-    circ(ctx, 21, 20, 2, COLORS.gold);
-    px(ctx, 4, 6, 24, 3, 0x6a5a48);
+    px(ctx, 0, 0, 32, 32, 0x6a6458);
+    px(ctx, 0, 0, 32, 4, 0x8a8278);
+    px(ctx, 0, 28, 32, 4, 0x4a4038);
+    px(ctx, 2, 6, 28, 20, 0x5a544c);
+    px(ctx, 4, 10, 24, 12, 0x7a6a48, 0.45);
+    px(ctx, 0, 14, 32, 3, 0x3a322c, 0.55);
+    px(ctx, 12, 8, 8, 2, COLORS.gold, 0.35);
   });
 }
 
@@ -1341,22 +1343,58 @@ function makeDecor(scene: Phaser.Scene): void {
     px(ctx, 6, 0, 24, 6, COLORS.gold, 0.85);
     px(ctx, 8, 1, 20, 2, shade(COLORS.gold, 0.3), 0.5);
   });
-  canvasTex(scene, "prop-gate", 96, 72, (ctx) => {
-    px(ctx, 8, 8, 80, 64, 0x4a4038);
-    px(ctx, 10, 10, 76, 8, 0x6a5a48);
-    px(ctx, 12, 18, 72, 54, 0x3a322c);
-    ctx.fillStyle = css(0x1a1410);
+  canvasTex(scene, "prop-gate-post", 36, 80, (ctx) => {
+    px(ctx, 4, 72, 28, 8, 0x4a4038);
+    px(ctx, 6, 74, 24, 3, 0x2a2218, 0.5);
+    px(ctx, 8, 12, 20, 62, 0x8a8278);
+    px(ctx, 10, 12, 6, 62, 0xc4bcb0, 0.4);
+    px(ctx, 24, 12, 3, 62, 0x5a544c, 0.45);
+    px(ctx, 9, 28, 18, 3, 0x6a6458);
+    px(ctx, 9, 48, 18, 3, 0x6a6458);
+    px(ctx, 12, 38, 12, 3, COLORS.gold, 0.7);
+    px(ctx, 2, 6, 32, 10, 0xb8b0a4);
+    px(ctx, 4, 8, 28, 3, 0xe0d8cc, 0.45);
+    px(ctx, 6, 0, 24, 8, 0xc4bcb0);
+    px(ctx, 8, 2, 20, 3, COLORS.gold, 0.75);
+  });
+  canvasTex(scene, "prop-gate-arch", 176, 64, (ctx) => {
     ctx.beginPath();
-    ctx.moveTo(22, 72);
-    ctx.lineTo(22, 34);
-    ctx.quadraticCurveTo(48, 8, 74, 34);
-    ctx.lineTo(74, 72);
+    ctx.moveTo(6, 64);
+    ctx.lineTo(6, 36);
+    ctx.quadraticCurveTo(88, 0, 170, 36);
+    ctx.lineTo(170, 64);
+    ctx.lineTo(148, 64);
+    ctx.lineTo(148, 40);
+    ctx.quadraticCurveTo(88, 16, 28, 40);
+    ctx.lineTo(28, 64);
+    ctx.closePath();
+    ctx.fillStyle = css(0x8a8278);
     ctx.fill();
-    px(ctx, 46, 18, 4, 54, 0x2a2218);
-    circ(ctx, 62, 48, 3, COLORS.gold);
-    px(ctx, 16, 8, 64, 6, COLORS.gold, 0.7);
-    px(ctx, 36, 2, 24, 8, COLORS.crimson);
-    px(ctx, 40, 3, 16, 5, shade(COLORS.crimson, 0.1));
+    ctx.beginPath();
+    ctx.moveTo(10, 64);
+    ctx.lineTo(10, 38);
+    ctx.quadraticCurveTo(88, 6, 166, 38);
+    ctx.strokeStyle = css(0xc4bcb0, 0.55);
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(28, 42);
+    ctx.quadraticCurveTo(88, 18, 148, 42);
+    ctx.strokeStyle = css(COLORS.gold, 0.9);
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    px(ctx, 80, 6, 16, 22, 0x9a9488);
+    px(ctx, 82, 8, 12, 8, 0xc4bcb0);
+    px(ctx, 84, 10, 8, 4, COLORS.gold);
+    px(ctx, 78, 26, 20, 16, COLORS.crimson);
+    px(ctx, 80, 28, 16, 5, shade(COLORS.crimson, 0.12));
+    px(ctx, 82, 40, 12, 4, shade(COLORS.crimson, -0.18));
+    circ(ctx, 88, 34, 3, COLORS.gold);
+    for (let i = 0; i < 9; i++) {
+      px(ctx, 36 + i * 12, 38, 3, 14, 0x2a2218, 0.8);
+      px(ctx, 36 + i * 12, 50, 3, 3, 0x1a1410, 0.9);
+    }
+    px(ctx, 34, 36, 108, 3, 0x3a322c, 0.85);
   });
   canvasTex(scene, "prop-torch", 16, 32, (ctx) => {
     px(ctx, 6, 12, 4, 18, 0x5a3a18);
@@ -1460,6 +1498,232 @@ function makeInteriorProps(scene: Phaser.Scene): void {
     px(ctx, 28, 14, 8, 4, 0x4a3018);
     px(ctx, 12, 2, 12, 4, COLORS.gold, 0.7);
   });
+  canvasTex(scene, "prop-trophy-empty", 28, 36, (ctx) => {
+    px(ctx, 2, 8, 24, 26, 0x5a3a18);
+    px(ctx, 2, 8, 24, 3, 0x8a6a44);
+    px(ctx, 4, 11, 20, 20, 0x4a3018);
+    px(ctx, 5, 12, 18, 2, 0x6a4a28, 0.5);
+    circ(ctx, 14, 18, 3, 0x8a8478);
+    px(ctx, 13, 20, 2, 8, 0x6a6458);
+    circ(ctx, 14, 28, 2, 0x8a8478);
+    px(ctx, 6, 30, 16, 3, COLORS.gold, 0.65);
+  });
+  canvasTex(scene, "prop-trophy-banner", 20, 30, (ctx) => {
+    px(ctx, 1, 2, 18, 3, 0x4a4038);
+    circ(ctx, 2, 4, 2, COLORS.gold);
+    circ(ctx, 18, 4, 2, COLORS.gold);
+    px(ctx, 3, 5, 14, 20, 0xe8dcc8);
+    px(ctx, 3, 5, 14, 4, 0xffffff, 0.35);
+    px(ctx, 3, 25, 5, 3, 0xe8dcc8);
+    px(ctx, 12, 25, 5, 3, 0xe8dcc8);
+    px(ctx, 9, 5, 2, 18, 0x1a1210, 0.12);
+  });
+  canvasTex(scene, "prop-dice-table", 88, 48, (ctx) => {
+    px(ctx, 18, 36, 8, 12, 0x4a2c10);
+    px(ctx, 62, 36, 8, 12, 0x4a2c10);
+    oval(ctx, 44, 22, 40, 18, 0x4a2c10);
+    oval(ctx, 44, 20, 38, 16, 0x6b4a2f);
+    oval(ctx, 44, 20, 32, 12, 0x3a5a38);
+    oval(ctx, 44, 20, 30, 10, 0x2a4a28);
+    px(ctx, 28, 18, 7, 7, 0xf0ece0);
+    circ(ctx, 30, 20, 1, 0x1a1210);
+    circ(ctx, 33, 23, 1, 0x1a1210);
+    px(ctx, 38, 19, 7, 7, 0xf0ece0);
+    circ(ctx, 41, 21, 1, 0x1a1210);
+    circ(ctx, 40, 24, 1, 0x1a1210);
+    circ(ctx, 44, 24, 1, 0x1a1210);
+    oval(ctx, 58, 18, 7, 6, COLORS.crimson);
+    px(ctx, 55, 12, 6, 5, 0x8a6a44);
+    circ(ctx, 24, 26, 3, COLORS.gold);
+    circ(ctx, 30, 28, 2, shade(COLORS.gold, -0.15));
+  });
+  canvasTex(scene, "prop-dice-lock", 88, 20, (ctx) => {
+    oval(ctx, 44, 10, 36, 7, 0x3a322c);
+    for (let i = 0; i < 11; i++) {
+      circ(ctx, 12 + i * 6, 10, 3, 0x6a6458);
+      circ(ctx, 12 + i * 6, 10, 1, 0x8a8478);
+    }
+  });
+}
+
+const BONE = 0xe8dcc8;
+const BONE_D = 0xb8a888;
+const BONE_H = 0x2a2218;
+
+function boneSkull(ctx: Ctx, cx: number, cy: number, rx: number, ry: number): void {
+  oval(ctx, cx, cy, rx, ry, BONE);
+  oval(ctx, cx, cy + 1, rx - 2, ry - 2, BONE_D, 0.35);
+  oval(ctx, cx - rx * 0.35, cy, 3, 4, BONE_H);
+  oval(ctx, cx + rx * 0.35, cy, 3, 4, BONE_H);
+  oval(ctx, cx, cy + ry * 0.35, 2, 2, BONE_H);
+}
+
+function makeTrophySkeletons(scene: Phaser.Scene): void {
+  canvasTex(scene, "trophy-skel-fox", 28, 24, (ctx) => {
+    boneSkull(ctx, 14, 11, 8, 7);
+    fillPoly(ctx, [[8, 12], [2, 16], [8, 18], [14, 16]], BONE);
+    px(ctx, 6, 4, 4, 5, BONE);
+    px(ctx, 18, 4, 4, 5, BONE);
+    px(ctx, 7, 4, 2, 2, BONE_D);
+    px(ctx, 19, 4, 2, 2, BONE_D);
+    px(ctx, 3, 16, 8, 2, BONE_D);
+    px(ctx, 4, 17, 1, 2, BONE);
+    px(ctx, 6, 17, 1, 2, BONE);
+    px(ctx, 8, 17, 1, 2, BONE);
+  });
+  canvasTex(scene, "trophy-skel-serpent", 28, 24, (ctx) => {
+    boneSkull(ctx, 8, 8, 6, 5);
+    fillPoly(ctx, [[8, 12], [2, 14], [8, 16]], BONE);
+    px(ctx, 10, 14, 4, 3, BONE);
+    px(ctx, 13, 12, 4, 3, BONE_D);
+    px(ctx, 16, 14, 4, 3, BONE);
+    px(ctx, 19, 12, 4, 3, BONE_D);
+    px(ctx, 22, 15, 4, 3, BONE);
+    circ(ctx, 6, 8, 2, BONE_H);
+    circ(ctx, 10, 8, 2, BONE_H);
+  });
+  canvasTex(scene, "trophy-skel-bear", 28, 24, (ctx) => {
+    boneSkull(ctx, 14, 12, 11, 9);
+    circ(ctx, 5, 7, 4, BONE);
+    circ(ctx, 23, 7, 4, BONE);
+    circ(ctx, 5, 7, 2, BONE_H);
+    circ(ctx, 23, 7, 2, BONE_H);
+    px(ctx, 10, 18, 8, 3, BONE);
+    px(ctx, 11, 20, 1, 3, BONE);
+    px(ctx, 13, 20, 1, 3, BONE);
+    px(ctx, 15, 20, 1, 3, BONE);
+    px(ctx, 17, 20, 1, 3, BONE);
+  });
+  canvasTex(scene, "trophy-skel-wolf", 28, 24, (ctx) => {
+    boneSkull(ctx, 15, 11, 8, 7);
+    fillPoly(ctx, [[10, 12], [1, 15], [10, 18], [15, 15]], BONE);
+    px(ctx, 8, 3, 3, 6, BONE);
+    px(ctx, 19, 3, 3, 6, BONE);
+    px(ctx, 2, 15, 8, 2, BONE_D);
+    px(ctx, 3, 16, 1, 3, BONE);
+    px(ctx, 5, 16, 1, 3, BONE);
+    px(ctx, 7, 16, 1, 3, BONE);
+  });
+  canvasTex(scene, "trophy-skel-lion", 28, 24, (ctx) => {
+    for (const [x, y] of [[6, 6], [22, 6], [4, 12], [24, 12], [8, 4], [20, 4], [14, 3]]) {
+      circ(ctx, x, y, 3, BONE_D);
+    }
+    boneSkull(ctx, 14, 12, 8, 7);
+    px(ctx, 10, 18, 8, 3, BONE);
+    px(ctx, 11, 20, 1, 2, BONE);
+    px(ctx, 17, 20, 1, 2, BONE);
+  });
+  canvasTex(scene, "trophy-skel-bull", 28, 24, (ctx) => {
+    boneSkull(ctx, 14, 14, 9, 7);
+    fillPoly(ctx, [[8, 8], [1, 2], [6, 8]], BONE);
+    fillPoly(ctx, [[20, 8], [27, 2], [22, 8]], BONE);
+    px(ctx, 1, 2, 4, 2, BONE_D);
+    px(ctx, 23, 2, 4, 2, BONE_D);
+    px(ctx, 10, 20, 8, 2, BONE);
+  });
+  canvasTex(scene, "trophy-skel-boar", 28, 24, (ctx) => {
+    boneSkull(ctx, 14, 12, 8, 7);
+    fillPoly(ctx, [[8, 14], [4, 18], [10, 16]], BONE);
+    fillPoly(ctx, [[20, 14], [24, 18], [18, 16]], BONE);
+    px(ctx, 4, 17, 5, 2, BONE);
+    px(ctx, 19, 17, 5, 2, BONE);
+    circ(ctx, 6, 8, 3, BONE);
+    circ(ctx, 22, 8, 3, BONE);
+    px(ctx, 11, 18, 6, 3, BONE);
+  });
+  canvasTex(scene, "trophy-skel-raven", 28, 24, (ctx) => {
+    boneSkull(ctx, 12, 12, 7, 6);
+    fillPoly(ctx, [[12, 12], [26, 14], [12, 16]], BONE);
+    px(ctx, 22, 13, 5, 2, BONE_D);
+    px(ctx, 6, 5, 4, 5, BONE);
+    px(ctx, 16, 5, 3, 4, BONE);
+    circ(ctx, 10, 11, 2, BONE_H);
+    circ(ctx, 14, 11, 2, BONE_H);
+  });
+  canvasTex(scene, "trophy-skel-eagle", 28, 24, (ctx) => {
+    boneSkull(ctx, 12, 12, 7, 6);
+    fillPoly(ctx, [[12, 11], [26, 10], [12, 15]], BONE);
+    px(ctx, 6, 5, 4, 5, BONE);
+    px(ctx, 15, 5, 4, 5, BONE);
+  });
+}
+
+function drawDieFace(ctx: Ctx, n: number): void {
+  px(ctx, 0, 0, 20, 20, 0x4a4038);
+  px(ctx, 1, 1, 18, 18, 0xf0ece0);
+  px(ctx, 2, 2, 16, 2, 0xffffff, 0.45);
+  const pip = (x: number, y: number) => circ(ctx, x, y, 1.6, 0x1a1210);
+  const spots: Record<number, Array<[number, number]>> = {
+    1: [[10, 10]],
+    2: [[5, 5], [15, 15]],
+    3: [[5, 5], [10, 10], [15, 15]],
+    4: [[5, 5], [15, 5], [5, 15], [15, 15]],
+    5: [[5, 5], [15, 5], [10, 10], [5, 15], [15, 15]],
+    6: [[5, 5], [15, 5], [5, 10], [15, 10], [5, 15], [15, 15]],
+  };
+  for (const [x, y] of spots[n] ?? []) pip(x, y);
+}
+
+function drawSuit(ctx: Ctx, suit: string, x: number, y: number, color: number): void {
+  if (suit === "hearts") {
+    circ(ctx, x - 2, y, 2, color);
+    circ(ctx, x + 2, y, 2, color);
+    fillPoly(ctx, [[x - 4, y], [x, y + 5], [x + 4, y]], color);
+  } else if (suit === "diamonds") {
+    fillPoly(ctx, [[x, y - 4], [x + 3, y], [x, y + 4], [x - 3, y]], color);
+  } else if (suit === "spades") {
+    fillPoly(ctx, [[x, y - 4], [x + 4, y + 1], [x - 4, y + 1]], color);
+    circ(ctx, x - 2, y + 1, 2, color);
+    circ(ctx, x + 2, y + 1, 2, color);
+    px(ctx, x - 1, y + 3, 2, 3, color);
+  } else {
+    circ(ctx, x, y - 2, 2, color);
+    circ(ctx, x - 3, y + 2, 2, color);
+    circ(ctx, x + 3, y + 2, 2, color);
+    px(ctx, x - 1, y + 2, 2, 4, color);
+  }
+}
+
+function makeTableGames(scene: Phaser.Scene): void {
+  canvasTex(scene, "prop-dice-bowl", 110, 64, (ctx) => {
+    oval(ctx, 55, 38, 50, 20, 0x4a3018);
+    oval(ctx, 55, 34, 48, 18, 0x6b4a2f);
+    oval(ctx, 55, 32, 42, 14, 0x3a2414);
+    oval(ctx, 55, 30, 38, 11, 0x5a3a22);
+    oval(ctx, 55, 28, 34, 9, 0x2a4a28);
+    oval(ctx, 55, 27, 30, 7, 0x1a3a1c);
+    px(ctx, 20, 20, 70, 3, 0x8a6a44, 0.45);
+    circ(ctx, 40, 26, 2, COLORS.gold, 0.35);
+    circ(ctx, 70, 28, 2, COLORS.gold, 0.25);
+  });
+  for (let n = 1; n <= 6; n++) {
+    canvasTex(scene, `dice-face-${n}`, 20, 20, (ctx) => drawDieFace(ctx, n));
+  }
+  canvasTex(scene, "card-back", 28, 40, (ctx) => {
+    px(ctx, 0, 0, 28, 40, 0x1a1210);
+    px(ctx, 1, 1, 26, 38, COLORS.crimson);
+    px(ctx, 3, 3, 22, 34, shade(COLORS.crimson, -0.15));
+    px(ctx, 5, 5, 18, 30, COLORS.gold, 0.35);
+    px(ctx, 8, 10, 12, 20, COLORS.crimson);
+    circ(ctx, 14, 20, 4, COLORS.gold, 0.7);
+  });
+  const suits = ["hearts", "diamonds", "clubs", "spades"];
+  const labels = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"];
+  for (const suit of suits) {
+    const red = suit === "hearts" || suit === "diamonds";
+    const color = red ? 0xb42c2c : 0x1a1210;
+    for (let rank = 1; rank <= 13; rank++) {
+      canvasTex(scene, `card-${suit}-${rank}`, 28, 40, (ctx) => {
+        px(ctx, 0, 0, 28, 40, 0x3a322c);
+        px(ctx, 1, 1, 26, 38, 0xf4ead8);
+        ctx.fillStyle = css(color);
+        ctx.font = "bold 8px Georgia, serif";
+        ctx.fillText(labels[rank - 1] ?? "?", 3, 10);
+        drawSuit(ctx, suit, 14, 22, color);
+        ctx.fillText(labels[rank - 1] ?? "?", 16, 36);
+      });
+    }
+  }
 }
 
 function makeRug(scene: Phaser.Scene, key: string, base: number, dark: number, stitch: number): void {

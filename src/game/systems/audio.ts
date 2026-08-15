@@ -111,7 +111,7 @@ class AudioSystem {
     const tick = () => {
       if (!this.musicOn || !this.ctx) return;
       const vol = gameState.settings.musicVolume;
-      if (vol > 0.01) {
+      if (vol > 0.01 && !gameState.settings.musicMuted) {
         const o = this.ctx.createOscillator();
         const g = this.ctx.createGain();
         o.type = "triangle";
@@ -134,6 +134,16 @@ class AudioSystem {
       clearTimeout(this.musicTimer);
       this.musicTimer = null;
     }
+  }
+
+  toggleMusicMute(): boolean {
+    gameState.settings.musicMuted = !gameState.settings.musicMuted;
+    gameState.persistSettings();
+    return gameState.settings.musicMuted;
+  }
+
+  musicMuteLabel(): string {
+    return gameState.settings.musicMuted ? "Unmute music" : "Mute music";
   }
 }
 

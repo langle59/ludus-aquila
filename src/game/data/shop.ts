@@ -88,7 +88,7 @@ export const SHOP_TABS: { kind: ShopKind; label: string; hint: string }[] = [
   { kind: "plume", label: "Crests", hint: "House crests take an animal shape on the helm" },
   { kind: "helm", label: "Helms", hint: "What sits on the brow" },
   { kind: "cape", label: "Capes", hint: "Cloth at the shoulders" },
-  { kind: "scar", label: "Scars", hint: "Marks steel left behind" },
+  { kind: "scar", label: "Scars", hint: "Marks from a real fall in the arena" },
   { kind: "title", label: "Titles", hint: "A name the crowd can shout" },
 ];
 
@@ -153,9 +153,9 @@ export const SHOP_ITEMS: ShopItem[] = [
   { id: "title-night", kind: "title", name: "of the Night", description: "Earned against the Raven.", cost: 140, requiresOpponent: "corvus" },
   { id: "title-freeman", kind: "title", name: "the Free Man", description: "Won with the rudis. No man owns your name.", cost: 0, requiresFlag: "freedomWon" },
   { id: "scar-none", kind: "scar", name: "No scar", description: "Unmarked.", cost: 0 },
-  { id: "scar-cheek", kind: "scar", name: "Cheek cut", description: "Steel left a line. Looks only.", cost: 0, requiresFlag: "steelScar1" },
-  { id: "scar-brow", kind: "scar", name: "Brow cut", description: "A second fall. The helm did not save it.", cost: 0, requiresFlag: "steelScar2" },
-  { id: "scar-sash", kind: "scar", name: "Marked sash", description: "A dark band the crowd will read.", cost: 0, requiresFlag: "steelScar3" },
+  { id: "scar-cheek", kind: "scar", name: "Cheek cut", description: "From an arena fall you were not spared. Looks only.", cost: 0, requiresFlag: "steelScar1" },
+  { id: "scar-brow", kind: "scar", name: "Brow cut", description: "A second unsaved fall. The helm did not save it.", cost: 0, requiresFlag: "steelScar2" },
+  { id: "scar-sash", kind: "scar", name: "Marked sash", description: "A third fall. A dark band the crowd will read.", cost: 0, requiresFlag: "steelScar3" },
 ];
 
 export function starterCosmetics(tunic: TunicColor): string[] {
@@ -175,7 +175,8 @@ export function shopUnlocked(item: ShopItem): boolean {
 
 export function shopLockHint(item: ShopItem): string {
   if (item.requiresFlag === "freedomWon") return "Win the Rudis first.";
-  if (item.requiresFlag) return "Steel has to leave a mark first.";
+  if (item.requiresFlag?.startsWith("steelScar")) return "Lose an arena fight without being spared.";
+  if (item.requiresFlag) return "That mark is still locked.";
   return "Win the matching arena fight first.";
 }
 

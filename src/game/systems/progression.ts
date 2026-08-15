@@ -1,11 +1,12 @@
-import type { ReputationTier, SkillId, WeaponId } from "../types";
+import type { FighterStats, ReputationTier, SkillId, WeaponId } from "../types";
 import { gameState, xpForLevel } from "../state/GameState";
 import { UNGUENT_COST, UNGUENT_MAX } from "../config";
 import { getHouse, getRival, isTournamentId, sortedHouses } from "../data/houses";
 import { TOURNAMENT_HOUSE, TOURNAMENT_ORDER } from "../data/tournament";
 import { getSkill } from "../data/skills";
 import { SHOP_ITEMS, shopUnlocked } from "../data/shop";
-import { palTier, palTitle } from "../data/pal";
+import { grantPalPoint, grantPalXp, palAnimalName, palBrought, palTier, palTitle, palUnlocked } from "../data/pal";
+import { recordWeaponWin } from "../data/weapons";
 import { bus } from "./bus";
 
 const REP_ORDER: ReputationTier[] = [
@@ -29,6 +30,25 @@ export interface SkillMods {
   perfectDodgeWindow: number;
   comboStamina: number;
   blockChip: number;
+}
+
+export function playerCombatStats(): FighterStats {
+  const s = { ...gameState.save.stats };
+  if (gameState.save.injured) {
+    s.maxHealth -= 8;
+    s.attack -= 0.5;
+  }
+  return s;
+}
+
+export function clearInjury(): boolean {
+  if (!gameState.save.injured) return false;
+  gameState.save.injured = false;
+  gameState.restoreVitals();
+  gameState.persist();
+  bus.emit("toast", "The ache leaves you.");
+  bus.emit("skills-changed");
+  return true;
 }
 
 export function hasSkill(id: SkillId): boolean {
@@ -102,7 +122,7 @@ export function addXp(amount: number): { leveled: boolean; newLevel: number } {
     s.stats.defense += 0.4;
     s.stats.agility += 0.3;
     s.statPoints += 1;
-    s.health = s.stats.maxHealth;
+    s.health = s.stats.maxHealth - (s.injured ? 8 : 0);
     s.stamina = s.stats.maxStamina;
     s.dummyHits = 0;
     leveled = true;
@@ -214,10 +234,13 @@ export function applyArenaVictory(opponentId: string): { denarii: number; xp: nu
   const s = gameState.save;
   const firstWin = !s.defeatedOpponents.includes(opponentId);
   if (firstWin) s.defeatedOpponents.push(opponentId);
-  const xp = firstWin ? fighter.rewards.xp : Math.round(fighter.rewards.xp * 0.5);
+  const rawXp = firstWin ? fighter.rewards.xp : Math.round(fighter.rewards.xp * 0.5);
+  const bond = palUnlocked(s) ? (palBrought(s) ? 0.9 : 1.15) : 1;
+  const xp = Math.round(rawXp * bond);
   const denarii = firstWin ? fighter.rewards.denarii : Math.round(fighter.rewards.denarii * 0.5);
   addDenarii(denarii);
   const { leveled } = addXp(xp);
+  recordWeaponWin(s.equippedWeapon);
   const unlocked: WeaponId[] = [];
   let palNote: string | undefined;
   if (firstWin && fighter.rewards.unlockWeapon) {
@@ -246,9 +269,14 @@ export function applyArenaVictory(opponentId: string): { denarii: number; xp: nu
     if (!s.palUnlocked && champs >= 1) {
       s.palUnlocked = true;
       s.palBrought = true;
-      palNote = "The eagle of Aquila takes your shoulder. It will dive with you in the arena.";
+      grantPalPoint();
+      palNote = `A ${palAnimalName(s).toLowerCase()} of your pledged house takes the roost. A pal point is yours.`;
     } else if (s.palUnlocked && palTier(s) > beforeTier) {
-      palNote = `Your eagle grows. It is now ${palTitle(palTier(s))}.`;
+      palNote = `Your ${palAnimalName(s).toLowerCase()} grows. It is now ${palTitle(palTier(s), s)}.`;
+    }
+    if (palBrought(s) && s.defeatedHouses.length > 1) {
+      grantPalPoint("The pit taught your pal. +1 pal point.");
+      palNote = palNote ? `${palNote}\nThe pit taught your pal. +1 pal point.` : "The pit taught your pal. +1 pal point.";
     }
   }
   if (firstWin && isTournamentId(opponentId)) {
@@ -262,9 +290,16 @@ export function applyArenaVictory(opponentId: string): { denarii: number; xp: nu
       s.title = "freeman";
       bus.emit("cosmetics-changed");
       if (s.palUnlocked && palTier(s) > beforeTier) {
-        palNote = `Your eagle becomes ${palTitle(palTier(s))}.`;
+        palNote = `Your ${palAnimalName(s).toLowerCase()} becomes ${palTitle(palTier(s), s)}.`;
       }
     }
+  }
+  if (palUnlocked(s) && palBrought(s)) {
+    const gained = grantPalXp(Math.max(8, Math.round(xp * 0.35)));
+    const xpLine = gained.gained
+      ? `Bond XP +${gained.amount}. A pal point is ready in the roost.`
+      : `Bond XP +${gained.amount}.`;
+    palNote = palNote ? `${palNote}\n${xpLine}` : xpLine;
   }
   bumpReputation();
   advanceAfterWin(opponentId);
@@ -283,6 +318,8 @@ export function applyArenaDefeat(spared = false): void {
   if (!spared) {
     addDenarii(-5);
     grantSteelScar();
+    gameState.save.injured = true;
+    bus.emit("toast", "The body remembers the fall.");
   }
   gameState.restoreVitals();
   gameState.persist();
@@ -295,11 +332,11 @@ function grantSteelScar(): void {
   const grant = (id: string, flag: string, label: string): void => {
     s.storyFlags[flag] = true;
     if (!s.ownedCosmetics.includes(id)) s.ownedCosmetics.push(id);
-    bus.emit("toast", `${label} The quartermaster will keep it.`);
+    bus.emit("toast", label);
   };
-  if (n === 1) grant("scar-cheek", "steelScar1", "Steel left a mark on your cheek.");
-  else if (n === 2) grant("scar-brow", "steelScar2", "A second fall cut the brow.");
-  else if (n === 3) grant("scar-sash", "steelScar3", "A marked sash is yours. Looks only.");
+  if (n === 1) grant("scar-cheek", "steelScar1", "The fall left a mark on your cheek. Equip it in Quarters → Scars.");
+  else if (n === 2) grant("scar-brow", "steelScar2", "A second unsaved fall cut the brow. Equip it in Quarters → Scars.");
+  else if (n === 3) grant("scar-sash", "steelScar3", "A marked sash is yours. Equip it in Quarters → Scars.");
 }
 
 export function applySparReward(npcId: string, playerWon: boolean): { xp: number; denarii: number } {

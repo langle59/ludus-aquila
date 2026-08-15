@@ -1,4 +1,5 @@
 import type { AttackKind, AttackShape, WeaponDef, WeaponId, WeaponMove } from "../types";
+import { gameState } from "../state/GameState";
 
 function move(name: string, shape: AttackShape, extra: Partial<Omit<WeaponMove, "name" | "shape">> = {}): WeaponMove {
   return {
@@ -107,15 +108,15 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
       lunge: 90,
     }),
     damage: 7,
-    attackSpeed: 220,
+    attackSpeed: 280,
     range: 36,
-    staminaCost: 6,
+    staminaCost: 8,
     specialStamina: 24,
     specialCooldown: 3000,
     blockStrength: 0.12,
     knockback: 50,
     windup: 40,
-    recover: 70,
+    recover: 105,
     comboHits: 2,
     playable: true,
     unlockAfter: "elite",
@@ -160,7 +161,12 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     description: "A heavy two-handed axe. Huge damage, slow swings, costly stamina.",
     specialName: "Heavy Slam",
     specialDescription: "A crushing slam that damages and staggers nearby enemies.",
-    light: move("Chop", "slam", { description: "A falling edge. Slow even when it is the light cut." }),
+    light: move("Chop", "slam", {
+      description: "A falling edge. Faster than the full overhead.",
+      windupMult: 0.62,
+      recoverMult: 0.7,
+      speedMult: 0.72,
+    }),
     heavy: move("Cleave", "slam", {
       description: "A full overhead. Staggers if it lands.",
       damageMult: 1.5,
@@ -195,7 +201,12 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     description: "The heaviest steel in the ludus. Slowest swing, greatest ruin. Almost no defense.",
     specialName: "Earth Shatter",
     specialDescription: "A ground slam that staggers and hurls anyone close.",
-    light: move("Smash", "slam", { description: "A short hammer blow." }),
+    light: move("Smash", "slam", {
+      description: "A short hammer blow.",
+      windupMult: 0.58,
+      recoverMult: 0.68,
+      speedMult: 0.7,
+    }),
     heavy: move("Crush", "slam", {
       description: "A two-handed drop. Staggers and throws.",
       damageMult: 1.45,
@@ -243,8 +254,59 @@ export function weaponIconKey(id: WeaponId): string {
   return "wep-gladius";
 }
 
-export function getWeapon(id: WeaponId): WeaponDef {
-  return WEAPONS[id];
+export function getWeapon(id: WeaponId, mastered = false): WeaponDef {
+  const base = WEAPONS[id];
+  if (!mastered) return base;
+  const lv = masteryLevel(id);
+  if (lv <= 0) return base;
+  const w: WeaponDef = { ...base, light: { ...base.light }, heavy: { ...base.heavy } };
+  if (id === "gladius") {
+    w.recover = Math.max(90, w.recover - (lv === 1 ? 18 : 32));
+    if (lv >= 2) w.damage += 1;
+  } else if (id === "spear") {
+    w.range += lv === 1 ? 8 : 14;
+  } else if (id === "dual_blades") {
+    w.staminaCost = Math.max(6, w.staminaCost - lv);
+    w.recover = Math.max(70, w.recover - (lv === 1 ? 8 : 16));
+  } else if (id === "trident_net") {
+    w.range += lv === 1 ? 6 : 12;
+  } else if (id === "securis") {
+    w.knockback += lv === 1 ? 10 : 22;
+    if (lv >= 2) w.damage += 1;
+  } else if (id === "malleus") {
+    w.knockback += lv === 1 ? 12 : 24;
+    if (lv >= 2) w.damage += 1;
+  }
+  return w;
+}
+
+export function recordWeaponWin(id: WeaponId): void {
+  const s = gameState.save;
+  s.weaponWins = s.weaponWins ?? {};
+  s.weaponWins[id] = (s.weaponWins[id] ?? 0) + 1;
+}
+
+export function masteryLevel(id: WeaponId): 0 | 1 | 2 {
+  const n = gameState.save.weaponWins?.[id] ?? 0;
+  if (n >= 5) return 2;
+  if (n >= 2) return 1;
+  return 0;
+}
+
+export function masteryHint(id: WeaponId): string {
+  const n = gameState.save.weaponWins?.[id] ?? 0;
+  const lv = masteryLevel(id);
+  if (lv >= 2) return "Mastered in the pit.";
+  if (lv === 1) return `Form II — win ${Math.max(0, 5 - n)} more with this weapon.`;
+  return `Form I — win ${Math.max(0, 2 - n)} more with this weapon.`;
+}
+
+export function flurryInterval(id: WeaponId, mastered = false): number {
+  if (id !== "dual_blades") return 120;
+  const lv = mastered ? masteryLevel(id) : 0;
+  if (lv >= 2) return 95;
+  if (lv >= 1) return 108;
+  return 120;
 }
 
 export function isHeavyWeapon(id: WeaponId): boolean {

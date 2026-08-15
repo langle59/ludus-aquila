@@ -1,10 +1,10 @@
 import Phaser from "phaser";
 import { TILE_SIZE } from "../config";
-import type { AttackKind, FighterStats, WeaponDef, WeaponId } from "../types";
-import { getWeapon, isHeavyWeapon, weaponMove } from "../data/weapons";
+import type { AttackKind, AttackShape, FighterStats, WeaponDef, WeaponId } from "../types";
+import { getWeapon, flurryInterval, isHeavyWeapon, weaponMove } from "../data/weapons";
 import { makeBodyTexture, bodyStyleFor, type BodyStyle } from "../systems/assets";
 import { audio } from "../systems/audio";
-import { getSkillMods } from "../systems/progression";
+import { clearInjury, getSkillMods, playerCombatStats } from "../systems/progression";
 import { gameState } from "../state/GameState";
 import { bus } from "../systems/bus";
 
@@ -134,7 +134,7 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
   }
 
   get weapon(): WeaponDef {
-    return getWeapon(this.weaponId);
+    return getWeapon(this.weaponId, this.team === "player");
   }
 
   get alive(): boolean {
@@ -297,7 +297,7 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
       this.scene.time.delayedCall(140, () => this.setVelocity(0, 0));
     } else if (w.id === "dual_blades") {
       this.animDuration = 520;
-      this.specialHitsLeft = 4;
+      this.specialHitsLeft = 3;
       this.flurryTimer = 0;
     } else if (w.id === "gladius") {
       this.animDuration = 300;
@@ -338,6 +338,11 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
       return false;
     }
     s.unguent -= 1;
+    if (s.injured) {
+      s.injured = false;
+      this.stats = playerCombatStats();
+      bus.emit("toast", "The ache leaves you.");
+    }
     this.health = Math.min(this.stats.maxHealth, this.health + 26);
     this.stamina = Math.min(this.stats.maxStamina, this.stamina + 32);
     this.nextUnguentAt = now + 900;
@@ -582,9 +587,19 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
     this.bodyVisual.setAlpha(1);
   }
 
+  poseReady(): void {
+    this.tableau = "none";
+    this.combat = "idle";
+    this.blocking = false;
+    this.hitboxActive = false;
+    this.setVelocity(0, 0);
+    this.bodyVisual.setAngle(0);
+    this.bodyVisual.setAlpha(1);
+  }
+
   refreshSkills(): void {
     if (this.team !== "player") return;
-    this.stats = { ...gameState.save.stats };
+    this.stats = playerCombatStats();
     this.moveSpeed = 140 + this.stats.agility * 6 + getSkillMods().moveSpeed;
     this.health = Math.min(this.health, this.stats.maxHealth);
     this.stamina = Math.min(this.stamina, this.stats.maxStamina);
@@ -603,12 +618,19 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
   attackCenter(): Phaser.Math.Vector2 {
     const w = this.weapon;
     let extra = 0;
+    let shape: AttackShape | null = null;
     if (this.attackKind === "special") {
       extra = w.id === "spear" ? 28 : w.id === "gladius" ? 8 : 0;
+      shape = w.id === "spear" || w.id === "trident_net" || w.id === "gladius" ? "thrust" : isHeavyWeapon(w.id) ? "slam" : "slash";
     } else {
-      extra = weaponMove(w, this.attackKind).rangeBonus;
+      const move = weaponMove(w, this.attackKind);
+      extra = move.rangeBonus;
+      shape = move.shape;
     }
-    const reach = w.range + extra;
+    let reach = w.range + extra;
+    if (shape === "slam" && this.attackKind !== "special") {
+      reach *= this.attackKind === "heavy" ? 0.55 : 0.45;
+    }
     return new Phaser.Math.Vector2(this.x + this.facing.x * reach, this.y + this.facing.y * reach);
   }
 
@@ -735,7 +757,7 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
 
     if (!this.isFrozen() && this.combat === "special" && this.weaponId === "dual_blades" && this.specialHitsLeft > 0) {
       this.flurryTimer += this.scene.game.loop.delta;
-      if (this.flurryTimer > 90) {
+      if (this.flurryTimer > flurryInterval(this.weaponId, this.team === "player")) {
         this.flurryTimer = 0;
         this.hitboxActive = true;
         this.specialHitsLeft -= 1;
@@ -808,9 +830,10 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
         ang2 = facingAng + arc * 0.7 - arc * sweep;
         reach = 10 + sweep * (this.attackKind === "heavy" ? 12 : 8);
       } else if (slamPose) {
+        const heavySlam = this.attackKind === "heavy" || this.attackKind === "special";
         const slam = easeOutCubic(Math.max(active, rec * 0.2));
-        ang = facingAng - (this.attackKind === "heavy" ? 155 : 140) + (this.attackKind === "heavy" ? 190 : 170) * slam;
-        reach = 10 + slam * (this.attackKind === "heavy" ? 14 : 10);
+        ang = facingAng - (heavySlam ? 155 : 125) + (heavySlam ? 190 : 155) * slam;
+        reach = 10 + slam * (heavySlam ? 14 : 10);
       } else {
         const slash = easeOutCubic(active);
         const start = facingAng - 120 * this.slashSide;

@@ -57,6 +57,7 @@ export class WorldProp extends Phaser.Physics.Arcade.Image {
     if (kind === "bed") this.setSize(36, 16);
     if (kind === "chest") this.setSize(22, 12);
     if (kind === "shieldstand") this.setSize(24, 12);
+    if (kind === "dice") this.setSize(56, 18);
     if (solid) this.refreshBody();
     if (!solid) this.disableBody();
   }

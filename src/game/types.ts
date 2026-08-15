@@ -52,6 +52,17 @@ export type SkillId =
   | "fox_step"
   | "ghost_step";
 
+export type PalSkillId =
+  | "hide_1"
+  | "hide_2"
+  | "hide_3"
+  | "fang_1"
+  | "fang_2"
+  | "fang_3"
+  | "pace_1"
+  | "pace_2"
+  | "pace_3";
+
 export type TunicColor =
   | "crimson"
   | "white"
@@ -212,11 +223,22 @@ export interface SaveData {
   unguent: number;
   palUnlocked: boolean;
   palBrought: boolean;
+  palName: string;
+  palTint: "house" | "ivory" | "night";
+  palTraining: number;
+  palPoints: number;
+  palXp: number;
+  palXpToNext: number;
+  unlockedPalSkills: PalSkillId[];
+  injured: boolean;
+  weaponWins: Partial<Record<WeaponId, number>>;
+  unlockedMastery: string[];
 }
 
 export interface SettingsData {
   musicVolume: number;
   sfxVolume: number;
+  musicMuted: boolean;
   screenShake: boolean;
   fullscreen: boolean;
   showMinimap: boolean;

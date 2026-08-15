@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { TILE_SIZE } from "../config";
+import { TILE_SIZE, HUD_CAM_PAD } from "../config";
 import { gameState } from "../state/GameState";
 import { bus } from "../systems/bus";
 import { audio } from "../systems/audio";
@@ -12,9 +12,9 @@ import { CombatAI } from "../systems/ai";
 import { bodyStyleFor } from "../systems/assets";
 import { burst, floatNumber, resolveHits } from "../systems/combat";
 import { getRival, houseCrowdTint, isTournamentId } from "../data/houses";
-import { applyArenaVictory, applyArenaDefeat, nextHouseAfter, nextUnlockedOpponent } from "../systems/progression";
+import { applyArenaVictory, applyArenaDefeat, nextHouseAfter, nextUnlockedOpponent, playerCombatStats } from "../systems/progression";
 import { getWeapon } from "../data/weapons";
-import { palBrought, palStats, palTier, palTitle } from "../data/pal";
+import { palBrought, palCombatStats, palKind } from "../data/pal";
 import { CombatInput } from "../systems/input";
 
 type Spectator = {
@@ -25,9 +25,14 @@ type Spectator = {
   cheer: string;
   raisedUntil: number;
   nextGesture: number;
+  side: "north" | "south";
+  baseTint: number;
 };
 
 type TossKind = "flower" | "fruit" | "cup" | "rock";
+
+const CROWD_MISSIO = 70;
+const CROWD_IUGULA = 40;
 
 export class ArenaScene extends Phaser.Scene {
   private player!: Fighter;
@@ -39,12 +44,15 @@ export class ArenaScene extends Phaser.Scene {
   private blockingHeld = false;
   private ended = false;
   private resolving = false;
+  private awaitingJudgment = false;
+  private crowdMissio = false;
   private opponentId = "";
   private spectators: Spectator[] = [];
   private cheerUntil = 0;
   private nextTossAt = 0;
   private sand = { x0: 0, y0: 0, x1: 0, y1: 0 };
-  private favor = 45;
+  private favor = 50;
+  private houseTint = 0xffffff;
   private firstBlood = false;
   private beastSeenAlive = false;
   private campMs = 0;
@@ -58,10 +66,13 @@ export class ArenaScene extends Phaser.Scene {
   create(): void {
     this.ended = false;
     this.resolving = false;
+    this.awaitingJudgment = false;
+    this.crowdMissio = false;
     this.beast = undefined;
     this.spectators = [];
     this.cheerUntil = 0;
-    this.favor = 45;
+    this.favor = palBrought() ? 50 : 45;
+    this.houseTint = 0xffffff;
     this.firstBlood = false;
     this.beastSeenAlive = false;
     this.campMs = 0;
@@ -77,7 +88,7 @@ export class ArenaScene extends Phaser.Scene {
     const built = buildArena(house.id);
     const solids = paintMap(this, built, "arena");
     labelMap(this, arenaMetaFor(house.id).labels);
-    this.cameras.main.setBounds(0, 0, built.cols * TILE_SIZE, built.rows * TILE_SIZE);
+    this.cameras.main.setBounds(0, -HUD_CAM_PAD, built.cols * TILE_SIZE, built.rows * TILE_SIZE + HUD_CAM_PAD);
     this.sand = {
       x0: 4 * TILE_SIZE,
       y0: 4 * TILE_SIZE,
@@ -85,6 +96,7 @@ export class ArenaScene extends Phaser.Scene {
       y1: (built.rows - 4) * TILE_SIZE,
     };
     const houseTint = houseCrowdTint(house.id);
+    this.houseTint = houseTint;
     this.seatCrowd(built.cols * TILE_SIZE, built.rows * TILE_SIZE, houseTint);
 
     const look = playerLook();
@@ -96,7 +108,7 @@ export class ArenaScene extends Phaser.Scene {
       cape: look.cape,
       scar: look.scar,
       crest: look.crest,
-      stats: { ...gameState.save.stats },
+      stats: { ...playerCombatStats() },
       weapon: gameState.save.equippedWeapon,
       team: "player",
     });
@@ -138,10 +150,9 @@ export class ArenaScene extends Phaser.Scene {
     }
 
     if (palBrought()) {
-      const tier = palTier();
-      const stats = palStats(tier);
-      this.pal = new ArenaBeast(this, this.player.x - 48, this.player.y + 8, "eagle", "player", {
-        label: palTitle(tier),
+      const stats = palCombatStats();
+      this.pal = new ArenaBeast(this, this.player.x - 48, this.player.y + 8, palKind(), "player", {
+        label: stats.label,
         maxHp: stats.maxHp,
         bite: stats.bite,
         knock: stats.knock,
@@ -161,14 +172,16 @@ export class ArenaScene extends Phaser.Scene {
 
     this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
     if (fighter.isChampion) bus.emit("boss", fighter.name);
-    bus.emit("favor-show");
+    bus.emit("favor-show", { them: houseTint });
     bus.emit("favor", this.favor);
+    if (this.pal) bus.emit("pal-hp-show");
     audio.sfx("crowd");
     bus.on("player-attack", this.doAttack, this);
     bus.on("player-special", this.doSpecial, this);
     bus.on("skills-changed", this.onSkillsChanged, this);
     bus.on("cosmetics-changed", this.onCosmeticsChanged, this);
     bus.on("player-snared", this.onPlayerSnared, this);
+    bus.on("judgment-pick", this.onJudgmentPick, this);
     this.nextTossAt = this.time.now + 1800;
 
     bus.emit("dialogue", {
@@ -182,6 +195,8 @@ export class ArenaScene extends Phaser.Scene {
     this.events.on("shutdown", () => {
       bus.emit("boss-hide");
       bus.emit("favor-hide");
+      bus.emit("pal-hp-hide");
+      bus.emit("judgment-hide");
       this.ai?.destroy();
       this.beast?.destroy();
       this.pal?.destroy();
@@ -190,6 +205,7 @@ export class ArenaScene extends Phaser.Scene {
       bus.off("skills-changed", this.onSkillsChanged, this);
       bus.off("cosmetics-changed", this.onCosmeticsChanged, this);
       bus.off("player-snared", this.onPlayerSnared, this);
+      bus.off("judgment-pick", this.onJudgmentPick, this);
     });
   }
 
@@ -212,7 +228,7 @@ export class ArenaScene extends Phaser.Scene {
       { y: worldH - 46, n: 25, stagger: 9 },
     ];
     let i = 0;
-    for (const row of [...north, ...south]) {
+    const addRow = (row: { y: number; n: number; stagger: number }, side: "north" | "south") => {
       const margin = 38;
       const span = worldW - margin * 2;
       for (let s = 0; s < row.n; s++) {
@@ -220,7 +236,7 @@ export class ArenaScene extends Phaser.Scene {
         const v = i % 8;
         const idle = `crowd-${v}`;
         const cheer = `crowd-${v}-arm`;
-        const houseWash = i % 5 === 0 ? houseTint : i % 7 === 0 ? 0xe8dcc8 : 0xffffff;
+        const houseWash = side === "south" ? (i % 3 === 0 ? houseTint : 0xe8dcc8) : i % 5 === 0 ? 0xe8c96a : 0xffffff;
         const img = this.add.image(x, row.y, idle).setDepth(4).setTint(houseWash);
         this.spectators.push({
           img,
@@ -230,45 +246,60 @@ export class ArenaScene extends Phaser.Scene {
           cheer,
           raisedUntil: 0,
           nextGesture: this.time.now + Phaser.Math.Between(400, 2400),
+          side,
+          baseTint: houseWash,
         });
         i += 1;
       }
-    }
+    };
+    for (const row of north) addRow(row, "north");
+    for (const row of south) addRow(row, "south");
   }
 
-  private swellCrowd(ms = 700): void {
+  private swellCrowd(ms = 700, side?: "north" | "south"): void {
     const now = this.time.now;
     this.cheerUntil = Math.max(this.cheerUntil, now + ms);
-    const chance = 0.22 + this.favor / 280;
+    const chance = 0.28 + this.favor / 240;
     for (const s of this.spectators) {
+      if (side && s.side !== side) continue;
       if (Math.random() < chance) s.raisedUntil = now + Phaser.Math.Between(280, 640);
     }
   }
 
   private addFavor(delta: number): void {
+    const prev = this.favor;
     const next = Phaser.Math.Clamp(this.favor + delta, 0, 100);
     if (next === this.favor) return;
     this.favor = next;
     bus.emit("favor", this.favor);
-    if (delta >= 4) this.swellCrowd(500);
+    if (Math.abs(delta) >= 4) {
+      this.swellCrowd(560, delta > 0 ? "north" : "south");
+      const mid = this.player ? { x: this.player.x, y: this.player.y - 48 } : { x: 400, y: 200 };
+      floatNumber(this, mid.x, mid.y, delta > 0 ? "+FAVOR" : "THEY BOO", delta > 0 ? "#e8c96a" : "#e07060");
+    }
+    if (prev < CROWD_MISSIO && this.favor >= CROWD_MISSIO) bus.emit("crowd-call", "missio");
+    if (prev > CROWD_IUGULA && this.favor <= CROWD_IUGULA) bus.emit("crowd-call", "iugula");
   }
 
   private onPlayerSnared = (): void => {
     if (this.busy()) return;
-    this.addFavor(-5);
+    this.addFavor(-8);
   };
 
   private updateCrowd(now: number): void {
     const cheering = now < this.cheerUntil;
-    const amp = (cheering ? 3.2 : 1.1) + this.favor / 70;
-    const gestureGap = this.favor >= 60 ? 700 : this.favor <= 35 ? 1600 : 1100;
     for (const s of this.spectators) {
+      const hot = s.side === "north" ? this.favor >= 55 : this.favor <= 45;
+      const amp = (cheering || hot ? 3.4 : 1.1) + (s.side === "north" ? this.favor : 100 - this.favor) / 80;
+      const gestureGap = hot ? 520 : 1500;
       if (now >= s.nextGesture) {
         s.raisedUntil = now + Phaser.Math.Between(260, 520);
         s.nextGesture = now + Phaser.Math.Between(gestureGap, gestureGap + 1400);
       }
       s.img.y = s.baseY + Math.sin(now / 180 + s.phase) * amp;
       s.img.setTexture(now < s.raisedUntil ? s.cheer : s.idle);
+      if (hot) s.img.setTint(s.side === "north" ? 0xe8c96a : this.houseTint);
+      else s.img.setTint(s.baseTint);
     }
   }
 
@@ -419,18 +450,21 @@ export class ArenaScene extends Phaser.Scene {
   }
 
   private onFoeHit = (attacker: Fighter, target: { x: number; y: number }, kind: "hit" | "block" | "perfect" | "parry" | "miss"): void => {
-    this.swellCrowd(kind === "hit" ? 820 : 480);
+    this.swellCrowd(kind === "hit" ? 820 : 480, attacker === this.player ? "north" : "south");
+    const onYou = target === this.player;
     if (kind === "perfect" || kind === "parry") {
-      if (target === this.player) this.addFavor(6);
+      this.addFavor(onYou ? -2 : 6);
       return;
     }
     if (attacker === this.player && kind === "hit") {
-      this.addFavor(this.player.attackKind === "special" ? 5 : this.player.attackKind === "heavy" ? 3 : 2);
+      this.addFavor(this.player.attackKind === "special" ? 10 : this.player.attackKind === "heavy" ? 7 : 4);
       if (!this.firstBlood) {
         this.firstBlood = true;
-        this.addFavor(8);
+        this.addFavor(12);
       }
     }
+    if (attacker === this.enemy && onYou && kind === "hit") this.addFavor(-8);
+    if (attacker === this.enemy && onYou && kind === "block") this.addFavor(-2);
   };
 
   private updateHabits(delta: number): void {
@@ -439,25 +473,25 @@ export class ArenaScene extends Phaser.Scene {
     if (dist > 150) {
       this.campMs += delta;
       this.pressMs = 0;
-      if (this.campMs > 2200) {
+      if (this.campMs > 1600) {
         this.campMs = 0;
-        this.addFavor(-3);
+        this.addFavor(-5);
       }
     } else {
       this.campMs = 0;
       if (dist < 80) {
         this.pressMs += delta;
-        if (this.pressMs > 2000) {
+        if (this.pressMs > 1800) {
           this.pressMs = 0;
-          this.addFavor(1);
+          this.addFavor(2);
         }
       } else this.pressMs = 0;
     }
     if (this.blockingHeld && this.player.combat === "block") {
       this.turtleMs += delta;
-      if (this.turtleMs > 1800) {
+      if (this.turtleMs > 1400) {
         this.turtleMs = 0;
-        this.addFavor(-2);
+        this.addFavor(-4);
       }
     } else this.turtleMs = 0;
   }
@@ -525,14 +559,14 @@ export class ArenaScene extends Phaser.Scene {
       resolveHits(this.enemy, marks, (t, kind) => this.onFoeHit(this.enemy, t, kind));
     }
     if (this.beast?.tryBite(beastPrey)) this.swellCrowd(500);
-    if (this.pal?.tryBite(this.palPrey())) this.addFavor(1);
+    if (this.pal?.tryBite(this.palPrey())) this.addFavor(3);
 
     this.player.updateNet(this.foes(), delta);
     this.enemy.updateNet(this.pal?.alive ? [this.player, this.pal] : [this.player], delta);
 
     if (this.beastSeenAlive && this.beast && !this.beast.alive) {
       this.beastSeenAlive = false;
-      this.addFavor(6);
+      this.addFavor(10);
     }
 
     this.player.syncVisuals(now);
@@ -542,6 +576,7 @@ export class ArenaScene extends Phaser.Scene {
     gameState.save.health = this.player.health;
     gameState.save.stamina = this.player.stamina;
     bus.emit("boss-hp", this.enemy.health / this.enemy.stats.maxHealth);
+    if (this.pal) bus.emit("pal-hp", this.pal.alive ? this.pal.health / this.pal.maxHealth : 0);
 
     if (!this.player.alive) this.beginTableau(false);
     else if (!this.enemy.alive && (!this.beast || !this.beast.alive)) this.beginTableau(true);
@@ -550,14 +585,13 @@ export class ArenaScene extends Phaser.Scene {
   private beginTableau(won: boolean): void {
     if (this.resolving || this.ended) return;
     this.resolving = true;
-    const missio = this.favor >= 55;
     this.player.setVelocity(0, 0);
     this.enemy.setVelocity(0, 0);
     this.beast?.setVelocity(0, 0);
     this.pal?.setVelocity(0, 0);
-    this.player.freeze(1500);
-    this.enemy.freeze(1500);
-    this.pal?.freeze(1500);
+    this.player.freeze(8000);
+    this.enemy.freeze(8000);
+    this.pal?.freeze(8000);
 
     const dx = this.enemy.x - this.player.x;
     const dy = this.enemy.y - this.player.y;
@@ -565,13 +599,67 @@ export class ArenaScene extends Phaser.Scene {
     this.player.facing.set(dx / dist, dy / dist);
     this.enemy.facing.set(-dx / dist, -dy / dist);
 
+    this.cameras.main.stopFollow();
+    this.cameras.main.pan((this.player.x + this.enemy.x) / 2, (this.player.y + this.enemy.y) / 2, 280);
+    this.haltBodies();
+    this.swellCrowd(1800);
+
+    this.crowdMissio = this.favor >= CROWD_MISSIO;
+    if (!won) {
+      this.playVerdict(false, this.crowdMissio, true);
+      return;
+    }
+
+    this.player.poseReady();
+    this.enemy.poseKneel();
+    this.awaitingJudgment = true;
+    bus.emit("crowd-call", this.crowdMissio ? "missio" : "iugula");
+    bus.emit("judgment-show", { crowd: this.crowdMissio ? "missio" : "iugula" });
+  }
+
+  private onJudgmentPick = (payload: { follow: boolean }): void => {
+    if (!this.awaitingJudgment || this.ended) return;
+    this.awaitingJudgment = false;
+    bus.emit("judgment-hide");
+    const missio = payload.follow ? this.crowdMissio : !this.crowdMissio;
+    this.playVerdict(true, missio, payload.follow);
+  };
+
+  private haltBodies(): void {
+    const stop = (obj?: Phaser.Physics.Arcade.Sprite) => {
+      if (!obj) return;
+      obj.setVelocity(0, 0);
+      const body = obj.body as Phaser.Physics.Arcade.Body | undefined;
+      if (body) body.enable = false;
+    };
+    stop(this.player);
+    stop(this.enemy);
+    stop(this.beast);
+    stop(this.pal);
+  }
+
+  private resetCamera(): void {
+    try {
+      this.tweens.killTweensOf(this.cameras.main);
+      this.cameras.main.resetFX();
+      this.cameras.main.setZoom(1);
+    } catch {
+      /* camera already tearing down */
+    }
+  }
+
+  private playVerdict(won: boolean, missio: boolean, followed: boolean): void {
     const winner = won ? this.player : this.enemy;
     const loser = won ? this.enemy : this.player;
     winner.poseFlourish();
-    if (missio) loser.poseKneel();
-    else loser.poseSteel();
+    this.haltBodies();
+
+    const dx = this.enemy.x - this.player.x;
+    const dy = this.enemy.y - this.player.y;
+    const dist = Math.max(1, Math.hypot(dx, dy));
 
     if (missio) {
+      loser.poseKneel();
       const sign = won ? -1 : 1;
       this.tweens.add({
         targets: winner,
@@ -580,16 +668,56 @@ export class ArenaScene extends Phaser.Scene {
         duration: 480,
         ease: "Sine.easeOut",
       });
+      if (gameState.settings.screenShake) this.cameras.main.shake(70, 0.002);
+      this.sandStain(loser.x, loser.y);
+      audio.sfx("missio");
+      this.time.delayedCall(1300, () => this.finish(won, missio, followed));
+      return;
     }
 
-    this.cameras.main.stopFollow();
-    this.cameras.main.pan((this.player.x + this.enemy.x) / 2, (this.player.y + this.enemy.y) / 2, 280);
-    if (gameState.settings.screenShake) this.cameras.main.shake(missio ? 70 : 130, missio ? 0.002 : 0.005);
-    this.swellCrowd(1600);
-    this.sandStain(loser.x, loser.y);
-    audio.sfx(missio ? "missio" : won ? "win" : "lose");
+    this.playSlaughter(won, winner, loser, dx / dist, dy / dist, followed);
+  }
 
-    this.time.delayedCall(1450, () => this.finish(won, missio));
+  private playSlaughter(
+    won: boolean,
+    winner: Fighter,
+    loser: Fighter,
+    nx: number,
+    ny: number,
+    followed: boolean,
+  ): void {
+    loser.poseKneel();
+    this.haltBodies();
+    const wash = this.add
+      .rectangle(this.scale.width / 2, this.scale.height / 2, this.scale.width, this.scale.height, 0xb33a2b, 0.14)
+      .setDepth(40)
+      .setScrollFactor(0);
+    this.tweens.add({
+      targets: wash,
+      alpha: 0.28,
+      duration: 360,
+      yoyo: true,
+      hold: 200,
+    });
+    this.tweens.add({
+      targets: winner,
+      x: winner.x + nx * 18 * (won ? 1 : -1),
+      y: winner.y + ny * 10 * (won ? 1 : -1),
+      duration: 720,
+      ease: "Sine.easeIn",
+    });
+    this.time.delayedCall(380, () => {
+      if (this.ended) return;
+      loser.poseSteel();
+      this.sandStain(loser.x, loser.y);
+      if (gameState.settings.screenShake) this.cameras.main.shake(180, 0.006);
+      audio.sfx(won ? "win" : "lose");
+      audio.sfx("crowd");
+    });
+    this.time.delayedCall(1500, () => {
+      if (wash.active) wash.destroy();
+      this.finish(won, false, followed);
+    });
   }
 
   private sandStain(x: number, y: number): void {
@@ -611,9 +739,12 @@ export class ArenaScene extends Phaser.Scene {
     });
   }
 
-  private finish(won: boolean, missio = false): void {
+  private finish(won: boolean, missio = false, followed = true): void {
     if (this.ended) return;
     this.ended = true;
+    this.awaitingJudgment = false;
+    this.resetCamera();
+    bus.emit("judgment-hide");
     const found = getRival(this.opponentId);
     const fighter = found!.fighter;
     if (won) {
@@ -632,11 +763,15 @@ export class ArenaScene extends Phaser.Scene {
       } else if (r.unlocked) extra = `\nUnlocked: ${getWeapon(r.unlocked).name}`;
       if (r.palNote) extra += `\n\n${r.palNote}`;
       const missioLine = missio
-        ? "The crowd calls missio. You step off. They live. The bout is yours.\n\n"
-        : "Steel. The stands roar.\n\n";
+        ? followed
+          ? "The crowd called missio. You stepped off. They live.\n\n"
+          : "The stands wanted blood. You showed mercy anyway.\n\n"
+        : followed
+          ? "The crowd called iugula. Steel. The stands roar.\n\n"
+          : "They begged missio. You put steel in anyway.\n\n";
       const chain = won && isTournamentId(this.opponentId) && this.opponentId !== "tourney_3";
       bus.emit("result", {
-        title: missio ? "Missio" : "Victory",
+        title: missio ? "Missio" : "Iugula",
         body: `${missioLine}${fighter.victory.join("\n")}\n\n+${r.denarii} denarii   +${r.xp} XP${r.leveled ? "\nYou grow stronger." : ""}${extra}`,
         action: chain ? "Next bout" : "Return to the ludus",
       });
@@ -646,7 +781,7 @@ export class ArenaScene extends Phaser.Scene {
         title: missio ? "Spared" : "Defeat",
         body: missio
           ? `${fighter.defeat.join("\n")}\n\nThe crowd wants you back. Marcellus' men drag you from the sand.\nYou wake in the ludus. Nothing you earned is lost.`
-          : `${fighter.defeat.join("\n")}\n\nYou fall. The stands go quiet.\nYou wake in the ludus. A few denarii are lost. Your name is not.`,
+          : `${fighter.defeat.join("\n")}\n\nYou fall. The stands go quiet.\nYou wake in the ludus. A few denarii are lost. The fall left a mark — equip scars in Quarters.`,
         action: "Return to the ludus",
       });
     }
@@ -656,6 +791,8 @@ export class ArenaScene extends Phaser.Scene {
   private leave(won: boolean): void {
     bus.emit("boss-hide");
     bus.emit("favor-hide");
+    bus.emit("pal-hp-hide");
+    bus.emit("judgment-hide");
     if (won && isTournamentId(this.opponentId) && !gameState.save.freedomWon) {
       const next = nextUnlockedOpponent();
       if (next && isTournamentId(next)) {
@@ -667,8 +804,6 @@ export class ArenaScene extends Phaser.Scene {
     gameState.pendingArenaOpponent = null;
     gameState.restoreVitals();
     gameState.persist();
-    this.scene.stop();
-    if (this.scene.isSleeping("LudusScene")) this.scene.wake("LudusScene");
-    else this.scene.launch("LudusScene");
+    bus.emit("return-ludus");
   }
 }

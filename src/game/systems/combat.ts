@@ -26,7 +26,7 @@ export function resolveHits(attacker: Fighter, targets: CombatTarget[], onHit?: 
   const move = attacker.attackKind === "special" ? null : weaponMove(w, attacker.attackKind);
   const specialMult =
     attacker.attackKind === "special"
-      ? (w.id === "dual_blades" ? 0.7 : 1.45) * (attacker.team === "player" ? getSkillMods().specialMult : 1)
+      ? (w.id === "dual_blades" ? 0.55 : 1.45) * (attacker.team === "player" ? getSkillMods().specialMult : 1)
       : move?.damageMult ?? 1;
   const bonus = attacker.team === "player" ? attacker.nextHitBonus : 1;
   const dmg = (w.damage + attacker.stats.attack) * specialMult * bonus;
@@ -35,12 +35,16 @@ export function resolveHits(attacker: Fighter, targets: CombatTarget[], onHit?: 
   const staggerHit =
     (attacker.attackKind === "special" && (w.id === "gladius" || isHeavyWeapon(w.id))) ||
     Boolean(move?.stagger);
+  const thrust = move?.shape === "thrust" || (attacker.attackKind === "special" && (w.id === "spear" || w.id === "trident_net"));
+  const slack = rad + 12;
 
   for (const t of targets) {
     if (!t.alive || t === attacker) continue;
     if (t.team === attacker.team) continue;
-    const dist = Phaser.Math.Distance.Between(center.x, center.y, t.x, t.y);
-    if (dist > rad + 12) continue;
+    const dist = thrust
+      ? distToSegment(t.x, t.y, attacker.x, attacker.y, center.x, center.y)
+      : Phaser.Math.Distance.Between(center.x, center.y, t.x, t.y);
+    if (dist > slack) continue;
     const result = t.takeDamage(dmg, from, knock, staggerHit);
     if (result === "miss") continue;
     attacker.hitboxActive = attacker.attackKind === "special" && w.id === "dual_blades";
@@ -61,24 +65,34 @@ export function resolveHits(attacker: Fighter, targets: CombatTarget[], onHit?: 
     if (attacker.team === "player") attacker.consumeHitBonus();
     audio.sfx(result === "block" ? "block" : "hit");
     const tint = result === "block" ? 0x88aacc : 0xe8dcc8;
-    burst(attacker.scene, t.x, t.y, tint, result === "hit" && (attacker.attackKind !== "light" || isHeavyWeapon(w.id)));
+    const heavyFeel = attacker.attackKind !== "light";
+    burst(attacker.scene, t.x, t.y, tint, result === "hit" && heavyFeel);
     const shown = Math.max(1, Math.round(t.lastDamage));
     floatNumber(attacker.scene, t.x + Phaser.Math.Between(-8, 8), t.y - 22, String(shown), result === "block" ? "#7ab8e8" : "#e07060");
     if (result === "hit") {
       if (attacker.team === "player") attacker.registerCombo();
-      const heavy = attacker.attackKind !== "light" || isHeavyWeapon(w.id);
-      const stop = w.id === "dual_blades" && attacker.attackKind === "special" ? 32 : heavy ? 70 : 45;
+      const stop = w.id === "dual_blades" && attacker.attackKind === "special" ? 32 : heavyFeel ? 70 : 45;
       attacker.freeze(stop);
       t.freeze(stop);
       if (gameState.settings.screenShake) {
-        attacker.scene.cameras.main.shake(heavy ? 90 : 42, heavy ? 0.005 : 0.0022);
+        attacker.scene.cameras.main.shake(heavyFeel ? 90 : 42, heavyFeel ? 0.005 : 0.0022);
       }
     } else if (gameState.settings.screenShake && attacker.attackKind !== "light") {
       attacker.scene.cameras.main.shake(50, 0.002);
     }
     onHit?.(t, result);
-    if (w.id !== "dual_blades") break;
+    if (!(w.id === "dual_blades" && attacker.attackKind === "special")) break;
   }
+}
+
+function distToSegment(px: number, py: number, ax: number, ay: number, bx: number, by: number): number {
+  const abx = bx - ax;
+  const aby = by - ay;
+  const apx = px - ax;
+  const apy = py - ay;
+  const ab2 = abx * abx + aby * aby;
+  const t = ab2 <= 0 ? 0 : Math.max(0, Math.min(1, (apx * abx + apy * aby) / ab2));
+  return Phaser.Math.Distance.Between(px, py, ax + abx * t, ay + aby * t);
 }
 
 export function burst(scene: Phaser.Scene, x: number, y: number, tint: number, heavy = false): void {

@@ -8,6 +8,7 @@ import { audio } from "../systems/audio";
 export type { BeastKind };
 
 type BeastAi = "circle" | "telegraph" | "lunge" | "backoff" | "recover";
+type BeastTrick = "feint" | "sideslip" | "double" | "flyby" | "slam" | "roar" | "charge" | "frenzy";
 
 type BeastProfile = {
   tex: string;
@@ -38,6 +39,7 @@ type BeastProfile = {
   markR: number;
   visY: number;
   pressIn: boolean;
+  trick: BeastTrick;
 };
 
 const PROFILES: Record<BeastKind, BeastProfile> = {
@@ -70,6 +72,7 @@ const PROFILES: Record<BeastKind, BeastProfile> = {
     markR: 6,
     visY: 10,
     pressIn: false,
+    trick: "feint",
   },
   serpent: {
     tex: "beast-serpent",
@@ -100,6 +103,7 @@ const PROFILES: Record<BeastKind, BeastProfile> = {
     markR: 7,
     visY: 10,
     pressIn: false,
+    trick: "sideslip",
   },
   wolf: {
     tex: "beast-wolf",
@@ -130,6 +134,7 @@ const PROFILES: Record<BeastKind, BeastProfile> = {
     markR: 7,
     visY: 10,
     pressIn: false,
+    trick: "double",
   },
   bear: {
     tex: "beast-bear",
@@ -160,6 +165,7 @@ const PROFILES: Record<BeastKind, BeastProfile> = {
     markR: 10,
     visY: 14,
     pressIn: true,
+    trick: "slam",
   },
   lion: {
     tex: "beast-lion",
@@ -190,6 +196,7 @@ const PROFILES: Record<BeastKind, BeastProfile> = {
     markR: 8,
     visY: 12,
     pressIn: true,
+    trick: "roar",
   },
   bull: {
     tex: "beast-bull",
@@ -198,9 +205,9 @@ const PROFILES: Record<BeastKind, BeastProfile> = {
     bite: 15,
     knock: 70,
     speed: 62,
-    lungeSpd: 230,
-    lungeMs: 280,
-    telegraphMs: 640,
+    lungeSpd: 280,
+    lungeMs: 380,
+    telegraphMs: 720,
     recoverMs: 480,
     backoffMs: 180,
     biteRange: 24,
@@ -220,6 +227,7 @@ const PROFILES: Record<BeastKind, BeastProfile> = {
     markR: 10,
     visY: 16,
     pressIn: true,
+    trick: "charge",
   },
   boar: {
     tex: "beast-boar",
@@ -229,10 +237,10 @@ const PROFILES: Record<BeastKind, BeastProfile> = {
     knock: 58,
     speed: 70,
     lungeSpd: 220,
-    lungeMs: 260,
-    telegraphMs: 600,
+    lungeMs: 160,
+    telegraphMs: 480,
     recoverMs: 400,
-    backoffMs: 160,
+    backoffMs: 120,
     biteRange: 22,
     lungeHitRange: 24,
     dmgTaken: 0.52,
@@ -250,6 +258,7 @@ const PROFILES: Record<BeastKind, BeastProfile> = {
     markR: 8,
     visY: 10,
     pressIn: true,
+    trick: "frenzy",
   },
   raven: {
     tex: "beast-raven",
@@ -258,13 +267,13 @@ const PROFILES: Record<BeastKind, BeastProfile> = {
     bite: 11,
     knock: 32,
     speed: 120,
-    lungeSpd: 280,
-    lungeMs: 180,
-    telegraphMs: 420,
+    lungeSpd: 340,
+    lungeMs: 260,
+    telegraphMs: 360,
     recoverMs: 520,
     backoffMs: 260,
     biteRange: 12,
-    lungeHitRange: 14,
+    lungeHitRange: 16,
     dmgTaken: 0.95,
     knockTaken: 1.1,
     invulnMs: 120,
@@ -280,6 +289,7 @@ const PROFILES: Record<BeastKind, BeastProfile> = {
     markR: 5,
     visY: 8,
     pressIn: false,
+    trick: "flyby",
   },
   eagle: {
     tex: "beast-eagle",
@@ -288,8 +298,8 @@ const PROFILES: Record<BeastKind, BeastProfile> = {
     bite: 8,
     knock: 32,
     speed: 118,
-    lungeSpd: 260,
-    lungeMs: 200,
+    lungeSpd: 300,
+    lungeMs: 240,
     telegraphMs: 400,
     recoverMs: 540,
     backoffMs: 240,
@@ -310,6 +320,7 @@ const PROFILES: Record<BeastKind, BeastProfile> = {
     markR: 6,
     visY: 12,
     pressIn: false,
+    trick: "flyby",
   },
 };
 
@@ -344,6 +355,9 @@ export class ArenaBeast extends Phaser.Physics.Arcade.Sprite {
   private down = false;
   private lungeVx = 0;
   private lungeVy = 0;
+  private chainLeft = 0;
+  private feint = false;
+  private usedFeint = false;
 
   constructor(
     scene: Phaser.Scene,
@@ -449,7 +463,11 @@ export class ArenaBeast extends Phaser.Physics.Arcade.Sprite {
     this.facing.set(nx, ny);
 
     if (this.aiState === "telegraph") {
-      this.setVelocity(0, 0);
+      if (p.trick === "sideslip") {
+        this.setVelocity(-ny * p.speed * 1.15, nx * p.speed * 1.15);
+      } else {
+        this.setVelocity(0, 0);
+      }
       if (this.telegraph) this.telegraph.setPosition(this.x, this.y - p.markY);
       if (now >= this.stateUntil) this.beginLunge(nx, ny, now);
       return;
@@ -457,9 +475,20 @@ export class ArenaBeast extends Phaser.Physics.Arcade.Sprite {
 
     if (this.aiState === "lunge") {
       this.setVelocity(this.lungeVx, this.lungeVy);
-      this.hitboxActive = dist < p.lungeHitRange;
+      const hitR = p.trick === "slam" ? p.lungeHitRange * 1.35 : p.lungeHitRange;
+      this.hitboxActive = !this.feint && dist < hitR;
       if (now >= this.stateUntil) {
         this.hitboxActive = false;
+        if (this.feint) {
+          this.feint = false;
+          this.beginTelegraph(now, target);
+          return;
+        }
+        if (this.chainLeft > 0) {
+          this.chainLeft -= 1;
+          this.beginLunge(nx, ny, now);
+          return;
+        }
         this.aiState = "backoff";
         this.stateUntil = now + p.backoffMs;
       }
@@ -498,7 +527,11 @@ export class ArenaBeast extends Phaser.Physics.Arcade.Sprite {
       if (Math.random() < 0.45) this.circleDir *= -1;
       const reach = p.pressIn ? 118 : 92;
       const chance = p.pressIn ? 0.86 : 0.72;
-      if (dist < reach && Math.random() < chance) this.beginTelegraph(now);
+      if (dist < reach && Math.random() < chance) {
+        this.usedFeint = false;
+        this.chainLeft = 0;
+        this.beginTelegraph(now, target);
+      }
     }
   }
 
@@ -539,6 +572,15 @@ export class ArenaBeast extends Phaser.Physics.Arcade.Sprite {
       result === "block" ? "#7ab8e8" : "#e07060",
     );
     audio.sfx(result === "block" ? "block" : "hit");
+    if (result === "hit" && this.kind === "serpent") {
+      this.scene.time.delayedCall(420, () => {
+        if (!target.alive) return;
+        const venom = target.takeDamage(Math.max(2, this.profile.bite * 0.35), from, 8);
+        if (venom === "hit") {
+          floatNumber(this.scene, target.x, target.y - 28, "VENOM", "#6ecf8a");
+        }
+      });
+    }
     return result === "hit";
   }
 
@@ -602,21 +644,43 @@ export class ArenaBeast extends Phaser.Physics.Arcade.Sprite {
     super.destroy(fromScene);
   }
 
-  private beginTelegraph(now: number): void {
+  private beginTelegraph(now: number, target?: { x: number; y: number; freeze?: (ms: number) => void }): void {
     const p = this.profile;
     this.aiState = "telegraph";
-    this.stateUntil = now + p.telegraphMs;
+    const short = p.trick === "feint" && !this.feint;
+    this.stateUntil = now + (short ? Math.min(280, p.telegraphMs * 0.5) : p.trick === "roar" ? p.telegraphMs + 180 : p.telegraphMs);
     this.setVelocity(0, 0);
     this.telegraph?.destroy();
-    const color = this.kind === "fox" ? COLORS.gold : this.kind === "serpent" ? 0x6ecf8a : this.kind === "bear" ? 0xc4a070 : 0xb8c0c8;
-    this.telegraph = this.scene.add.circle(this.x, this.y - p.markY, p.markR, color, 0.88).setDepth(4000);
+    const color = short
+      ? 0xc4b49a
+      : this.kind === "fox"
+        ? COLORS.foxOrange
+        : this.kind === "serpent"
+          ? COLORS.serpentGreen
+          : this.kind === "wolf"
+            ? COLORS.wolfGrey
+            : this.kind === "bear"
+              ? COLORS.bearBrown
+              : this.kind === "lion"
+                ? COLORS.lionGold
+                : this.kind === "bull"
+                  ? COLORS.bullRed
+                  : this.kind === "boar"
+                    ? COLORS.boarHide
+                    : this.kind === "raven"
+                      ? COLORS.ravenBlack
+                      : COLORS.gold;
+    this.telegraph = this.scene.add.circle(this.x, this.y - p.markY, p.markR * (p.trick === "roar" ? 1.6 : 1), color, 0.88).setDepth(4000);
     this.scene.tweens.add({
       targets: this.telegraph,
       alpha: 0.2,
       yoyo: true,
-      duration: 140,
-      repeat: 3,
+      duration: p.trick === "roar" ? 90 : 140,
+      repeat: p.trick === "roar" ? 6 : 3,
     });
+    if (p.trick === "roar" && target && Phaser.Math.Distance.Between(this.x, this.y, target.x, target.y) < 90) {
+      target.freeze?.(220);
+    }
   }
 
   private beginLunge(nx: number, ny: number, now: number): void {
@@ -624,9 +688,21 @@ export class ArenaBeast extends Phaser.Physics.Arcade.Sprite {
     this.telegraph?.destroy();
     this.telegraph = undefined;
     this.aiState = "lunge";
+    this.feint = p.trick === "feint" && !this.usedFeint;
+    if (this.feint) {
+      this.usedFeint = true;
+      this.stateUntil = now + 90;
+      this.lungeVx = nx * p.lungeSpd * 0.45;
+      this.lungeVy = ny * p.lungeSpd * 0.45;
+      this.hitboxActive = false;
+      return;
+    }
+    if (p.trick === "double") this.chainLeft = Math.max(this.chainLeft, 1);
+    if (p.trick === "frenzy") this.chainLeft = Math.max(this.chainLeft, 2);
+    const spd = p.trick === "charge" || p.trick === "flyby" ? p.lungeSpd : p.lungeSpd;
     this.stateUntil = now + p.lungeMs;
-    this.lungeVx = nx * p.lungeSpd;
-    this.lungeVy = ny * p.lungeSpd;
+    this.lungeVx = nx * spd;
+    this.lungeVy = ny * spd;
     this.hitboxActive = true;
   }
 

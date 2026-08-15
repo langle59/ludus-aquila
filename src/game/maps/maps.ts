@@ -14,11 +14,13 @@ export const LUDUS_META: MapDef = {
   cols: 48,
   rows: 36,
   labels: [
-    { x: 24, y: 2.2, text: "LANISTA" },
+    { x: 23.5, y: 2.2, text: "LANISTA" },
+    { x: 4.5, y: 13.35, text: "ROOST" },
     { x: 6, y: 7.2, text: "ARMORY" },
     { x: 42, y: 7.2, text: "QUARTERS" },
-    { x: 24, y: 13, text: "TRAINING YARD" },
-    { x: 24, y: 32.2, text: "ARENA GATE" },
+    { x: 40.5, y: 13.35, text: "HALL" },
+    { x: 23.5, y: 12.35, text: "TRAINING YARD" },
+    { x: 23.5, y: 32.6, text: "ARENA GATE" },
   ],
 };
 
@@ -92,9 +94,8 @@ export function buildLudus(): BuiltMap {
   addRect(tiles, solids, "tile-wall", 32, 1, 33, 5, true);
   addRect(tiles, solids, "tile-wall", 1, 5, 13, 5, true);
   addRect(tiles, solids, "tile-wall", 34, 5, 46, 5, true);
-  addRect(tiles, solids, "tile-stone", 22, 5, 25, 5);
-  spawns.lanista = cell(24, 3);
-  spawns.pal = cell(20, 3);
+  addRect(tiles, solids, "tile-stone", 22, 5, 25, 12);
+  spawns.lanista = cell(23, 3);
 
   addRect(tiles, solids, "tile-wood", 1, 6, 10, 12);
   addRect(tiles, solids, "tile-rug-armory", 3, 8, 7, 10);
@@ -122,49 +123,65 @@ export function buildLudus(): BuiltMap {
   props.push({ kind: "shop", ...cell(43, 11) });
   props.push({ kind: "barrel", ...cell(46, 11) });
 
-  addRect(tiles, solids, "tile-dirt", 16, 14, 31, 24);
-  addRect(tiles, solids, "tile-fence", 15, 13, 32, 13, true);
-  addRect(tiles, solids, "tile-fence", 15, 25, 32, 25, true);
-  addRect(tiles, solids, "tile-fence", 15, 13, 15, 25, true);
-  addRect(tiles, solids, "tile-fence", 32, 13, 32, 25, true);
-  addRect(tiles, solids, "tile-dirt", 23, 13, 24, 13);
-  addRect(tiles, solids, "tile-dirt", 23, 25, 24, 25);
-  popSolids(solids, 23, 13, 24, 13);
-  popSolids(solids, 23, 25, 24, 25);
+  addRect(tiles, solids, "tile-wood", 1, 14, 8, 19);
+  addRect(tiles, solids, "tile-wall", 1, 14, 8, 14, true);
+  addRect(tiles, solids, "tile-wall", 8, 14, 8, 19, true);
+  addRect(tiles, solids, "tile-wall", 1, 19, 8, 19, true);
+  addRect(tiles, solids, "tile-wood", 8, 16, 8, 17);
+  solids.push(...popSolids(solids, 8, 16, 8, 17));
+  spawns.pal = cell(4, 16);
+  props.push({ kind: "perch", ...cell(3, 15) });
+  props.push({ kind: "hay", ...cell(7, 15) });
+  props.push({ kind: "hay", ...cell(2, 18) });
 
-  addRect(tiles, solids, "tile-ring", 23, 17, 25, 19);
-  spawns.dummy = cell(24, 18);
-  props.push({ kind: "dummy", ...cell(22, 17) });
-  props.push({ kind: "dummy", ...cell(26, 17) });
-  props.push({ kind: "hay", ...cell(21, 16) });
-  props.push({ kind: "hay", ...cell(27, 16) });
-  props.push({ kind: "bench", ...cell(13, 21) });
-  props.push({ kind: "bench", ...cell(34, 21) });
-  spawns.brom = cell(12, 20);
-  spawns.aelia = cell(36, 20);
-  spawns.titus = cell(18, 22);
-  spawns.rufus = cell(30, 22);
+  addRect(tiles, solids, "tile-wood-pale", 35, 14, 46, 21);
+  addRect(tiles, solids, "tile-mosaic", 38, 16, 43, 19);
+  addRect(tiles, solids, "tile-wall", 35, 14, 46, 14, true);
+  addRect(tiles, solids, "tile-wall", 35, 14, 35, 21, true);
+  addRect(tiles, solids, "tile-wall", 35, 21, 46, 21, true);
+  addRect(tiles, solids, "tile-wood-pale", 35, 17, 35, 18);
+  solids.push(...popSolids(solids, 35, 17, 35, 18));
+  props.push({ kind: "dice", ...cell(40, 18) });
 
-  addRect(tiles, solids, "tile-column", 12, 15, 12, 15, true);
-  addRect(tiles, solids, "tile-column", 35, 15, 35, 15, true);
-  addRect(tiles, solids, "tile-column", 12, 23, 12, 23, true);
-  addRect(tiles, solids, "tile-column", 35, 23, 35, 23, true);
+  addRect(tiles, solids, "tile-dirt", 17, 14, 30, 23);
+  addRect(tiles, solids, "tile-fence", 16, 13, 31, 13, true);
+  addRect(tiles, solids, "tile-fence", 16, 24, 31, 24, true);
+  addRect(tiles, solids, "tile-fence", 16, 13, 16, 24, true);
+  addRect(tiles, solids, "tile-fence", 31, 13, 31, 24, true);
+  addRect(tiles, solids, "tile-dirt", 22, 13, 25, 13);
+  addRect(tiles, solids, "tile-dirt", 22, 24, 25, 29);
+  popSolids(solids, 22, 13, 25, 13);
+  popSolids(solids, 22, 24, 25, 24);
+
+  addRect(tiles, solids, "tile-ring", 22, 17, 25, 20);
+  spawns.dummy = { x: 24 * TILE_SIZE, y: 19 * TILE_SIZE };
+  props.push({ kind: "dummy", x: 21 * TILE_SIZE + 16, y: 19 * TILE_SIZE });
+  props.push({ kind: "dummy", x: 26 * TILE_SIZE + 16, y: 19 * TILE_SIZE });
+  props.push({ kind: "hay", ...cell(20, 15) });
+  props.push({ kind: "hay", ...cell(27, 15) });
+  props.push({ kind: "bench", ...cell(14, 22) });
+  props.push({ kind: "bench", ...cell(33, 22) });
+  spawns.brom = cell(18, 16);
+  spawns.aelia = cell(29, 16);
+  spawns.titus = cell(18, 21);
+  spawns.rufus = cell(29, 21);
 
   props.push({ kind: "fountain", ...cell(6, 22) });
-  props.push({ kind: "crate", ...cell(42, 22) });
-  props.push({ kind: "crate", ...cell(43, 23) });
+  props.push({ kind: "crate", ...cell(9, 23) });
+  props.push({ kind: "crate", ...cell(10, 24) });
 
   addRect(tiles, solids, "tile-stone", 1, 31, 46, 34);
   addRect(tiles, solids, yardBanner, 2, 31, 3, 31, true);
   addRect(tiles, solids, yardBanner, 44, 31, 45, 31, true);
-  addRect(tiles, solids, "tile-wall", 1, 30, 20, 30, true);
-  addRect(tiles, solids, "tile-wall", 27, 30, 46, 30, true);
-  addRect(tiles, solids, "tile-dirt", 21, 30, 26, 34);
-  popSolids(solids, 21, 30, 26, 30);
-  spawns.player = cell(24, 21);
-  spawns.gate = cell(24, 33);
-  props.push({ kind: "gate", ...cell(24, 33) });
-  addRect(tiles, solids, "tile-gate", 23, 33, 25, 33);
+  addRect(tiles, solids, "tile-wall", 1, 30, 21, 30, true);
+  addRect(tiles, solids, "tile-wall", 26, 30, 46, 30, true);
+  addRect(tiles, solids, "tile-dirt", 22, 30, 25, 34);
+  popSolids(solids, 22, 30, 25, 30);
+  addRect(tiles, solids, "tile-gate", 22, 34, 25, 35);
+  popSolids(solids, 22, 35, 25, 35);
+  spawns.player = { x: 24 * TILE_SIZE, y: 22 * TILE_SIZE + 16 };
+  spawns.gate = { x: 24 * TILE_SIZE, y: 34 * TILE_SIZE + 16 };
+  props.push({ kind: "gate", x: 24 * TILE_SIZE, y: 34 * TILE_SIZE + 16 });
 
   return { cols, rows, solids, spawns, props, tiles };
 }

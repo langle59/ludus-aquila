@@ -52,6 +52,7 @@ export function controlsHelpText(): string {
     "C — Customize / Shop (looks, and unguent vials)",
     "M — Minimap (ludus)",
     "Esc — Pause",
+    "Mute music — title screen or pause Settings",
   ].join("\n");
 }
 

@@ -79,12 +79,23 @@ export function createNewSave(playerName: string, tunic: TunicColor, playerHouse
     unguent: 1,
     palUnlocked: false,
     palBrought: true,
+    palName: "",
+    palTint: "house",
+    palTraining: 0,
+    palPoints: 0,
+    palXp: 0,
+    palXpToNext: 40,
+    unlockedPalSkills: [],
+    injured: false,
+    weaponWins: {},
+    unlockedMastery: [],
   };
 }
 
 export const defaultSettings: SettingsData = {
   musicVolume: 0.45,
   sfxVolume: 0.7,
+  musicMuted: false,
   screenShake: true,
   fullscreen: false,
   showMinimap: true,
@@ -115,6 +126,7 @@ class GameState {
         this.settings = {
           ...defaultSettings,
           ...parsed,
+          musicMuted: Boolean(parsed.musicMuted),
           keybinds: { ...DEFAULT_KEYBINDS, ...(parsed.keybinds ?? {}) },
         };
       }
@@ -259,6 +271,18 @@ class GameState {
     this.save.unguent = parsed.unguent ?? 1;
     this.save.palUnlocked = parsed.palUnlocked ?? this.save.defeatedHouses.length >= 1;
     this.save.palBrought = parsed.palBrought ?? true;
+    this.save.palName = parsed.palName ?? "";
+    this.save.palTint = parsed.palTint === "ivory" || parsed.palTint === "night" || parsed.palTint === "house" ? parsed.palTint : "house";
+    this.save.palTraining = Math.max(0, Math.min(3, parsed.palTraining ?? 0));
+    this.save.unlockedPalSkills = parsed.unlockedPalSkills ?? [];
+    const leftoverTrain = this.save.palTraining;
+    this.save.palPoints = parsed.palPoints ?? leftoverTrain;
+    this.save.palTraining = 0;
+    this.save.palXp = Math.max(0, parsed.palXp ?? 0);
+    this.save.palXpToNext = Math.max(20, parsed.palXpToNext ?? 40);
+    this.save.injured = Boolean(parsed.injured);
+    this.save.weaponWins = parsed.weaponWins ?? {};
+    this.save.unlockedMastery = parsed.unlockedMastery ?? [];
     this.save.playerHouse = parsed.playerHouse ?? null;
     this.save.tournamentWins = parsed.tournamentWins ?? 0;
     this.save.freedomWon = parsed.freedomWon ?? false;
@@ -306,7 +330,8 @@ class GameState {
   }
 
   restoreVitals(): void {
-    this.save.health = this.save.stats.maxHealth;
+    const max = this.save.stats.maxHealth - (this.save.injured ? 8 : 0);
+    this.save.health = max;
     this.save.stamina = this.save.stats.maxStamina;
   }
 

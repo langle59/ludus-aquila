@@ -3,15 +3,16 @@ import { COLORS, GAME_HEIGHT, GAME_WIDTH, UNGUENT_COST, UNGUENT_MAX } from "../c
 import { gameState } from "../state/GameState";
 import { bus } from "../systems/bus";
 import { currentObjectiveText } from "../systems/objectives";
-import { WEAPON_ORDER, getWeapon, weaponIconKey } from "../data/weapons";
+import { WEAPON_ORDER, getWeapon, masteryHint, masteryLevel, weaponIconKey } from "../data/weapons";
 import { getHouse, houseTitleColor, isTournamentId } from "../data/houses";
 import { TOURNAMENT_HOUSE } from "../data/tournament";
-import { isOpponentUnlocked, canUnlockSkill, unlockSkill, hasSkill, buyCosmetic, buyUnguent, isHouseUnlocked, houseLockHint, rivalHouses, tournamentUnlocked } from "../systems/progression";
+import { isOpponentUnlocked, canUnlockSkill, unlockSkill, hasSkill, buyCosmetic, buyUnguent, isHouseUnlocked, houseLockHint, rivalHouses, tournamentUnlocked, clearInjury, playerCombatStats } from "../systems/progression";
+import { TABLE_BETS, TABLE_GAMES, takeTableBet, settleTakenBet, rollAleaDice, aleaOutcome, freshDeck, drawCard, handTotal, isNatural, dealerShouldHit, blackjackCompare, cardTex, type AleaResult, type Card, type BlackjackOutcome } from "../systems/gambling";
 import { audio } from "../systems/audio";
 import { makeBodyTexture } from "../systems/assets";
 import { SKILL_BRANCHES, skillsInBranch, type SkillDef } from "../data/skills";
 import { SHOP_ITEMS, SHOP_TABS, TUNIC_HEX, PLUME_HEX, CAPE_HEX, ownsCosmetic, shopUnlocked, shopLockHint, equippedId, displayTitle, lookWithItem, previewTitle, type ShopKind } from "../data/shop";
-import { palBrought, palNextHint, palTier, palTitle, palUnlocked, togglePalBrought } from "../data/pal";
+import { palAnimalName, palBondHint, palBondProgress, palBrought, palCombatStats, palDisplayName, palNextHint, palSkillsInBranch, palTexture, palTier, palTintColor, palTintId, palTitle, palUnlocked, canUnlockPalSkill, hasPalSkill, unlockPalSkill, PAL_SKILL_BRANCHES, PAL_TINTS, rollPalName, setPalTint, togglePalBrought, type PalSkillDef } from "../data/pal";
 import { generateHouseName } from "../data/names";
 import { ACTION_LABELS, controlsHelpText, eventToKeyName, mergedKeybinds, prettyKey, trySetBind, type CombatAction } from "../systems/input";
 
@@ -29,7 +30,38 @@ export class UIScene extends Phaser.Scene {
   private objectiveLabel!: Phaser.GameObjects.Text;
   private bossWrap: Phaser.GameObjects.GameObject[] = [];
   private favorWrap: Phaser.GameObjects.GameObject[] = [];
+  private favorMarker?: Phaser.GameObjects.Rectangle;
+  private favorYouFill?: Phaser.GameObjects.Rectangle;
+  private palHpBg?: Phaser.GameObjects.Rectangle;
+  private palHpFill?: Phaser.GameObjects.Rectangle;
+  private palHpLabel?: Phaser.GameObjects.Text;
   private overlay: Phaser.GameObjects.Container | null = null;
+  private aleaLast: AleaResult | null = null;
+  private aleaBusy = false;
+  private aleaPending: { bet: number; player: [number, number]; house: [number, number] } | null = null;
+  private aleaDice: Phaser.GameObjects.Image[] = [];
+  private aleaYou?: Phaser.GameObjects.Text;
+  private aleaHouse?: Phaser.GameObjects.Text;
+  private aleaStatus?: Phaser.GameObjects.Text;
+  private aleaPurse?: Phaser.GameObjects.Text;
+  private bjBusy = false;
+  private bj: {
+    bet: number;
+    deck: Card[];
+    player: Card[];
+    house: Card[];
+    holeHidden: boolean;
+    phase: "bet" | "dealing" | "play" | "done";
+    message: string;
+  } | null = null;
+  private bjHouseCards: Phaser.GameObjects.Image[] = [];
+  private bjPlayerCards: Phaser.GameObjects.Image[] = [];
+  private bjHouseTotal?: Phaser.GameObjects.Text;
+  private bjPlayerTotal?: Phaser.GameObjects.Text;
+  private bjStatus?: Phaser.GameObjects.Text;
+  private bjPurse?: Phaser.GameObjects.Text;
+  private bjDeck?: Phaser.GameObjects.Image;
+  private bjBtnWrap?: Phaser.GameObjects.Container;
   private dialogueBox: Phaser.GameObjects.Container | null = null;
   private dialogueLines: string[] = [];
   private dialogueIndex = 0;
@@ -55,12 +87,16 @@ export class UIScene extends Phaser.Scene {
   private gateHouse: string | null = null;
   private waitingBind: CombatAction | null = null;
   private shopTab: ShopKind = "tunic";
+  private roostTab: "care" | "looks" = "care";
   private shopPreviewId: string | null = null;
   private minimapWrap?: Phaser.GameObjects.Container;
   private minimapGfx?: Phaser.GameObjects.Graphics;
   private minimapScene = "none";
   private renameValue = "";
   private renameLabel?: Phaser.GameObjects.Text;
+  private musicMuteText?: Phaser.GameObjects.Text;
+  private judgmentOpen = false;
+  private judgmentWrap: Phaser.GameObjects.GameObject[] = [];
 
   constructor() {
     super("UIScene");
@@ -84,6 +120,13 @@ export class UIScene extends Phaser.Scene {
       .text(28, 104, "", { fontFamily: "Cinzel, Georgia", fontSize: "13px", color: "#8ecf6a", stroke: "#1a1210", strokeThickness: 3 })
       .setScrollFactor(0)
       .setDepth(100);
+    this.palHpBg = this.add.rectangle(56, 124, 180, 8, 0x000000, 0.7).setOrigin(0, 0).setScrollFactor(0).setDepth(99).setVisible(false);
+    this.palHpFill = this.add.rectangle(56, 124, 180, 8, 0x6aa84f).setOrigin(0, 0).setScrollFactor(0).setDepth(100).setVisible(false);
+    this.palHpLabel = this.add
+      .text(56, 116, "Pal", { fontFamily: "Cinzel, Georgia", fontSize: "10px", color: "#e8c96a" })
+      .setScrollFactor(0)
+      .setDepth(100)
+      .setVisible(false);
 
     this.weaponLabel = this.add.text(28, GAME_HEIGHT - 40, "", { fontFamily: "Georgia", fontSize: "16px", color: "#d4a84b", stroke: "#1a1210", strokeThickness: 4 }).setScrollFactor(0).setDepth(100);
     this.addAttackButton();
@@ -91,6 +134,7 @@ export class UIScene extends Phaser.Scene {
     this.addNetButton();
     this.addSparButton();
     this.addTalkButton();
+    this.addMusicMuteButton();
 
     const coinX = GAME_WIDTH - 132;
     const coinBg = this.add.rectangle(coinX, 40, 236, 56, 0x2a1c16, 0.92).setStrokeStyle(2, COLORS.gold).setScrollFactor(0).setDepth(99).setInteractive({ useHandCursor: true });
@@ -106,7 +150,7 @@ export class UIScene extends Phaser.Scene {
       .setScrollFactor(0)
       .setDepth(100);
     coinBg.on("pointerdown", () => {
-      if (this.resultPending || gameState.inDialogue) return;
+      if (this.resultPending || gameState.inDialogue || this.judgmentOpen) return;
       this.openShop();
     });
     coinBg.on("pointerover", () => coinBg.setFillStyle(0x3a281c));
@@ -148,10 +192,20 @@ export class UIScene extends Phaser.Scene {
     bus.on("boss-hide", this.hideBoss, this);
     bus.on("favor-show", this.showFavor, this);
     bus.on("favor-hide", this.hideFavor, this);
+    bus.on("crowd-call", this.onCrowdCall, this);
+    bus.on("judgment-show", this.showJudgment, this);
+    bus.on("judgment-hide", this.hideJudgment, this);
+    bus.on("return-ludus", this.returnLudus, this);
+    bus.on("pal-hp-show", this.showPalHp, this);
+    bus.on("pal-hp", this.onPalHp, this);
+    bus.on("pal-hp-hide", this.hidePalHp, this);
     bus.on("toast", this.toast, this);
     bus.on("spar-available", this.setSparButton, this);
     bus.on("talk-available", this.setTalkButton, this);
     bus.on("shop", this.openShop, this);
+    bus.on("roost", this.openRoost, this);
+    bus.on("dice", this.openTable, this);
+    bus.on("table", this.openTable, this);
     bus.on("denarii-changed", this.pulseDenarii, this);
     bus.on("combo", this.onCombo, this);
     bus.on("perfect-dodge", this.onPerfectDodge, this);
@@ -161,6 +215,7 @@ export class UIScene extends Phaser.Scene {
     bus.on("minimap-scene", this.onMinimapScene, this);
 
     this.input.keyboard?.on("keydown-ESC", () => {
+      if (this.judgmentOpen) return;
       if (this.pausePage === "rename" && this.overlay) {
         this.pausePage = "stats";
         this.renderPause();
@@ -182,12 +237,17 @@ export class UIScene extends Phaser.Scene {
     });
     this.input.keyboard?.on("keydown-TAB", (e: KeyboardEvent) => {
       e.preventDefault();
+      if (this.judgmentOpen) return;
       if (this.pausePage === "rename") return;
       if (this.resultPending || gameState.inDialogue) return;
       if (this.overlay) this.closeOverlay();
       else this.openArmory();
     });
     this.input.keyboard?.on("keydown-SPACE", () => {
+      if (this.judgmentOpen) {
+        this.pickJudgment(true);
+        return;
+      }
       if (this.pausePage === "rename") return;
       if (this.resultPending) {
         this.finishResult();
@@ -200,6 +260,10 @@ export class UIScene extends Phaser.Scene {
       if (gameState.inDialogue || gameState.inMenu || gameState.paused || this.overlay) return;
     });
     this.input.keyboard?.on("keydown-ENTER", () => {
+      if (this.judgmentOpen) {
+        this.pickJudgment(true);
+        return;
+      }
       if (this.pausePage === "rename") {
         this.commitRename();
         return;
@@ -207,6 +271,7 @@ export class UIScene extends Phaser.Scene {
       if (this.resultPending) this.finishResult();
     });
     this.input.keyboard?.on("keydown-C", () => {
+      if (this.judgmentOpen) return;
       if (this.pausePage === "rename") return;
       if (this.resultPending || gameState.inDialogue) return;
       if (this.overlay) {
@@ -216,6 +281,7 @@ export class UIScene extends Phaser.Scene {
       this.openShop();
     });
     this.input.keyboard?.on("keydown-M", () => {
+      if (this.judgmentOpen) return;
       if (this.pausePage === "rename") return;
       if (this.resultPending || gameState.inDialogue || this.overlay) return;
       gameState.settings.showMinimap = !gameState.settings.showMinimap;
@@ -223,6 +289,7 @@ export class UIScene extends Phaser.Scene {
       if (!gameState.settings.showMinimap) this.minimapWrap?.setVisible(false);
     });
     this.input.keyboard?.on("keydown-K", () => {
+      if (this.judgmentOpen) return;
       if (this.pausePage === "rename") return;
       if (this.resultPending || gameState.inDialogue) return;
       if (this.overlay && this.pausePage === "skills") {
@@ -234,6 +301,10 @@ export class UIScene extends Phaser.Scene {
       this.renderPause();
     });
     this.input.keyboard?.on("keydown-E", () => {
+      if (this.judgmentOpen) {
+        this.pickJudgment(true);
+        return;
+      }
       if (this.pausePage === "rename") return;
       if (this.resultPending) {
         this.finishResult();
@@ -243,6 +314,9 @@ export class UIScene extends Phaser.Scene {
         this.advanceDialogue();
         return;
       }
+    });
+    this.input.keyboard?.on("keydown-Q", () => {
+      if (this.judgmentOpen) this.pickJudgment(false);
     });
     this.input.keyboard?.on("keydown", (e: KeyboardEvent) => {
       if (this.pausePage !== "rename" || !this.overlay) return;
@@ -264,10 +338,20 @@ export class UIScene extends Phaser.Scene {
       bus.off("boss-hide", this.hideBoss, this);
       bus.off("favor-show", this.showFavor, this);
       bus.off("favor-hide", this.hideFavor, this);
+      bus.off("crowd-call", this.onCrowdCall, this);
+      bus.off("judgment-show", this.showJudgment, this);
+      bus.off("judgment-hide", this.hideJudgment, this);
+      bus.off("return-ludus", this.returnLudus, this);
+      bus.off("pal-hp-show", this.showPalHp, this);
+      bus.off("pal-hp", this.onPalHp, this);
+      bus.off("pal-hp-hide", this.hidePalHp, this);
       bus.off("toast", this.toast, this);
       bus.off("spar-available", this.setSparButton, this);
       bus.off("talk-available", this.setTalkButton, this);
       bus.off("shop", this.openShop, this);
+      bus.off("roost", this.openRoost, this);
+      bus.off("dice", this.openTable, this);
+      bus.off("table", this.openTable, this);
       bus.off("denarii-changed", this.pulseDenarii, this);
       bus.off("combo", this.onCombo, this);
       bus.off("perfect-dodge", this.onPerfectDodge, this);
@@ -295,6 +379,7 @@ export class UIScene extends Phaser.Scene {
     this.denariiLabel.setText(`${s.denarii} denarii`);
     this.titleLabel.setText(displayTitle());
     this.objectiveLabel.setText(currentObjectiveText());
+    this.musicMuteText?.setText(audio.musicMuteLabel());
     if (this.comboLabel.visible && this.time.now > this.comboHideAt) {
       this.comboLabel.setAlpha(Math.max(0, this.comboLabel.alpha - 0.08));
       if (this.comboLabel.alpha <= 0) this.comboLabel.setVisible(false);
@@ -307,6 +392,35 @@ export class UIScene extends Phaser.Scene {
   }
 
   private closeOverlay(): void {
+    if (this.aleaPending) {
+      const p = this.aleaPending;
+      const outcome = aleaOutcome(p.player[0] + p.player[1], p.house[0] + p.house[1]);
+      settleTakenBet(p.bet, outcome);
+      this.aleaLast = {
+        bet: p.bet,
+        player: p.player[0] + p.player[1],
+        house: p.house[0] + p.house[1],
+        playerDice: p.player,
+        houseDice: p.house,
+        outcome,
+      };
+      this.aleaPending = null;
+      this.aleaBusy = false;
+    }
+    this.aleaDice = [];
+    this.aleaYou = undefined;
+    this.aleaHouse = undefined;
+    this.aleaStatus = undefined;
+    this.aleaPurse = undefined;
+    this.bjBusy = false;
+    this.bjHouseCards = [];
+    this.bjPlayerCards = [];
+    this.bjHouseTotal = undefined;
+    this.bjPlayerTotal = undefined;
+    this.bjStatus = undefined;
+    this.bjPurse = undefined;
+    this.bjDeck = undefined;
+    this.bjBtnWrap = undefined;
     this.dimmer?.destroy();
     this.dimmer = null;
     this.overlay?.destroy();
@@ -325,6 +439,21 @@ export class UIScene extends Phaser.Scene {
     this.closeOverlay();
     bus.emit("result-closed");
   }
+
+  private returnLudus = (): void => {
+    gameState.paused = false;
+    gameState.inMenu = false;
+    gameState.inDialogue = false;
+    this.hideJudgment();
+    this.resultPending = false;
+    if (this.scene.isActive("ArenaScene") || this.scene.isSleeping("ArenaScene") || this.scene.isPaused("ArenaScene")) {
+      this.scene.stop("ArenaScene");
+    }
+    this.time.delayedCall(30, () => {
+      if (this.scene.isSleeping("LudusScene")) this.scene.wake("LudusScene");
+      else if (!this.scene.isActive("LudusScene")) this.scene.launch("LudusScene");
+    });
+  };
 
   private box(w: number, h: number, title: string): Phaser.GameObjects.Container {
     this.closeOverlay();
@@ -375,7 +504,7 @@ export class UIScene extends Phaser.Scene {
       this.renderRename();
       return;
     }
-    const c = this.box(520, this.pausePage === "settings" || this.pausePage === "controls" || this.pausePage === "stats" ? 620 : 560, "PAUSED");
+    const c = this.box(520, this.pausePage === "settings" || this.pausePage === "controls" || this.pausePage === "stats" ? 680 : 560, "PAUSED");
     if (this.pausePage === "root") {
       const items: [string, () => void][] = [
         ["Resume", () => this.closeOverlay()],
@@ -394,14 +523,17 @@ export class UIScene extends Phaser.Scene {
     }
     if (this.pausePage === "stats") {
       const s = gameState.save;
+      const animal = palAnimalName();
+      const live = playerCombatStats();
+      const hurt = s.injured ? "\nInjured — drink unguent or rest in Quarters." : "";
       const palLine = palUnlocked()
-        ? `\n\nEagle  ·  ${palTitle(palTier())}\n${palBrought() ? "Comes with you into the arena." : "Waiting at the roost."}\n${palNextHint()}`
-        : "\n\nEagle  ·  locked\nBeat a house champion to earn the bird of Aquila.";
+        ? `\n\n${animal}  ·  ${palDisplayName()}\n${palBrought() ? "Comes with you into the arena. XP ×0.9" : "Waiting at the roost. XP ×1.15"}\n${palNextHint()}`
+        : `\n\n${animal}  ·  locked\nBeat a house champion to earn a pal from your pledged house.`;
       const body = this.add
         .text(
           0,
           -10,
-          `${s.playerName}  ·  Lv ${s.level}  ·  ${s.reputation}\nXP ${Math.floor(s.xp)} / ${s.xpToNext}\nSkill points: ${s.statPoints}\n\nHealth ${Math.round(s.stats.maxHealth)}\nStamina ${Math.round(s.stats.maxStamina)}\nUnguent vials ${s.unguent ?? 0} / 3\nAttack ${s.stats.attack.toFixed(1)}\nDefense ${s.stats.defense.toFixed(1)}\nAgility ${s.stats.agility.toFixed(1)}${palLine}`,
+          `${s.playerName}  ·  Lv ${s.level}  ·  ${s.reputation}\nXP ${Math.floor(s.xp)} / ${s.xpToNext}\nSkill points: ${s.statPoints}${hurt}\n\nHealth ${Math.round(live.maxHealth)}\nStamina ${Math.round(live.maxStamina)}\nUnguent vials ${s.unguent ?? 0} / 3\nAttack ${live.attack.toFixed(1)}\nDefense ${live.defense.toFixed(1)}\nAgility ${live.agility.toFixed(1)}${palLine}`,
           { fontFamily: "Georgia", fontSize: "16px", color: "#e8dcc8", align: "center" },
         )
         .setOrigin(0.5);
@@ -411,7 +543,7 @@ export class UIScene extends Phaser.Scene {
           c,
           0,
           148,
-          palBrought() ? "Leave eagle at roost" : "Bring eagle to the arena",
+          palBrought() ? "Leave pal at roost" : "Bring pal to the arena",
           () => {
             togglePalBrought();
             this.renderPause();
@@ -439,7 +571,7 @@ export class UIScene extends Phaser.Scene {
     if (this.pausePage === "settings") {
       const s = gameState.settings;
       const t = this.add
-        .text(0, -20, `Music ${Math.round(s.musicVolume * 100)}%   Sound ${Math.round(s.sfxVolume * 100)}%\nShake ${s.screenShake ? "On" : "Off"}   Fullscreen ${s.fullscreen ? "On" : "Off"}`, {
+        .text(0, -40, `Music ${s.musicMuted ? "muted" : `${Math.round(s.musicVolume * 100)}%`}   Sound ${Math.round(s.sfxVolume * 100)}%\nShake ${s.screenShake ? "On" : "Off"}   Fullscreen ${s.fullscreen ? "On" : "Off"}`, {
           fontFamily: "Georgia",
           fontSize: "18px",
           color: "#e8dcc8",
@@ -447,20 +579,21 @@ export class UIScene extends Phaser.Scene {
         })
         .setOrigin(0.5);
       c.add(t);
-      this.addBtn(c, -120, 70, "Music -", () => { s.musicVolume = Math.max(0, s.musicVolume - 0.1); gameState.persistSettings(); this.renderPause(); }, 140);
-      this.addBtn(c, 120, 70, "Music +", () => { s.musicVolume = Math.min(1, s.musicVolume + 0.1); gameState.persistSettings(); this.renderPause(); }, 140);
-      this.addBtn(c, -120, 120, "Sound -", () => { s.sfxVolume = Math.max(0, s.sfxVolume - 0.1); gameState.persistSettings(); this.renderPause(); }, 140);
-      this.addBtn(c, 120, 120, "Sound +", () => { s.sfxVolume = Math.min(1, s.sfxVolume + 0.1); gameState.persistSettings(); this.renderPause(); }, 140);
-      this.addBtn(c, 0, 170, "Toggle shake", () => { s.screenShake = !s.screenShake; gameState.persistSettings(); this.renderPause(); });
-      this.addBtn(c, 0, 220, "Toggle fullscreen", () => {
+      this.addBtn(c, -120, 50, "Music -", () => { s.musicVolume = Math.max(0, s.musicVolume - 0.1); gameState.persistSettings(); this.renderPause(); }, 140);
+      this.addBtn(c, 120, 50, "Music +", () => { s.musicVolume = Math.min(1, s.musicVolume + 0.1); gameState.persistSettings(); this.renderPause(); }, 140);
+      this.addBtn(c, 0, 100, audio.musicMuteLabel(), () => { audio.toggleMusicMute(); this.renderPause(); });
+      this.addBtn(c, -120, 150, "Sound -", () => { s.sfxVolume = Math.max(0, s.sfxVolume - 0.1); gameState.persistSettings(); this.renderPause(); }, 140);
+      this.addBtn(c, 120, 150, "Sound +", () => { s.sfxVolume = Math.min(1, s.sfxVolume + 0.1); gameState.persistSettings(); this.renderPause(); }, 140);
+      this.addBtn(c, 0, 200, "Toggle shake", () => { s.screenShake = !s.screenShake; gameState.persistSettings(); this.renderPause(); });
+      this.addBtn(c, 0, 250, "Toggle fullscreen", () => {
         s.fullscreen = !s.fullscreen;
         if (s.fullscreen) void this.scale.startFullscreen();
         else void this.scale.stopFullscreen();
         gameState.persistSettings();
         this.renderPause();
       });
-      this.addBtn(c, 0, 270, "Rebind keys", () => ((this.pausePage = "keybinds"), this.renderPause()));
-      this.addBtn(c, 0, 320, "Back", () => ((this.pausePage = "root"), this.renderPause()));
+      this.addBtn(c, 0, 300, "Rebind keys", () => ((this.pausePage = "keybinds"), this.renderPause()));
+      this.addBtn(c, 0, 350, "Back", () => ((this.pausePage = "root"), this.renderPause()));
     }
   }
 
@@ -579,8 +712,9 @@ export class UIScene extends Phaser.Scene {
       .setOrigin(0.5);
     c.add(detail);
 
-    const colX = [-340, 0, 340];
+    const colX = [-350, 0, 350];
     const tierY = [-210, -110, -10, 90, 190];
+    const cardH = 52;
     const lines = this.add.graphics();
     c.add(lines);
 
@@ -588,7 +722,7 @@ export class UIScene extends Phaser.Scene {
       const x = colX[bi];
       c.add(
         this.add
-          .text(x, -248, branch.title, {
+          .text(x, -252, branch.title, {
             fontFamily: "Cinzel, Georgia",
             fontSize: "18px",
             color: bi === 0 ? "#e07060" : bi === 1 ? "#e8c96a" : "#7ab8a4",
@@ -602,7 +736,7 @@ export class UIScene extends Phaser.Scene {
           const owned = hasSkill(skill.id);
           const prevOwned = hasSkill(list[ti - 1].id);
           lines.lineStyle(3, owned ? branch.color : prevOwned ? 0x8a6a3a : 0x3a3028, owned ? 0.95 : 0.45);
-          lines.lineBetween(x, tierY[ti - 1] + 24, x, y - 24);
+          lines.lineBetween(x, tierY[ti - 1] + cardH / 2, x, y - cardH / 2);
         }
         this.addSkillNode(c, x, y, skill, branch.color, detail);
       });
@@ -621,28 +755,39 @@ export class UIScene extends Phaser.Scene {
   ): void {
     const owned = hasSkill(skill.id);
     const available = canUnlockSkill(skill.id);
-    const fill = owned ? color : available ? 0x3a281c : 0x1a1410;
-    const stroke = owned || available ? COLORS.gold : 0x5a4a3a;
-    const node = this.add.circle(x, y, 24, fill, 1).setStrokeStyle(3, stroke).setInteractive({ useHandCursor: available || owned });
-    const label = this.add
-      .text(x, y, skill.name, {
+    const fill = owned ? 0x3a281c : available ? 0x241810 : 0x14100e;
+    const stroke = owned ? color : available ? COLORS.gold : 0x5a4a3a;
+    const cardW = 210;
+    const cardH = 52;
+    const card = this.add
+      .rectangle(x, y, cardW, cardH, fill, 0.96)
+      .setStrokeStyle(owned || available ? 2 : 1, stroke)
+      .setInteractive({ useHandCursor: available || owned });
+    const gem = this.add.circle(x - cardW / 2 + 22, y, 11, owned ? color : available ? 0x5a3828 : 0x2a2018).setStrokeStyle(2, stroke);
+    const name = this.add
+      .text(x - cardW / 2 + 40, y - 9, skill.name, {
         fontFamily: "Cinzel, Georgia",
-        fontSize: "12px",
+        fontSize: "15px",
         color: owned || available ? "#f0e6d2" : "#6a5a4a",
-        align: "center",
-        wordWrap: { width: 88 },
       })
-      .setOrigin(0.5);
+      .setOrigin(0, 0.5);
+    const state = owned ? "Learned" : available ? "Click  ·  1 skill point" : skill.requires ? "Locked  ·  skill above" : "Locked  ·  need a point";
+    const status = this.add
+      .text(x - cardW / 2 + 40, y + 11, state, {
+        fontFamily: "Georgia",
+        fontSize: "12px",
+        color: owned ? "#8ecf6a" : available ? "#d4a84b" : "#6a5a4a",
+      })
+      .setOrigin(0, 0.5);
     const show = () => {
-      const state = owned ? "Learned" : available ? "Click to learn (1 point)" : skill.requires ? "Requires the skill above" : "Need a skill point";
       detail.setText(`${skill.name}  —  ${state}\n${skill.description}`);
     };
-    node.on("pointerover", () => {
+    card.on("pointerover", () => {
       show();
-      if (available) node.setFillStyle(0x5a3828);
+      if (available) card.setFillStyle(0x4a3424);
     });
-    node.on("pointerout", () => node.setFillStyle(fill));
-    node.on("pointerdown", () => {
+    card.on("pointerout", () => card.setFillStyle(fill));
+    card.on("pointerdown", () => {
       if (owned) {
         show();
         return;
@@ -657,7 +802,7 @@ export class UIScene extends Phaser.Scene {
         this.renderSkillTree();
       }
     });
-    c.add([node, label]);
+    c.add([card, gem, name, status]);
   }
 
   private pulseDenarii = (): void => {
@@ -864,6 +1009,20 @@ export class UIScene extends Phaser.Scene {
       },
       220,
     );
+    if (gameState.save.injured) {
+      this.addBtn(
+        c,
+        -530,
+        292,
+        "Rest  ·  clear injury",
+        () => {
+          if (clearInjury()) this.toast("You rest. The ache leaves you.");
+          else this.toast("You are not injured.");
+          this.openShop();
+        },
+        220,
+      );
+    }
 
     const tab = SHOP_TABS.find((t) => t.kind === this.shopTab) ?? SHOP_TABS[0];
     const tabY = -218;
@@ -926,7 +1085,7 @@ export class UIScene extends Phaser.Scene {
         ? item.requiresFlag === "freedomWon"
           ? "Locked — win the Rudis"
           : item.requiresFlag
-            ? "Locked — steel has to mark you"
+            ? "Locked — lose an arena fight without being spared"
             : "Locked — win that house first"
         : previewing
           ? equipped
@@ -978,6 +1137,868 @@ export class UIScene extends Phaser.Scene {
       fn();
     });
     c.add([bg, t]);
+  }
+
+  openRoost = (): void => {
+    if (this.resultPending) return;
+    const c = this.box(1180, 660, "ROOST");
+    c.add(this.add.rectangle(0, -288, 1120, 8, 0x6a2420, 0.9));
+    if (!palUnlocked()) {
+      c.add(
+        this.add
+          .text(0, -20, "Beat a house champion first.\nA pledged beast will take this perch.", {
+            fontFamily: "Georgia",
+            fontSize: "20px",
+            color: "#e8dcc8",
+            align: "center",
+            wordWrap: { width: 520 },
+          })
+          .setOrigin(0.5),
+      );
+      this.addBtn(c, 0, 160, "Close", () => this.closeOverlay(), 200);
+      return;
+    }
+
+    const stats = palCombatStats();
+    const animal = palAnimalName();
+    this.textures.get(palTexture())?.setFilter(Phaser.Textures.FilterMode.NEAREST);
+    const preview = this.add.image(-460, -90, palTexture()).setScale(1.7 * Math.min(1, stats.visScale / 0.7));
+    if (stats.tint) preview.setTint(stats.tint);
+    c.add(preview);
+    c.add(
+      this.add
+        .text(-460, 28, palDisplayName(), {
+          fontFamily: "Cinzel, Georgia",
+          fontSize: "18px",
+          color: "#e8c96a",
+        })
+        .setOrigin(0.5),
+    );
+    c.add(
+      this.add
+        .text(-460, 54, `${palTitle(palTier())}  ·  ${animal}`, {
+          fontFamily: "Georgia",
+          fontSize: "13px",
+          color: "#c4b49a",
+        })
+        .setOrigin(0.5),
+    );
+    c.add(
+      this.add
+        .text(-460, 88, `HP ${stats.maxHp}  Bite ${stats.bite}  Spd ${stats.speed}`, {
+          fontFamily: "Georgia",
+          fontSize: "13px",
+          color: "#e8dcc8",
+        })
+        .setOrigin(0.5),
+    );
+    const bond = palBondProgress();
+    const barW = 196;
+    c.add(this.add.rectangle(-460, 118, barW + 6, 16, 0x000000, 0.7));
+    c.add(this.add.rectangle(-460 - barW / 2, 118, Math.max(0, barW * bond.ratio), 10, 0x8ecf6a).setOrigin(0, 0.5));
+    c.add(
+      this.add
+        .text(-460, 136, `Bond  ${bond.xp} / ${bond.toNext}`, {
+          fontFamily: "Georgia",
+          fontSize: "12px",
+          color: "#8ecf6a",
+        })
+        .setOrigin(0.5),
+    );
+    c.add(this.add.rectangle(-460, 158, barW + 6, 12, 0x000000, 0.7));
+    c.add(this.add.rectangle(-460 - barW / 2, 158, Math.max(0, barW * bond.treeRatio), 8, COLORS.gold).setOrigin(0, 0.5));
+    c.add(
+      this.add
+        .text(-460, 176, `Tree  ${bond.skills} / ${bond.skillMax}  ·  ${bond.points} pal point${bond.points === 1 ? "" : "s"}`, {
+          fontFamily: "Georgia",
+          fontSize: "12px",
+          color: "#e8c96a",
+        })
+        .setOrigin(0.5),
+    );
+    c.add(
+      this.add
+        .text(-460, 198, bond.hint, {
+          fontFamily: "Georgia",
+          fontSize: "11px",
+          color: "#c4b49a",
+          wordWrap: { width: 220 },
+          align: "center",
+        })
+        .setOrigin(0.5),
+    );
+
+    this.addShopTab(c, 20, -248, "Care", this.roostTab === "care", () => {
+      this.roostTab = "care";
+      this.openRoost();
+    });
+    this.addShopTab(c, 140, -248, "Looks", this.roostTab === "looks", () => {
+      this.roostTab = "looks";
+      this.openRoost();
+    });
+
+    if (this.roostTab === "care") {
+      const detail = this.add
+        .text(90, 168, palBondHint(), {
+          fontFamily: "Georgia",
+          fontSize: "13px",
+          color: "#d4a84b",
+          wordWrap: { width: 680 },
+          align: "center",
+        })
+        .setOrigin(0.5);
+      c.add(detail);
+      c.add(
+        this.add
+          .text(90, -208, `${gameState.save.palPoints ?? 0} pal points  ·  ${gameState.save.denarii} denarii  ·  ${palNextHint()}`, {
+            fontFamily: "Georgia",
+            fontSize: "14px",
+            color: "#e8c96a",
+          })
+          .setOrigin(0.5),
+      );
+      const colX = [0, 220, 440];
+      const tierY = [-138, -36, 66];
+      const cardH = 56;
+      const lines = this.add.graphics();
+      c.add(lines);
+      PAL_SKILL_BRANCHES.forEach((branch, bi) => {
+        const x = colX[bi];
+        c.add(
+          this.add
+            .text(x, -176, branch.title, {
+              fontFamily: "Cinzel, Georgia",
+              fontSize: "15px",
+              color: "#e8dcc8",
+            })
+            .setOrigin(0.5),
+        );
+        palSkillsInBranch(branch.id).forEach((skill, ti) => {
+          const y = tierY[ti];
+          if (ti > 0) {
+            const owned = hasPalSkill(skill.id);
+            const prev = palSkillsInBranch(branch.id)[ti - 1];
+            const prevOwned = hasPalSkill(prev.id);
+            lines.lineStyle(3, owned ? branch.color : prevOwned ? 0x8a6a3a : 0x3a3028, owned ? 0.95 : 0.45);
+            lines.lineBetween(x, tierY[ti - 1] + cardH / 2, x, y - cardH / 2);
+          }
+          this.addPalNode(c, x, y, skill, branch.color, detail);
+        });
+      });
+      this.addBtn(
+        c,
+        90,
+        214,
+        palBrought() ? "Leave pal at roost" : "Bring pal to the arena",
+        () => {
+          togglePalBrought();
+          this.openRoost();
+        },
+        280,
+      );
+    } else {
+      c.add(
+        this.add
+          .text(140, -150, "A name the yard can shout, and a wash of dye.", {
+            fontFamily: "Georgia",
+            fontSize: "15px",
+            color: "#d4a84b",
+          })
+          .setOrigin(0.5),
+      );
+      c.add(
+        this.add
+          .text(140, -110, palDisplayName(), {
+            fontFamily: "Cinzel, Georgia",
+            fontSize: "22px",
+            color: "#e8dcc8",
+          })
+          .setOrigin(0.5),
+      );
+      this.addBtn(
+        c,
+        140,
+        -60,
+        "Roll a name",
+        () => {
+          rollPalName();
+          this.openRoost();
+        },
+        220,
+      );
+      PAL_TINTS.forEach((tint, i) => {
+        const x = -20 + i * 160;
+        const y = 70;
+        const active = palTintId() === tint.id;
+        const swatch = tint.id === "ivory" ? 0xf4ead8 : tint.id === "night" ? 0x5a5478 : palTintColor() ?? COLORS.gold;
+        const card = this.add
+          .rectangle(x, y, 140, 88, active ? 0x3a281c : 0x1a1210, 0.96)
+          .setStrokeStyle(active ? 2 : 1, active ? COLORS.gold : 0x6a5a3a)
+          .setInteractive({ useHandCursor: true });
+        const chip = this.add.rectangle(x, y - 18, 28, 28, swatch).setStrokeStyle(1, 0x1a1210);
+        const name = this.add
+          .text(x, y + 18, tint.name, {
+            fontFamily: "Georgia",
+            fontSize: "14px",
+            color: "#e8dcc8",
+          })
+          .setOrigin(0.5);
+        card.on("pointerdown", () => {
+          audio.sfx("ui");
+          setPalTint(tint.id);
+          this.openRoost();
+        });
+        c.add([card, chip, name]);
+      });
+    }
+
+    if (this.roostTab !== "care") {
+      c.add(
+        this.add
+          .text(0, 230, `${gameState.save.denarii} denarii`, {
+            fontFamily: "Georgia",
+            fontSize: "14px",
+            color: "#d4a84b",
+          })
+          .setOrigin(0.5),
+      );
+    }
+    this.addBtn(c, 0, 292, "Close", () => this.closeOverlay(), 180);
+  };
+
+  openTable = (): void => {
+    if (this.resultPending) return;
+    if (!gameState.save.freedomWon) return;
+    this.bj = null;
+    const c = this.box(520, 420, "TABLE");
+    c.add(this.add.rectangle(0, -178, 460, 8, 0x6a2420, 0.9));
+    c.add(
+      this.add
+        .text(0, -140, "Free men play. Pick a game.", {
+          fontFamily: "Georgia",
+          fontSize: "16px",
+          color: "#e8dcc8",
+        })
+        .setOrigin(0.5),
+    );
+    c.add(
+      this.add
+        .text(0, -108, `${gameState.save.denarii} denarii`, {
+          fontFamily: "Georgia",
+          fontSize: "18px",
+          color: "#d4a84b",
+        })
+        .setOrigin(0.5),
+    );
+    TABLE_GAMES.forEach((game, i) => {
+      const y = -40 + i * 56;
+      if (!game.available) {
+        const bg = this.add.rectangle(0, y, 240, 40, 0x14100e).setStrokeStyle(1, 0x6a5a3a);
+        const t = this.add.text(0, y, "Soon", { fontFamily: "Georgia", fontSize: "16px", color: "#6a5a4a" }).setOrigin(0.5);
+        c.add([bg, t]);
+        return;
+      }
+      this.addBtn(c, 0, y, game.name, () => {
+        if (game.id === "alea") this.openAlea();
+        else if (game.id === "blackjack") this.openBlackjack();
+      }, 240);
+    });
+    this.addBtn(c, 0, 178, "Leave", () => this.closeOverlay(), 180);
+  };
+
+  private tableAlive(): boolean {
+    return Boolean(this.overlay?.active);
+  }
+
+  openAlea = (): void => {
+    if (this.resultPending) return;
+    if (!gameState.save.freedomWon) return;
+    const c = this.box(640, 560, "ALEA");
+    c.add(this.add.rectangle(0, -248, 580, 8, 0x6a2420, 0.9));
+    this.aleaPurse = this.add
+      .text(0, -214, `${gameState.save.denarii} denarii`, {
+        fontFamily: "Georgia",
+        fontSize: "18px",
+        color: "#d4a84b",
+      })
+      .setOrigin(0.5);
+    c.add(this.aleaPurse);
+    c.add(
+      this.add
+        .text(0, -186, "Even money. Dump the dice into the dish.", {
+          fontFamily: "Georgia",
+          fontSize: "15px",
+          color: "#e8dcc8",
+        })
+        .setOrigin(0.5),
+    );
+    this.aleaYou = this.add
+      .text(-200, -148, this.aleaLast ? `YOU  ${this.aleaLast.player}` : "YOU  —", {
+        fontFamily: "Cinzel, Georgia",
+        fontSize: "18px",
+        color: "#e8c96a",
+      })
+      .setOrigin(0.5);
+    this.aleaHouse = this.add
+      .text(200, -148, this.aleaLast ? `HOUSE  ${this.aleaLast.house}` : "HOUSE  —", {
+        fontFamily: "Cinzel, Georgia",
+        fontSize: "18px",
+        color: "#e8c96a",
+      })
+      .setOrigin(0.5);
+    c.add([this.aleaYou, this.aleaHouse]);
+    c.add(this.add.image(0, -40, "prop-dice-bowl").setScale(2.1));
+
+    const last = this.aleaLast;
+    const resultText = last
+      ? last.outcome === "win"
+        ? `You ${last.player}. House ${last.house}. You take ${last.bet} denarii.`
+        : last.outcome === "lose"
+          ? `You ${last.player}. House ${last.house}. The house takes ${last.bet} denarii.`
+          : `You ${last.player}. House ${last.house}. The stakes stand.`
+      : "Stake denarii. Watch the dish.";
+    this.aleaStatus = this.add
+      .text(0, 50, resultText, {
+        fontFamily: "Georgia",
+        fontSize: "16px",
+        color: last?.outcome === "win" ? "#8ecf6a" : last?.outcome === "lose" ? "#e07060" : "#c4b49a",
+        align: "center",
+        wordWrap: { width: 560 },
+      })
+      .setOrigin(0.5);
+    c.add(this.aleaStatus);
+
+    TABLE_BETS.forEach((bet, i) => {
+      const x = -180 + i * 180;
+      const poor = gameState.save.denarii < bet;
+      this.addBtn(c, x, 110, poor ? `${bet}  —  short` : `Bet ${bet}`, () => this.startAleaRoll(bet), 160);
+    });
+    this.addBtn(c, -110, 220, "Back", () => {
+      if (this.aleaBusy) return;
+      this.openTable();
+    }, 180);
+    this.addBtn(c, 110, 220, "Leave", () => this.closeOverlay(), 180);
+  };
+
+  private startAleaRoll(bet: number): void {
+    if (this.aleaBusy) return;
+    const taken = takeTableBet(bet);
+    if (taken === "locked") {
+      this.toast("Free men gamble. You are not free.");
+      return;
+    }
+    if (taken === "poor") {
+      this.toast("Not enough denarii.");
+      return;
+    }
+    const roll = rollAleaDice();
+    this.aleaBusy = true;
+    this.aleaPending = { bet, player: roll.player, house: roll.house };
+    this.aleaYou?.setText("YOU  —");
+    this.aleaHouse?.setText("HOUSE  —");
+    this.aleaPurse?.setText(`${gameState.save.denarii} denarii`);
+    this.aleaStatus?.setColor("#c4b49a").setText("You throw...");
+    this.dumpBowl(roll.player, () => {
+      if (!this.aleaPending || !this.tableAlive()) return;
+      this.aleaYou?.setText(`YOU  ${roll.player[0] + roll.player[1]}`);
+      this.time.delayedCall(450, () => {
+        if (!this.aleaPending || !this.tableAlive()) return;
+        this.fadeBowlDice(() => {
+          if (!this.aleaPending || !this.tableAlive()) return;
+          this.aleaStatus?.setText("The house throws...");
+          this.dumpBowl(roll.house, () => {
+            if (!this.aleaPending || !this.tableAlive()) return;
+            const player = roll.player[0] + roll.player[1];
+            const houseSum = roll.house[0] + roll.house[1];
+            const outcome = aleaOutcome(player, houseSum);
+            settleTakenBet(bet, outcome);
+            this.aleaPending = null;
+            this.aleaBusy = false;
+            this.aleaLast = { bet, player, house: houseSum, playerDice: roll.player, houseDice: roll.house, outcome };
+            this.aleaHouse?.setText(`HOUSE  ${houseSum}`);
+            this.aleaPurse?.setText(`${gameState.save.denarii} denarii`);
+            const msg =
+              outcome === "win"
+                ? `You ${player}. House ${houseSum}. You take ${bet} denarii.`
+                : outcome === "lose"
+                  ? `You ${player}. House ${houseSum}. The house takes ${bet} denarii.`
+                  : `You ${player}. House ${houseSum}. The stakes stand.`;
+            this.aleaStatus
+              ?.setColor(outcome === "win" ? "#8ecf6a" : outcome === "lose" ? "#e07060" : "#c4b49a")
+              .setText(msg);
+            if (outcome === "win") this.toast(`You take ${bet} denarii.`);
+            else if (outcome === "lose") this.toast(`The house takes ${bet} denarii.`);
+            else this.toast("The stakes stand.");
+            this.time.delayedCall(700, () => {
+              if (!this.tableAlive()) return;
+              this.fadeBowlDice(() => undefined);
+            });
+          });
+        });
+      });
+    });
+  }
+
+  private dumpBowl(faces: [number, number], onLanded: () => void): void {
+    const c = this.overlay;
+    if (!c) return;
+    audio.sfx("ui");
+    this.aleaDice.forEach((d) => d.destroy());
+    const rest = [
+      { x: -16, y: -36 },
+      { x: 18, y: -32 },
+    ];
+    const dice = [
+      this.add.image(-36, -200, "dice-face-1").setScale(1.7),
+      this.add.image(36, -210, "dice-face-2").setScale(1.7),
+    ];
+    c.add(dice);
+    this.aleaDice = dice;
+    dice.forEach((die, i) => {
+      this.tweens.add({
+        targets: die,
+        x: rest[i]!.x,
+        y: rest[i]!.y,
+        angle: 280 + Math.random() * 80,
+        duration: 420,
+        ease: "Cubic.easeIn",
+      });
+    });
+    const flicker = this.time.addEvent({
+      delay: 45,
+      loop: true,
+      callback: () => {
+        dice.forEach((die, i) => {
+          if (!die.active) return;
+          die.setTexture(`dice-face-${1 + Math.floor(Math.random() * 6)}`);
+          const r = rest[i]!;
+          if (this.tweens.isTweening(die)) return;
+          die.x = r.x + Phaser.Math.Between(-5, 5);
+          die.y = r.y + Phaser.Math.Between(-4, 4);
+          die.angle += Phaser.Math.Between(-24, 24);
+        });
+      },
+    });
+    this.time.delayedCall(1220, () => {
+      flicker.remove(false);
+      if (!this.tableAlive()) return;
+      dice.forEach((die, i) => {
+        if (!die.active) return;
+        die.setTexture(`dice-face-${faces[i] ?? 1}`);
+        die.setAngle(i === 0 ? -10 : 14);
+        die.setPosition(rest[i]!.x, rest[i]!.y);
+        die.setScale(1.7);
+      });
+      onLanded();
+    });
+  }
+
+  private fadeBowlDice(onDone: () => void): void {
+    const dice = this.aleaDice.filter((d) => d.active);
+    if (!dice.length) {
+      onDone();
+      return;
+    }
+    this.tweens.add({
+      targets: dice,
+      alpha: 0,
+      duration: 260,
+      onComplete: () => {
+        dice.forEach((d) => d.destroy());
+        this.aleaDice = [];
+        onDone();
+      },
+    });
+  }
+
+  openBlackjack = (): void => {
+    if (this.resultPending) return;
+    if (!gameState.save.freedomWon) return;
+    if (this.bj && (this.bj.phase === "dealing" || this.bj.phase === "play") && this.tableAlive()) return;
+    const c = this.box(720, 580, "BLACKJACK");
+    c.add(this.add.rectangle(0, -258, 660, 8, 0x6a2420, 0.9));
+    if (!this.bj || this.bj.phase === "bet") {
+      c.add(
+        this.add
+          .text(0, -216, `${gameState.save.denarii} denarii`, {
+            fontFamily: "Georgia",
+            fontSize: "16px",
+            color: "#d4a84b",
+          })
+          .setOrigin(0.5),
+      );
+      c.add(
+        this.add
+          .text(0, -80, "Hit 21. House stands on 17. Naturals pay 3:2.", {
+            fontFamily: "Georgia",
+            fontSize: "16px",
+            color: "#e8dcc8",
+            align: "center",
+            wordWrap: { width: 560 },
+          })
+          .setOrigin(0.5),
+      );
+      TABLE_BETS.forEach((bet, i) => {
+        const x = -180 + i * 180;
+        const poor = gameState.save.denarii < bet;
+        this.addBtn(c, x, 40, poor ? `${bet}  —  short` : `Deal ${bet}`, () => this.dealBlackjack(bet), 160);
+      });
+      this.addBtn(c, 0, 220, "Back", () => this.openTable(), 180);
+      return;
+    }
+    this.mountBlackjackTable(c);
+  };
+
+  private mountBlackjackTable(c: Phaser.GameObjects.Container): void {
+    this.bjHouseCards = [];
+    this.bjPlayerCards = [];
+    this.bjPurse = this.add
+      .text(0, -226, `${gameState.save.denarii} denarii`, {
+        fontFamily: "Georgia",
+        fontSize: "16px",
+        color: "#d4a84b",
+      })
+      .setOrigin(0.5);
+    c.add(this.bjPurse);
+    c.add(this.add.text(0, -188, "HOUSE", { fontFamily: "Cinzel, Georgia", fontSize: "14px", color: "#e8c96a" }).setOrigin(0.5));
+    this.bjHouseTotal = this.add
+      .text(0, -78, "—", { fontFamily: "Georgia", fontSize: "14px", color: "#c4b49a" })
+      .setOrigin(0.5);
+    c.add(this.bjHouseTotal);
+    c.add(this.add.text(0, -42, "YOU", { fontFamily: "Cinzel, Georgia", fontSize: "14px", color: "#e8c96a" }).setOrigin(0.5));
+    this.bjPlayerTotal = this.add
+      .text(0, 78, "—", { fontFamily: "Georgia", fontSize: "14px", color: "#e8dcc8" })
+      .setOrigin(0.5);
+    c.add(this.bjPlayerTotal);
+    this.bjStatus = this.add
+      .text(0, 112, this.bj?.message ?? "Dealing...", {
+        fontFamily: "Georgia",
+        fontSize: "16px",
+        color: "#c4b49a",
+        align: "center",
+        wordWrap: { width: 640 },
+      })
+      .setOrigin(0.5);
+    c.add(this.bjStatus);
+    this.bjDeck = this.add.image(268, -20, "card-back").setScale(1.35);
+    c.add(this.bjDeck);
+    c.add(
+      this.add
+        .text(268, 28, "DECK", { fontFamily: "Cinzel, Georgia", fontSize: "11px", color: "#8a7a68" })
+        .setOrigin(0.5),
+    );
+    this.refreshBjButtons();
+  }
+
+  private refreshBjButtons(): void {
+    this.bjBtnWrap?.destroy();
+    const c = this.overlay;
+    if (!c || !this.bj) return;
+    const wrap = this.add.container(0, 168);
+    c.add(wrap);
+    this.bjBtnWrap = wrap;
+    if (this.bjBusy || this.bj.phase === "dealing") {
+      this.addBtn(wrap, 0, 70, "Leave", () => this.closeOverlay(), 180);
+      return;
+    }
+    if (this.bj.phase === "play") {
+      this.addBtn(wrap, -110, 0, "Hit", () => this.hitBlackjack(), 180);
+      this.addBtn(wrap, 110, 0, "Stand", () => this.standBlackjack(), 180);
+    } else if (this.bj.phase === "done") {
+      this.addBtn(wrap, -110, 0, "Deal again", () => {
+        this.bj = null;
+        this.openBlackjack();
+      }, 180);
+      this.addBtn(wrap, 110, 0, "Back", () => this.openTable(), 180);
+    }
+    this.addBtn(wrap, 0, 70, "Leave", () => this.closeOverlay(), 180);
+  }
+
+  private bjCardSlot(count: number, index: number): number {
+    const gap = 40;
+    return -((count - 1) * gap) / 2 + index * gap;
+  }
+
+  private layoutBjHand(imgs: Phaser.GameObjects.Image[], y: number): void {
+    imgs.forEach((img, i) => {
+      this.tweens.add({
+        targets: img,
+        x: this.bjCardSlot(imgs.length, i),
+        y,
+        duration: 220,
+        ease: "Cubic.easeOut",
+      });
+    });
+  }
+
+  private slideBjCard(
+    card: Card,
+    row: "player" | "house",
+    faceDown: boolean,
+    onDone: () => void,
+  ): void {
+    const c = this.overlay;
+    if (!c || !this.bjDeck) {
+      onDone();
+      return;
+    }
+    audio.sfx("ui");
+    const img = this.add.image(this.bjDeck.x, this.bjDeck.y, faceDown ? "card-back" : cardTex(card)).setScale(1.35);
+    c.add(img);
+    const list = row === "player" ? this.bjPlayerCards : this.bjHouseCards;
+    list.push(img);
+    const y = row === "player" ? 16 : -130;
+    this.layoutBjHand(list, y);
+    this.time.delayedCall(240, () => {
+      if (!this.tableAlive()) return;
+      this.updateBjTotals();
+      onDone();
+    });
+  }
+
+  private updateBjTotals(): void {
+    const s = this.bj;
+    if (!s) return;
+    if (s.player.length) this.bjPlayerTotal?.setText(`${handTotal(s.player)}`);
+    else this.bjPlayerTotal?.setText("—");
+    if (!s.house.length) this.bjHouseTotal?.setText("—");
+    else if (s.holeHidden && s.house.length >= 1) {
+      this.bjHouseTotal?.setText(`${handTotal(s.house.slice(0, 1))} + ?`);
+    } else this.bjHouseTotal?.setText(`${handTotal(s.house)}`);
+  }
+
+  private flipBjHole(onDone: () => void): void {
+    const s = this.bj;
+    const hole = this.bjHouseCards[1];
+    if (!s || !hole || !s.house[1]) {
+      onDone();
+      return;
+    }
+    s.holeHidden = false;
+    this.tweens.add({
+      targets: hole,
+      scaleX: 0,
+      duration: 110,
+      onComplete: () => {
+        if (!hole.active) {
+          onDone();
+          return;
+        }
+        hole.setTexture(cardTex(s.house[1]!));
+        this.tweens.add({
+          targets: hole,
+          scaleX: 1.35,
+          duration: 110,
+          onComplete: () => {
+            this.updateBjTotals();
+            onDone();
+          },
+        });
+      },
+    });
+  }
+
+  private finishBj(outcome: BlackjackOutcome): void {
+    const s = this.bj;
+    if (!s) return;
+    if (s.phase !== "done") settleTakenBet(s.bet, outcome);
+    s.phase = "done";
+    s.message = this.blackjackMessage(outcome, s.bet);
+    this.bjBusy = false;
+    this.bjStatus
+      ?.setColor(outcome === "win" || outcome === "blackjack" ? "#8ecf6a" : outcome === "lose" ? "#e07060" : "#c4b49a")
+      .setText(s.message);
+    this.bjPurse?.setText(`${gameState.save.denarii} denarii`);
+    this.toastBlackjack(outcome, s.bet);
+    this.refreshBjButtons();
+  }
+
+  private dealBlackjack(bet: number): void {
+    if (this.bjBusy) return;
+    const taken = takeTableBet(bet);
+    if (taken === "locked") {
+      this.toast("Free men gamble. You are not free.");
+      return;
+    }
+    if (taken === "poor") {
+      this.toast("Not enough denarii.");
+      return;
+    }
+    this.bj = {
+      bet,
+      deck: freshDeck(),
+      player: [],
+      house: [],
+      holeHidden: true,
+      phase: "dealing",
+      message: "Dealing...",
+    };
+    const c = this.box(720, 580, "BLACKJACK");
+    c.add(this.add.rectangle(0, -258, 660, 8, 0x6a2420, 0.9));
+    this.mountBlackjackTable(c);
+    this.bjBusy = true;
+    this.refreshBjButtons();
+    const order: Array<{ row: "player" | "house"; down: boolean }> = [
+      { row: "player", down: false },
+      { row: "house", down: false },
+      { row: "player", down: false },
+      { row: "house", down: true },
+    ];
+    const step = (i: number): void => {
+      const s = this.bj;
+      if (!s || !this.tableAlive()) return;
+      if (i >= order.length) {
+        this.afterBjDeal();
+        return;
+      }
+      const next = order[i]!;
+      const card = drawCard(s.deck);
+      if (next.row === "player") s.player.push(card);
+      else s.house.push(card);
+      this.slideBjCard(card, next.row, next.down, () => this.time.delayedCall(140, () => step(i + 1)));
+    };
+    step(0);
+  }
+
+  private afterBjDeal(): void {
+    const s = this.bj;
+    if (!s || !this.tableAlive()) return;
+    if (isNatural(s.player) || isNatural(s.house)) {
+      this.flipBjHole(() => {
+        if (!this.bj) return;
+        this.finishBj(blackjackCompare(this.bj.player, this.bj.house));
+      });
+      return;
+    }
+    s.phase = "play";
+    s.message = "Hit or stand.";
+    this.bjBusy = false;
+    this.bjStatus?.setText(s.message);
+    this.refreshBjButtons();
+  }
+
+  private hitBlackjack(): void {
+    const s = this.bj;
+    if (!s || s.phase !== "play" || this.bjBusy) return;
+    this.bjBusy = true;
+    this.refreshBjButtons();
+    const card = drawCard(s.deck);
+    s.player.push(card);
+    this.slideBjCard(card, "player", false, () => {
+      if (!this.bj || !this.tableAlive()) return;
+      if (handTotal(this.bj.player) > 21) {
+        this.flipBjHole(() => this.finishBj("lose"));
+        return;
+      }
+      this.bjBusy = false;
+      this.refreshBjButtons();
+    });
+  }
+
+  private standBlackjack(): void {
+    const s = this.bj;
+    if (!s || s.phase !== "play" || this.bjBusy) return;
+    this.bjBusy = true;
+    this.refreshBjButtons();
+    this.flipBjHole(() => this.drawHouseToSeventeen());
+  }
+
+  private drawHouseToSeventeen(): void {
+    const s = this.bj;
+    if (!s || !this.tableAlive()) return;
+    if (!dealerShouldHit(s.house)) {
+      this.finishBj(blackjackCompare(s.player, s.house));
+      return;
+    }
+    const card = drawCard(s.deck);
+    s.house.push(card);
+    this.slideBjCard(card, "house", false, () => {
+      this.time.delayedCall(180, () => this.drawHouseToSeventeen());
+    });
+  }
+
+  private blackjackMessage(outcome: BlackjackOutcome, bet: number): string {
+    if (outcome === "blackjack") return `Blackjack. You take ${Math.floor(bet * 1.5)} denarii.`;
+    if (outcome === "win") return `You win ${bet} denarii.`;
+    if (outcome === "lose") return `You lose ${bet} denarii.`;
+    return "Push. The stakes stand.";
+  }
+
+  private toastBlackjack(outcome: BlackjackOutcome, bet: number): void {
+    this.toast(this.blackjackMessage(outcome, bet));
+  }
+
+  private addPalNode(
+    c: Phaser.GameObjects.Container,
+    x: number,
+    y: number,
+    skill: PalSkillDef,
+    color: number,
+    detail: Phaser.GameObjects.Text,
+  ): void {
+    const owned = hasPalSkill(skill.id);
+    const available = canUnlockPalSkill(skill.id);
+    const fill = owned ? 0x3a281c : available ? 0x241810 : 0x14100e;
+    const stroke = owned ? color : available ? COLORS.gold : 0x5a4a3a;
+    const cardW = 204;
+    const cardH = 56;
+    const card = this.add
+      .rectangle(x, y, cardW, cardH, fill, 0.96)
+      .setStrokeStyle(owned || available ? 2 : 1, stroke)
+      .setInteractive({ useHandCursor: available || owned });
+    const gem = this.add.circle(x - cardW / 2 + 20, y, 10, owned ? color : available ? 0x5a3828 : 0x2a2018).setStrokeStyle(2, stroke);
+    const name = this.add
+      .text(x - cardW / 2 + 38, y - 10, skill.name, {
+        fontFamily: "Cinzel, Georgia",
+        fontSize: "15px",
+        color: owned || available ? "#f0e6d2" : "#6a5a4a",
+      })
+      .setOrigin(0, 0.5);
+    const state = owned
+      ? "Learned"
+      : available
+        ? `Click  ·  1 pt + ${skill.cost}`
+        : skill.requires
+          ? "Locked  ·  skill above"
+          : "Locked";
+    const status = this.add
+      .text(x - cardW / 2 + 38, y + 12, state, {
+        fontFamily: "Georgia",
+        fontSize: "12px",
+        color: owned ? "#8ecf6a" : available ? "#d4a84b" : "#6a5a4a",
+      })
+      .setOrigin(0, 0.5);
+    const show = () => {
+      const line = owned
+        ? "Learned"
+        : available
+          ? `Click — 1 pal point + ${skill.cost} denarii`
+          : skill.requires
+            ? "Requires the skill above"
+            : "Need a pal point and denarii";
+      detail.setText(`${skill.name}  —  ${line}\n${skill.description}`);
+    };
+    card.on("pointerover", () => {
+      show();
+      if (available) card.setFillStyle(0x4a3424);
+    });
+    card.on("pointerout", () => card.setFillStyle(fill));
+    card.on("pointerdown", () => {
+      if (owned) {
+        show();
+        return;
+      }
+      const result = unlockPalSkill(skill.id);
+      if (result === "poor") this.toast("Not enough denarii.");
+      else if (result === "points") this.toast("Need a pal point. Beat a house champion with the pal.");
+      else if (result === "locked") this.toast("That branch is still closed.");
+      else if (result === "ok") {
+        audio.sfx("ui");
+        this.toast(`${skill.name} is learned.`);
+        this.openRoost();
+      }
+    });
+    c.add([card, gem, name, status]);
   }
 
   openArmory(): void {
@@ -1033,6 +2054,18 @@ export class UIScene extends Phaser.Scene {
         })
         .setOrigin(0.5, 0),
     );
+    const lv = masteryLevel(cur.id);
+    c.add(
+      this.add
+        .text(-310, 210, `Mastery  ${lv === 2 ? "II" : lv === 1 ? "I" : "—"}\n${masteryHint(cur.id)}`, {
+          fontFamily: "Georgia",
+          fontSize: "12px",
+          color: "#8ecf6a",
+          wordWrap: { width: 250 },
+          align: "center",
+        })
+        .setOrigin(0.5, 0),
+    );
 
     WEAPON_ORDER.forEach((id, i) => {
       const w = getWeapon(id);
@@ -1055,7 +2088,7 @@ export class UIScene extends Phaser.Scene {
         })
         .setOrigin(0.5);
       const status = this.add
-        .text(x + 18, y + 10, equipped ? "Equipped" : unlocked ? "Ready" : "Locked", {
+        .text(x + 18, y + 10, equipped ? `Equipped  ·  ${masteryLevel(id) ? `M${masteryLevel(id)}` : "form"}` : unlocked ? masteryHint(id).split("—")[0].trim() : "Locked", {
           fontFamily: "Georgia",
           fontSize: "13px",
           color: equipped ? "#8ecf6a" : unlocked ? "#d4a84b" : "#6a5a4a",
@@ -1192,6 +2225,11 @@ export class UIScene extends Phaser.Scene {
   }
 
   openResult = (payload: { title: string; body: string; action?: string }): void => {
+    this.hideJudgment();
+    this.perfectFlash?.destroy();
+    this.perfectText?.destroy();
+    this.perfectFlash = undefined;
+    this.perfectText = undefined;
     const c = this.box(620, 360, payload.title);
     this.resultPending = true;
     c.add(
@@ -1225,39 +2263,197 @@ export class UIScene extends Phaser.Scene {
     this.bossWrap = [];
   };
 
-  showFavor = (): void => {
+  showFavor = (payload?: { them?: number }): void => {
     this.hideFavor();
-    const y = 88;
-    const bg = this.add.rectangle(GAME_WIDTH / 2, y, 280, 12, 0x1a1210).setScrollFactor(0).setDepth(120);
-    const fill = this.add.rectangle(GAME_WIDTH / 2 - 136, y, 272, 8, COLORS.gold).setOrigin(0, 0.5).setScrollFactor(0).setDepth(121);
-    const label = this.add
-      .text(GAME_WIDTH / 2, y - 16, "FAVOR", {
-        fontFamily: "Cinzel, Georgia",
-        fontSize: "12px",
-        color: "#d4a84b",
-        stroke: "#1a1210",
-        strokeThickness: 3,
-      })
-      .setOrigin(0.5)
-      .setScrollFactor(0)
-      .setDepth(122);
-    this.favorWrap = [bg, fill, label];
+    const y = 52;
+    const w = 360;
+    const them = payload?.them ?? COLORS.crimson;
+    const bg = this.add.rectangle(GAME_WIDTH / 2, y, w + 8, 16, 0x1a1210).setScrollFactor(0).setDepth(120);
+    const youFill = this.add.rectangle(GAME_WIDTH / 2 - w / 2, y, w * 0.5, 10, COLORS.gold).setOrigin(0, 0.5).setScrollFactor(0).setDepth(121);
+    const themFill = this.add.rectangle(GAME_WIDTH / 2 + w / 2, y, w * 0.5, 10, them).setOrigin(1, 0.5).setScrollFactor(0).setDepth(121);
+    const tick = this.add.rectangle(GAME_WIDTH / 2 - w / 2 + w * 0.7, y, 3, 18, 0xf0e6d2).setScrollFactor(0).setDepth(122);
+    const marker = this.add.rectangle(GAME_WIDTH / 2, y, 6, 20, 0xfff4d0).setStrokeStyle(1, 0x1a1210).setScrollFactor(0).setDepth(123);
+    const you = this.add.text(GAME_WIDTH / 2 - w / 2 - 8, y, "YOU", { fontFamily: "Cinzel, Georgia", fontSize: "11px", color: "#e8c96a", stroke: "#1a1210", strokeThickness: 3 }).setOrigin(1, 0.5).setScrollFactor(0).setDepth(122);
+    const themLbl = this.add.text(GAME_WIDTH / 2 + w / 2 + 8, y, "THEM", { fontFamily: "Cinzel, Georgia", fontSize: "11px", color: "#e07060", stroke: "#1a1210", strokeThickness: 3 }).setOrigin(0, 0.5).setScrollFactor(0).setDepth(122);
+    const missio = this.add.text(GAME_WIDTH / 2 - w / 2 + w * 0.7, y - 16, "missio", { fontFamily: "Georgia", fontSize: "10px", color: "#d4a84b", stroke: "#1a1210", strokeThickness: 3 }).setOrigin(0.5).setScrollFactor(0).setDepth(122);
+    this.favorYouFill = youFill;
+    this.favorMarker = marker;
+    this.favorWrap = [bg, youFill, themFill, tick, marker, you, themLbl, missio];
     bus.on("favor", this.onFavor);
+    this.onFavor(50);
   };
 
   hideFavor = (): void => {
     bus.off("favor", this.onFavor);
     this.favorWrap.forEach((o) => o.destroy());
     this.favorWrap = [];
+    this.favorYouFill = undefined;
+    this.favorMarker = undefined;
   };
 
   private onFavor = (value: number): void => {
-    const fill = this.favorWrap[1] as Phaser.GameObjects.Rectangle | undefined;
-    if (!fill) return;
+    const w = 360;
     const t = Phaser.Math.Clamp(value / 100, 0, 1);
-    fill.width = 272 * t;
-    fill.setFillStyle(t < 0.35 ? COLORS.crimson : t < 0.55 ? 0xc48a48 : COLORS.gold);
+    if (this.favorYouFill) this.favorYouFill.width = Math.max(4, w * t);
+    const themFill = this.favorWrap[2] as Phaser.GameObjects.Rectangle | undefined;
+    if (themFill) themFill.width = Math.max(4, w * (1 - t));
+    if (this.favorMarker) this.favorMarker.x = GAME_WIDTH / 2 - w / 2 + w * t;
+    this.tweens.add({ targets: this.favorMarker, scaleY: 1.35, yoyo: true, duration: 90 });
   };
+
+  showPalHp = (): void => {
+    this.palHpBg?.setVisible(true);
+    this.palHpFill?.setVisible(true);
+    this.palHpLabel?.setVisible(true);
+  };
+
+  hidePalHp = (): void => {
+    this.palHpBg?.setVisible(false);
+    this.palHpFill?.setVisible(false);
+    this.palHpLabel?.setVisible(false);
+  };
+
+  private onPalHp = (ratio: number): void => {
+    if (!this.palHpFill) return;
+    this.palHpFill.width = 180 * Phaser.Math.Clamp(ratio, 0, 1);
+  };
+
+  private onCrowdCall = (kind: "missio" | "iugula"): void => {
+    this.perfectFlash?.destroy();
+    this.perfectText?.destroy();
+    const missio = kind === "missio";
+    this.perfectFlash = this.add
+      .rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, missio ? 0xffe08a : 0xb33a2b, missio ? 0.2 : 0.18)
+      .setScrollFactor(0)
+      .setDepth(3500);
+    this.perfectText = this.add
+      .text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 110, missio ? "MISSIO" : "IUGULA", {
+        fontFamily: "Cinzel, Georgia",
+        fontSize: "44px",
+        color: missio ? "#ffe08a" : "#e07060",
+        stroke: "#1a1210",
+        strokeThickness: 7,
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(3501);
+    audio.sfx(missio ? "missio" : "crowd");
+    this.tweens.add({
+      targets: [this.perfectFlash, this.perfectText],
+      alpha: 0,
+      delay: 280,
+      duration: 900,
+      onComplete: () => {
+        this.perfectFlash?.destroy();
+        this.perfectText?.destroy();
+        this.perfectFlash = undefined;
+        this.perfectText = undefined;
+      },
+    });
+  };
+
+  private showJudgment = (payload: { crowd: "missio" | "iugula" }): void => {
+    this.hideJudgment();
+    this.judgmentOpen = true;
+    const crowdMissio = payload.crowd === "missio";
+    const followAct = crowdMissio ? "Mercy" : "Steel";
+    const defyAct = crowdMissio ? "Steel" : "Mercy";
+    const y = GAME_HEIGHT / 2 + 92;
+    const header = this.add
+      .text(GAME_WIDTH / 2, y - 58, crowdMissio ? "THE CROWD CALLS MISSIO" : "THE CROWD CALLS IUGULA", {
+        fontFamily: "Cinzel, Georgia",
+        fontSize: "22px",
+        color: crowdMissio ? "#ffe08a" : "#e07060",
+        stroke: "#1a1210",
+        strokeThickness: 6,
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(3600);
+    const sub = this.add
+      .text(GAME_WIDTH / 2, y - 28, "Follow the stands, or go against them.", {
+        fontFamily: "Georgia",
+        fontSize: "16px",
+        color: "#e8dcc8",
+        stroke: "#1a1210",
+        strokeThickness: 4,
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(3600);
+    const followBg = this.add
+      .rectangle(GAME_WIDTH / 2 - 150, y + 28, 220, 72, 0x3a281c, 0.96)
+      .setStrokeStyle(3, COLORS.gold)
+      .setScrollFactor(0)
+      .setDepth(3600)
+      .setInteractive({ useHandCursor: true });
+    const followLabel = this.add
+      .text(GAME_WIDTH / 2 - 150, y + 16, "FOLLOW", {
+        fontFamily: "Cinzel, Georgia",
+        fontSize: "20px",
+        color: "#e8c96a",
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(3601);
+    const followHint = this.add
+      .text(GAME_WIDTH / 2 - 150, y + 40, `${followAct}  ·  E`, {
+        fontFamily: "Georgia",
+        fontSize: "14px",
+        color: "#e8dcc8",
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(3601);
+    const defyBg = this.add
+      .rectangle(GAME_WIDTH / 2 + 150, y + 28, 220, 72, 0x3a1814, 0.96)
+      .setStrokeStyle(3, 0xe07060)
+      .setScrollFactor(0)
+      .setDepth(3600)
+      .setInteractive({ useHandCursor: true });
+    const defyLabel = this.add
+      .text(GAME_WIDTH / 2 + 150, y + 16, "DEFY", {
+        fontFamily: "Cinzel, Georgia",
+        fontSize: "20px",
+        color: "#e07060",
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(3601);
+    const defyHint = this.add
+      .text(GAME_WIDTH / 2 + 150, y + 40, `${defyAct}  ·  Q`, {
+        fontFamily: "Georgia",
+        fontSize: "14px",
+        color: "#e8dcc8",
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(3601);
+    followBg.on("pointerover", () => followBg.setFillStyle(0x4a3424));
+    followBg.on("pointerout", () => followBg.setFillStyle(0x3a281c));
+    followBg.on("pointerdown", () => this.pickJudgment(true));
+    defyBg.on("pointerover", () => defyBg.setFillStyle(0x5a2420));
+    defyBg.on("pointerout", () => defyBg.setFillStyle(0x3a1814));
+    defyBg.on("pointerdown", () => this.pickJudgment(false));
+    this.judgmentWrap = [header, sub, followBg, followLabel, followHint, defyBg, defyLabel, defyHint];
+  };
+
+  private hideJudgment = (): void => {
+    this.judgmentOpen = false;
+    this.judgmentWrap.forEach((o) => o.destroy());
+    this.judgmentWrap = [];
+  };
+
+  private pickJudgment(follow: boolean): void {
+    if (!this.judgmentOpen) return;
+    this.hideJudgment();
+    this.perfectFlash?.destroy();
+    this.perfectText?.destroy();
+    this.perfectFlash = undefined;
+    this.perfectText = undefined;
+    audio.sfx("ui");
+    bus.emit("judgment-pick", { follow });
+  }
 
   private onMinimapScene = (scene: string): void => {
     this.minimapScene = scene;
@@ -1356,7 +2552,7 @@ export class UIScene extends Phaser.Scene {
     bg.on("pointerover", () => bg.setFillStyle(0xc44a38));
     bg.on("pointerout", () => bg.setFillStyle(COLORS.crimson));
     bg.on("pointerdown", () => {
-      if (this.overlay || this.resultPending) return;
+      if (this.overlay || this.resultPending || this.judgmentOpen) return;
       if (this.dialogueBox) {
         this.advanceDialogue();
         return;
@@ -1398,7 +2594,7 @@ export class UIScene extends Phaser.Scene {
     bg.on("pointerover", () => bg.setFillStyle(0x8a3a2c));
     bg.on("pointerout", () => bg.setFillStyle(0x6a2a22));
     bg.on("pointerdown", () => {
-      if (this.overlay || this.resultPending) return;
+      if (this.overlay || this.resultPending || this.judgmentOpen) return;
       if (this.dialogueBox) {
         this.advanceDialogue();
         return;
@@ -1443,7 +2639,7 @@ export class UIScene extends Phaser.Scene {
     this.netBg.on("pointerover", () => this.netBg.setFillStyle(0x3a7a84));
     this.netBg.on("pointerout", () => this.netBg.setFillStyle(0x2a5a62));
     this.netBg.on("pointerdown", () => {
-      if (this.overlay || this.resultPending) return;
+      if (this.overlay || this.resultPending || this.judgmentOpen) return;
       if (this.dialogueBox) {
         this.advanceDialogue();
         return;
@@ -1502,7 +2698,7 @@ export class UIScene extends Phaser.Scene {
     this.sparBg.on("pointerover", () => this.sparBg.setFillStyle(0xd4a84b));
     this.sparBg.on("pointerout", () => this.sparBg.setFillStyle(this.sparYield ? 0x6a3a2a : 0xb08a3a));
     this.sparBg.on("pointerdown", () => {
-      if (this.overlay || this.resultPending || gameState.inDialogue || gameState.inMenu) return;
+      if (this.overlay || this.resultPending || this.judgmentOpen || gameState.inDialogue || gameState.inMenu) return;
       if (this.sparYield) bus.emit("player-yield");
       else bus.emit("player-spar");
     });
@@ -1543,8 +2739,35 @@ export class UIScene extends Phaser.Scene {
     this.talkBg.on("pointerover", () => this.talkBg.setFillStyle(0x4a5a7a));
     this.talkBg.on("pointerout", () => this.talkBg.setFillStyle(0x3a4a6a));
     this.talkBg.on("pointerdown", () => {
-      if (this.overlay || this.resultPending || gameState.inDialogue || gameState.inMenu || gameState.paused) return;
+      if (this.overlay || this.resultPending || this.judgmentOpen || gameState.inDialogue || gameState.inMenu || gameState.paused) return;
       bus.emit("player-interact");
+    });
+  }
+
+  private addMusicMuteButton(): void {
+    const x = GAME_WIDTH - 132;
+    const y = 92;
+    const bg = this.add
+      .rectangle(x, y, 236, 32, 0x2a1c16, 0.92)
+      .setStrokeStyle(2, COLORS.gold)
+      .setScrollFactor(0)
+      .setDepth(99)
+      .setInteractive({ useHandCursor: true });
+    this.musicMuteText = this.add
+      .text(x, y, audio.musicMuteLabel(), {
+        fontFamily: "Cinzel, Georgia",
+        fontSize: "15px",
+        color: "#e8dcc8",
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(100);
+    bg.on("pointerover", () => bg.setFillStyle(0x3a281c));
+    bg.on("pointerout", () => bg.setFillStyle(0x2a1c16));
+    bg.on("pointerdown", () => {
+      audio.toggleMusicMute();
+      this.musicMuteText?.setText(audio.musicMuteLabel());
+      audio.sfx("ui");
     });
   }
 
@@ -1571,6 +2794,7 @@ export class UIScene extends Phaser.Scene {
 
   private toMenu(): void {
     gameState.persist();
+    this.hideJudgment();
     this.closeOverlay();
     this.scene.stop("LudusScene");
     this.scene.stop("ArenaScene");

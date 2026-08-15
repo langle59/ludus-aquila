@@ -7,7 +7,7 @@ import {
   pledgedHouse,
   rivalHouses,
 } from "../systems/progression";
-import { palBrought, palNextHint, palTier, palTitle, palUnlocked } from "./pal";
+import { palAnimalName, palBrought, palNextHint, palTier, palTitle, palUnlocked } from "./pal";
 
 type LineFn = () => string[];
 
@@ -67,8 +67,9 @@ export const DIALOGUE: Record<string, LineFn> = {
       ];
     }
     if (palUnlocked() && s.defeatedHouses.length === 1) {
+      const animal = palAnimalName().toLowerCase();
       return [
-        `"You took a house. The eagle of Aquila is yours now. It waits by my hall."`,
+        `"You took a house. The ${animal} of your pledge is yours now. It waits in the roost, west of my hall."`,
         `"Bring it to the sand. Beat more houses, and it grows."`,
       ];
     }
@@ -250,21 +251,20 @@ export const DIALOGUE: Record<string, LineFn> = {
     ];
   },
   pal: () => {
-    const tier = palTier();
-    const name = palTitle(tier);
+    const name = palTitle(palTier());
     if (!palBrought()) {
       return [
         `The ${name} watches the yard from the roost.`,
-        `"Leave it here if you want the sand to yourself. Gladiator stats can call it back."`,
+        `"Leave it here if you want the sand to yourself. The roost can call it back."`,
         palNextHint(),
       ];
     }
-    if (tier >= 4) {
-      return [`The ${name} ruffles gold-dark feathers.`, `"It has hunted every house with you. The sand already knows its shadow."`];
+    if (palTier() >= 4) {
+      return [`The ${name} waits on the perch.`, `"It has hunted every house with you. The sand already knows its shadow."`];
     }
     return [
-      `The ${name} of Aquila tilts its head. Talons click on stone.`,
-      palBrought() ? `"It will dive when you walk the gate."` : `"It stays at roost until you call it."`,
+      `The ${name} of your pledged house waits on the perch.`,
+      palBrought() ? `"It will fight when you walk the gate."` : `"It stays at roost until you call it."`,
       palNextHint(),
     ];
   },
@@ -292,7 +292,9 @@ export const AREA_HINTS: Record<string, string> = {
   dummy: "Training dummy — light attack (Space) or heavy (G).",
   rack: "Weapon rack — press E to open the armory.",
   shop: "Quarters — press E for cloth, dye, and unguent.",
-  pal: "The eagle of Aquila. Press E. Bring it to the arena from Gladiator Stats.",
+  pal: "The roost. Press E to feed, train, or change how it looks.",
   gate: "Arena gate — press E to choose a match.",
   fountain: "A stone basin. The water is warm.",
+  trophy: "A mount on the wall. Press E to inspect it.",
+  dice: "The oval table. Free men play. Press E.",
 };

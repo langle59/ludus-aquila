@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { TILE_SIZE } from "../config";
+import { TILE_SIZE, HUD_CAM_PAD } from "../config";
 import { gameState } from "../state/GameState";
 import { bus } from "../systems/bus";
 import { audio } from "../systems/audio";
@@ -13,8 +13,9 @@ import { resolveHits, dummyStrikeFeedback } from "../systems/combat";
 import { DIALOGUE } from "../data/dialogue";
 import { getNpc, HOUSE_GLADIATORS, LANISTA } from "../data/gladiators";
 import { markTutorial, skipTutorial } from "../systems/objectives";
-import { applySparReward, applyDummyXp, pledgedHouse, rivalHouses } from "../systems/progression";
-import { palBrought, palNextHint, palStats, palTier, palTitle, palUnlocked } from "../data/pal";
+import { applySparReward, applyDummyXp, pledgedHouse, playerCombatStats, rivalHouses } from "../systems/progression";
+import { palCombatStats, palDisplayName, palTexture, palUnlocked } from "../data/pal";
+import { getHouse } from "../data/houses";
 import { bodyStyleFor } from "../systems/assets";
 import { CombatInput } from "../systems/input";
 
@@ -39,12 +40,16 @@ export class LudusScene extends Phaser.Scene {
   private combat!: CombatInput;
   private blockingHeld = false;
   private interactables: { kind: string; x: number; y: number; id?: string }[] = [];
+  private palSprite?: Phaser.GameObjects.Image;
+  private palNameTag?: Phaser.GameObjects.Text;
   private nearestHint?: Phaser.GameObjects.Text;
   private sparring: { enemy: Fighter; ai: CombatAI; npcId: string } | null = null;
   private hiddenNpc?: NpcActor;
   private awaitingSpar: string | null = null;
   private dummyCapTold = false;
   private built = buildLudus();
+  private trophyGfx: Phaser.GameObjects.GameObject[] = [];
+  private tableLock?: Phaser.GameObjects.Image;
 
   constructor() {
     super("LudusScene");
@@ -53,7 +58,7 @@ export class LudusScene extends Phaser.Scene {
   create(): void {
     this.solids = paintMap(this, this.built, "ludus");
     labelMap(this, LUDUS_META.labels);
-    this.cameras.main.setBounds(0, 0, this.built.cols * TILE_SIZE, this.built.rows * TILE_SIZE);
+    this.cameras.main.setBounds(0, -HUD_CAM_PAD, this.built.cols * TILE_SIZE, this.built.rows * TILE_SIZE + HUD_CAM_PAD);
     this.cameras.main.setZoom(1);
 
     const spawn = gameState.save.position.x
@@ -69,7 +74,7 @@ export class LudusScene extends Phaser.Scene {
       cape: look.cape,
       scar: look.scar,
       crest: look.crest,
-      stats: { ...gameState.save.stats },
+      stats: { ...playerCombatStats() },
       weapon: gameState.save.equippedWeapon,
       team: "player",
     });
@@ -80,6 +85,7 @@ export class LudusScene extends Phaser.Scene {
     this.spawnNpcs();
     this.spawnProps();
     this.spawnPalRoost();
+    this.refreshHall();
 
     this.nearestHint = this.add
       .text(0, 0, "", { fontFamily: "Georgia", fontSize: "14px", color: "#d4a84b", stroke: "#1a1210", strokeThickness: 4 })
@@ -93,11 +99,21 @@ export class LudusScene extends Phaser.Scene {
     this.game.canvas.focus();
 
     this.events.on("wake", () => {
+      gameState.paused = false;
+      gameState.inMenu = false;
+      gameState.inDialogue = false;
+      this.physics.world.resume();
+      const body = this.player.body as Phaser.Physics.Arcade.Body | undefined;
+      if (body) {
+        body.enable = true;
+        body.setVelocity(0, 0);
+      }
       this.player.setWeapon(gameState.save.equippedWeapon);
-      this.player.stats = { ...gameState.save.stats };
+      this.player.stats = { ...playerCombatStats() };
       this.player.revive(true);
       gameState.restoreVitals();
       bus.emit("minimap-scene", "ludus");
+      this.refreshHall();
       if (gameState.save.freedomWon && !gameState.save.dialogueFlags.freedomSpeech) {
         gameState.save.dialogueFlags.freedomSpeech = true;
         gameState.persist();
@@ -117,6 +133,7 @@ export class LudusScene extends Phaser.Scene {
     bus.on("player-yield", this.onYield, this);
     bus.on("skills-changed", this.onSkillsChanged, this);
     bus.on("cosmetics-changed", this.onCosmeticsChanged, this);
+    bus.on("roost-changed", this.onRoostChanged, this);
 
     this.events.on("shutdown", () => {
       bus.off("weapon-changed", this.onWeapon, this);
@@ -129,6 +146,7 @@ export class LudusScene extends Phaser.Scene {
       bus.off("player-yield", this.onYield, this);
       bus.off("skills-changed", this.onSkillsChanged, this);
       bus.off("cosmetics-changed", this.onCosmeticsChanged, this);
+      bus.off("roost-changed", this.onRoostChanged, this);
       bus.emit("spar-available", { show: false });
       bus.emit("talk-available", { show: false });
       bus.emit("minimap-scene", "none");
@@ -190,8 +208,19 @@ export class LudusScene extends Phaser.Scene {
         this.physics.add.collider(this.player, rack);
         this.interactables.push({ kind: "rack", x: p.x, y: p.y });
       } else if (p.kind === "gate") {
-        const gate = new WorldProp(this, p.x, p.y - 8, "gate", "prop-gate", false);
-        gate.setDepth(p.y + 30);
+        const footY = p.y + TILE_SIZE / 2;
+        const span = 64;
+        for (const dx of [-span, span]) {
+          const post = this.physics.add.staticImage(p.x + dx, footY, "prop-gate-post");
+          post.setOrigin(0.5, 1);
+          post.setDepth(footY);
+          const body = post.body as Phaser.Physics.Arcade.StaticBody;
+          body.setSize(18, 14);
+          body.setOffset(9, 66);
+          post.refreshBody();
+          this.physics.add.collider(this.player, post);
+        }
+        this.add.image(p.x, footY - 62, "prop-gate-arch").setOrigin(0.5, 1).setDepth(footY + 80);
         this.interactables.push({ kind: "gate", x: p.x, y: p.y });
       } else if (p.kind === "fountain") {
         const f = new WorldProp(this, p.x, p.y, "fountain", "prop-fountain", true);
@@ -217,6 +246,9 @@ export class LudusScene extends Phaser.Scene {
         this.physics.add.collider(this.player, sh);
       } else if (p.kind === "hay") {
         this.add.image(p.x, p.y, "prop-hay").setDepth(2);
+      } else if (p.kind === "perch") {
+        this.add.image(p.x, p.y, "prop-hay").setDepth(2);
+        this.interactables.push({ kind: "pal", x: p.x, y: p.y });
       } else if (p.kind === "bench") {
         const b = new WorldProp(this, p.x, p.y, "bench", "prop-bench", true);
         this.physics.add.collider(this.player, b);
@@ -224,19 +256,79 @@ export class LudusScene extends Phaser.Scene {
         const stall = new WorldProp(this, p.x, p.y, "shop", "prop-stall", true);
         this.physics.add.collider(this.player, stall);
         this.interactables.push({ kind: "shop", x: p.x, y: p.y });
+      } else if (p.kind === "dice") {
+        const table = new WorldProp(this, p.x, p.y, "dice", "prop-dice-table", true);
+        this.physics.add.collider(this.player, table);
+        this.interactables.push({ kind: "dice", x: p.x, y: p.y });
+        this.tableLock = this.add.image(p.x, p.y - 6, "prop-dice-lock").setDepth(p.y + 1);
       }
     }
   }
 
+  private hallSlotCols(count: number): number[] {
+    if (count >= 4) return [37, 40, 43, 45];
+    if (count === 3) return [38, 41, 44];
+    if (count === 2) return [39, 43];
+    if (count === 1) return [41];
+    return [];
+  }
+
+  private refreshHall(): void {
+    for (const g of this.trophyGfx) g.destroy();
+    this.trophyGfx = [];
+    this.interactables = this.interactables.filter((it) => it.kind !== "trophy");
+    this.tableLock?.setVisible(!gameState.save.freedomWon);
+
+    const houses = rivalHouses();
+    const north = houses.slice(0, 4);
+    const south = houses.slice(4);
+    const place = (houseList: typeof houses, cols: number[], row: number) => {
+      houseList.forEach((house, i) => {
+        const col = cols[i];
+        if (col == null) return;
+        const x = col * TILE_SIZE + TILE_SIZE / 2;
+        const y = row * TILE_SIZE + TILE_SIZE / 2;
+        const beaten = gameState.save.defeatedHouses.includes(house.id);
+        const plaque = this.add.image(x, y - 2, "prop-trophy-empty").setDepth(y);
+        this.trophyGfx.push(plaque);
+        if (beaten) {
+          const banner = this.add.image(x, y - 22, "prop-trophy-banner").setDepth(y - 1).setTint(house.colors.primary);
+          this.trophyGfx.push(banner);
+          const kind = house.beastKind ?? "eagle";
+          const tex = `trophy-skel-${kind}`;
+          if (this.textures.exists(tex)) {
+            const head = this.add.image(x, y - 8, tex).setDepth(y + 1);
+            this.trophyGfx.push(head);
+          }
+          const tag = this.add
+            .text(x, y + 16, house.animalName, {
+              fontFamily: "Cinzel, Georgia",
+              fontSize: "9px",
+              color: "#e8c96a",
+              stroke: "#1a1210",
+              strokeThickness: 3,
+            })
+            .setOrigin(0.5)
+            .setDepth(y + 2);
+          this.trophyGfx.push(tag);
+        }
+        this.interactables.push({ kind: "trophy", x, y, id: house.id });
+      });
+    };
+    place(north, this.hallSlotCols(north.length), 15);
+    place(south, this.hallSlotCols(south.length), 20);
+  }
+
   private spawnPalRoost(): void {
-    if (!palUnlocked()) return;
     const pos = this.built.spawns.pal;
     if (!pos) return;
-    const scale = palStats(palTier()).visScale;
+    this.interactables.push({ kind: "pal", x: pos.x, y: pos.y });
+    if (!palUnlocked()) return;
+    const stats = palCombatStats();
     this.add.image(pos.x, pos.y + 10, "char-shadow").setDepth(1).setScale(0.85);
-    const img = this.add.image(pos.x, pos.y - 12, "beast-eagle").setDepth(pos.y).setScale(scale);
-    const tint = palStats(palTier()).tint;
-    if (tint) img.setTint(tint);
+    const img = this.add.image(pos.x, pos.y - 12, palTexture()).setDepth(pos.y).setScale(stats.visScale);
+    if (stats.tint) img.setTint(stats.tint);
+    this.palSprite = img;
     this.tweens.add({
       targets: img,
       y: pos.y - 18,
@@ -245,8 +337,8 @@ export class LudusScene extends Phaser.Scene {
       repeat: -1,
       ease: "Sine.easeInOut",
     });
-    this.add
-      .text(pos.x, pos.y - 38, palTitle(palTier()), {
+    this.palNameTag = this.add
+      .text(pos.x, pos.y - 38, palDisplayName(), {
         fontFamily: "Cinzel, Georgia",
         fontSize: "11px",
         color: "#e8c96a",
@@ -255,7 +347,6 @@ export class LudusScene extends Phaser.Scene {
       })
       .setOrigin(0.5)
       .setDepth(pos.y + 2);
-    this.interactables.push({ kind: "pal", x: pos.x, y: pos.y });
   }
 
   private nearest(): { kind: string; x: number; y: number; id?: string; dist: number } | null {
@@ -282,10 +373,35 @@ export class LudusScene extends Phaser.Scene {
       return;
     }
     if (n.kind === "pal") {
-      bus.emit("dialogue", {
-        name: palTitle(palTier()),
-        lines: DIALOGUE.pal(),
-      });
+      bus.emit("roost");
+      return;
+    }
+    if (n.kind === "trophy") {
+      const house = n.id ? getHouse(n.id) : undefined;
+      const animal = house?.animalName ?? "beast";
+      const beaten = n.id ? gameState.save.defeatedHouses.includes(n.id) : false;
+      if (beaten && house) {
+        bus.emit("dialogue", {
+          name: house.latinName,
+          lines: [`The ${animal} hangs here. You took their champion.`],
+        });
+      } else {
+        bus.emit("dialogue", {
+          name: "Empty hook",
+          lines: [`The hook waits. Beat the ${animal} champion.`],
+        });
+      }
+      return;
+    }
+    if (n.kind === "dice") {
+      if (!gameState.save.freedomWon) {
+        bus.emit("dialogue", {
+          name: "Gambling Table",
+          lines: ["The lanista keeps this shut. Free men gamble. You are not free."],
+        });
+        return;
+      }
+      bus.emit("table");
       return;
     }
     if (n.kind === "gate") {
@@ -416,8 +532,17 @@ export class LudusScene extends Phaser.Scene {
     this.player.applyLook(look.tunic, look.accent, look.style, look.cape, look.scar, look.crest);
   };
 
+  private onRoostChanged = (): void => {
+    if (!this.palSprite || !palUnlocked()) return;
+    const stats = palCombatStats();
+    this.palSprite.setTexture(palTexture());
+    this.palSprite.setScale(stats.visScale);
+    if (stats.tint) this.palSprite.setTint(stats.tint);
+    else this.palSprite.clearTint();
+    this.palNameTag?.setText(palDisplayName());
+  };
+
   private onSkillsChanged = (): void => {
-    this.player.stats = { ...gameState.save.stats };
     this.player.refreshSkills();
     this.player.health = gameState.save.health;
     this.player.stamina = gameState.save.stamina;
@@ -556,7 +681,21 @@ export class LudusScene extends Phaser.Scene {
     }
     if (n && !this.sparring && !gameState.paused && !gameState.inMenu) {
       const talkLabel =
-        n.kind === "rack" ? "ARMORY" : n.kind === "gate" ? "ARENA" : n.kind === "shop" ? "QUARTERS" : n.kind === "pal" ? "EAGLE" : "TALK";
+        n.kind === "rack"
+          ? "ARMORY"
+          : n.kind === "gate"
+            ? "ARENA"
+            : n.kind === "shop"
+              ? "QUARTERS"
+              : n.kind === "pal"
+                ? "ROOST"
+                : n.kind === "trophy"
+                  ? "MOUNT"
+                  : n.kind === "dice"
+                    ? gameState.save.freedomWon
+                      ? "TABLE"
+                      : "LOCKED"
+                    : "TALK";
       bus.emit("talk-available", { show: true, label: talkLabel });
       this.nearestHint!.setVisible(true).setPosition(this.player.x, this.player.y + 28);
       const canSpar = n.kind === "npc" && n.id ? getNpc(n.id).canSpar : false;
@@ -572,8 +711,14 @@ export class LudusScene extends Phaser.Scene {
               : n.kind === "shop"
                 ? "E  Quarters"
                 : n.kind === "pal"
-                  ? "E  Eagle"
-                : "";
+                  ? "E  Roost"
+                  : n.kind === "trophy"
+                    ? "E  Inspect"
+                    : n.kind === "dice"
+                      ? gameState.save.freedomWon
+                        ? "E  Table"
+                        : "E  Locked"
+                      : "";
       this.nearestHint!.setText(label);
       this.npcs.forEach((npc) => npc.setPrompt(n.id === npc.npcId, getNpc(npc.npcId).canSpar ? "SPAR / E" : "E  Talk"));
     } else {
@@ -597,6 +742,8 @@ export class LudusScene extends Phaser.Scene {
       if (it.kind === "shop") marks.push({ x: it.x, y: it.y, color: 0xe8c96a, kind: "shop" });
       if (it.kind === "pal") marks.push({ x: it.x, y: it.y, color: 0xe8c96a, kind: "pal" });
       if (it.kind === "gate") marks.push({ x: it.x, y: it.y, color: 0xc45a1a, kind: "gate" });
+      if (it.kind === "trophy") marks.push({ x: it.x, y: it.y, color: 0xc4a060, kind: "trophy" });
+      if (it.kind === "dice") marks.push({ x: it.x, y: it.y, color: 0xd4a84b, kind: "dice" });
     }
     bus.emit("minimap", {
       show: true,
