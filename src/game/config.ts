@@ -31,6 +31,7 @@ export const COLORS = {
   bullRed: 0x8a2820,
   boarHide: 0x5a4030,
   ravenBlack: 0x3a3450,
+  tigerOrange: 0xd46818,
   uiDark: 0x1a1210,
   uiPanel: 0x2a1c16,
   hp: 0xb33a2b,

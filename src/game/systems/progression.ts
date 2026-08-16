@@ -219,7 +219,7 @@ export function bumpReputation(): void {
   if (wins >= 3) tier = "Fighter";
   if (s.defeatedHouses.length >= 1) tier = "Contender";
   if (s.defeatedHouses.length >= 3) tier = "Champion";
-  if (s.freedomWon || s.defeatedHouses.length >= 7) tier = "Legend";
+  if (s.freedomWon || s.defeatedHouses.length >= 8) tier = "Legend";
   const idx = Math.max(REP_ORDER.indexOf(s.reputation), REP_ORDER.indexOf(tier));
   s.reputation = REP_ORDER[idx];
 }
@@ -405,7 +405,13 @@ export function rivalHouses() {
 }
 
 export function allRivalsBeaten(): boolean {
-  return rivalHouses().every((h) => gameState.save.defeatedHouses.includes(h.id));
+  const s = gameState.save;
+  const rivals = rivalHouses();
+  if (rivals.every((h) => s.defeatedHouses.includes(h.id))) return true;
+  const openedRudis =
+    Boolean(s.freedomWon) || (s.tournamentWins ?? 0) > 0 || s.currentObjective.startsWith("tournament");
+  if (!openedRudis) return false;
+  return rivals.filter((h) => h.id !== "tigris").every((h) => s.defeatedHouses.includes(h.id));
 }
 
 export function tournamentUnlocked(): boolean {

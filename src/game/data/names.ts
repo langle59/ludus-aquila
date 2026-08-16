@@ -70,6 +70,11 @@ const HOUSE_NAMES: Record<string, HouseNamePack> = {
     nick: ["Night", "Dusk", "Omen", "Wing", "Ash"],
     ring: ["Night-Wing", "Dark Omen", "Dusk", "Ash Wing"],
   },
+  tigris: {
+    given: ["Rutila", "Stria", "Amba", "Varro", "Tigrina", "Rutilus"],
+    nick: ["Stripe", "Amber", "Ambush", "Paw", "Fang"],
+    ring: ["Stripe-Paw", "Amber Fang", "Night Ambush", "Gold Stripe"],
+  },
   aquila: {
     given: ["Valens", "Scaeva", "Julia", "Marcus", "Aquila", "Aurea"],
     nick: ["Eagle", "Gold", "Yard", "Wing", "Sun"],

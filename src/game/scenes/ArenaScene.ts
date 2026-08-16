@@ -138,7 +138,7 @@ export class ArenaScene extends Phaser.Scene {
       const spawnPad =
         beastKind === "bear" || beastKind === "bull"
           ? 88
-          : beastKind === "boar" || beastKind === "wolf" || beastKind === "lion"
+          : beastKind === "boar" || beastKind === "wolf" || beastKind === "lion" || beastKind === "tiger"
             ? 72
             : beastKind === "serpent"
               ? 70

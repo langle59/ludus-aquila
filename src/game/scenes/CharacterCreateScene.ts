@@ -26,6 +26,7 @@ const TUNIC_SWATCH_LABEL: Record<TunicColor, string> = {
   bull: "blood",
   boar: "hide",
   raven: "night",
+  tiger: "stripe",
 };
 
 export class CharacterCreateScene extends Phaser.Scene {
@@ -149,12 +150,12 @@ export class CharacterCreateScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
 
-    this.houseRing = this.add.rectangle(0, 0, 248, 58, 0x000000, 0).setStrokeStyle(2, COLORS.gold);
+    this.houseRing = this.add.rectangle(0, 0, 246, 54, 0x000000, 0).setStrokeStyle(2, COLORS.gold);
     HOUSES.forEach((h, i) => {
       const col = i % 2;
       const row = Math.floor(i / 2);
       const x = 640 + col * 270;
-      const y = 268 + row * 68;
+      const y = 258 + row * 60;
       if (i === 0) this.houseRing.setPosition(x, y);
       const btn = this.add.rectangle(x, y, 240, 52, 0x2a1c16).setStrokeStyle(2, h.colors.primary).setInteractive({ useHandCursor: true });
       this.add.rectangle(x - 98, y, 18, 32, h.colors.primary).setStrokeStyle(1, h.colors.accent);

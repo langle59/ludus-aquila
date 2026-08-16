@@ -69,7 +69,8 @@ function stampKeyedSprite(scene: Phaser.Scene, srcKey: string, destKey: string, 
     const b = src[i + 2];
     const a = src[i + 3];
     if (a < 20) return true;
-    return r > 150 && b > 150 && g < 150 && r + b > g * 2.2;
+    if (r > 150 && b > 150 && g < 150 && r + b > g * 2.2) return true;
+    return g > 90 && g > r + 18 && g > b + 18;
   };
   const lightNeutral = (i: number): boolean => {
     const r = src[i];
@@ -234,6 +235,7 @@ export function generatePlaceholderAssets(scene: Phaser.Scene): void {
   makeBanner(scene, "tile-banner-bull", COLORS.bullRed);
   makeBanner(scene, "tile-banner-boar", COLORS.boarHide);
   makeBanner(scene, "tile-banner-raven", COLORS.ravenBlack);
+  makeBanner(scene, "tile-banner-tiger", COLORS.tigerOrange);
   makeFence(scene);
   makeColumnTile(scene);
   makeGateTile(scene);
@@ -1090,6 +1092,59 @@ function makeBeasts(scene: Phaser.Scene): void {
     });
     scene.textures.get("beast-raven")?.setFilter(Phaser.Textures.FilterMode.NEAREST);
   }
+  if (!stampKeyedSprite(scene, "tiger-src", "beast-tiger", 96)) {
+    canvasTex(scene, "beast-tiger", 92, 48, (ctx) => {
+      const fur = COLORS.tigerOrange;
+      const dark = 0x8a3a0c;
+      const line = 0x1a1210;
+      const white = 0xf4ead8;
+      const cream = 0xe8d4b0;
+      px(ctx, 18, 18, 42, 16, line);
+      px(ctx, 20, 20, 38, 12, fur);
+      px(ctx, 24, 28, 28, 6, cream);
+      px(ctx, 58, 14, 18, 16, line);
+      px(ctx, 60, 16, 14, 12, fur);
+      px(ctx, 70, 18, 16, 10, line);
+      px(ctx, 72, 20, 14, 7, white);
+      px(ctx, 84, 22, 6, 4, white);
+      px(ctx, 62, 8, 5, 8, line);
+      px(ctx, 70, 7, 5, 8, line);
+      px(ctx, 63, 9, 3, 5, white);
+      px(ctx, 71, 8, 3, 5, white);
+      px(ctx, 88, 24, 4, 3, line);
+      px(ctx, 74, 26, 10, 2, line);
+      px(ctx, 76, 25, 3, 2, 0xf0e8d8);
+      circ(ctx, 78, 18, 1.6, 0xf0a020);
+      circ(ctx, 78, 18, 0.6, line);
+      px(ctx, 8, 6, 14, 5, line);
+      px(ctx, 4, 10, 12, 5, fur);
+      px(ctx, 10, 14, 12, 5, line);
+      px(ctx, 12, 16, 10, 3, fur);
+      px(ctx, 16, 20, 8, 4, fur);
+      px(ctx, 6, 8, 8, 2, line);
+      px(ctx, 5, 12, 7, 2, line);
+      px(ctx, 12, 16, 7, 2, line);
+      px(ctx, 28, 16, 3, 14, line);
+      px(ctx, 36, 15, 3, 16, line);
+      px(ctx, 44, 16, 3, 14, line);
+      px(ctx, 52, 17, 2, 12, line);
+      px(ctx, 22, 32, 5, 12, line);
+      px(ctx, 32, 34, 5, 12, line);
+      px(ctx, 50, 32, 5, 12, line);
+      px(ctx, 62, 34, 5, 12, line);
+      px(ctx, 23, 33, 3, 10, dark);
+      px(ctx, 33, 35, 3, 10, fur);
+      px(ctx, 51, 33, 3, 10, dark);
+      px(ctx, 63, 35, 3, 10, fur);
+      px(ctx, 22, 42, 6, 3, white);
+      px(ctx, 32, 44, 6, 3, white);
+      px(ctx, 50, 42, 6, 3, white);
+      px(ctx, 62, 44, 6, 3, white);
+      px(ctx, 34, 36, 2, 8, line);
+      px(ctx, 64, 36, 2, 8, line);
+    });
+    scene.textures.get("beast-tiger")?.setFilter(Phaser.Textures.FilterMode.NEAREST);
+  }
   if (!stampKeyedSprite(scene, "eagle-src", "beast-eagle", 48)) {
     canvasTex(scene, "beast-eagle", 72, 48, (ctx) => {
       const brown = 0x5a3a18;
@@ -1695,6 +1750,19 @@ function makeTrophySkeletons(scene: Phaser.Scene): void {
     circ(ctx, 10, 11, 2, BONE_H);
     circ(ctx, 14, 11, 2, BONE_H);
   });
+  canvasTex(scene, "trophy-skel-tiger", 28, 24, (ctx) => {
+    boneSkull(ctx, 15, 12, 8, 7);
+    fillPoly(ctx, [[10, 12], [2, 15], [10, 18], [15, 15]], BONE);
+    px(ctx, 8, 3, 3, 6, BONE);
+    px(ctx, 19, 3, 3, 6, BONE);
+    px(ctx, 9, 4, 1, 4, BONE_D);
+    px(ctx, 20, 4, 1, 4, BONE_D);
+    px(ctx, 14, 6, 2, 6, BONE_D);
+    px(ctx, 3, 15, 8, 2, BONE_D);
+    px(ctx, 4, 16, 1, 3, BONE);
+    px(ctx, 6, 16, 1, 3, BONE);
+    px(ctx, 8, 16, 1, 3, BONE);
+  });
   canvasTex(scene, "trophy-skel-eagle", 28, 24, (ctx) => {
     boneSkull(ctx, 12, 12, 7, 6);
     fillPoly(ctx, [[12, 11], [26, 10], [12, 15]], BONE);
@@ -1846,12 +1914,12 @@ export function bodyStyleFor(id: string): BodyStyle {
   if (id === "lanista") return "lanista";
   if (id === "aelia" || id === "fox_2") return "aelia";
   if (id === "brom") return "heavy";
-  if (id === "cassian" || id === "cotta" || id === "lupa" || id === "leo" || id === "taurus" || id === "aper" || id === "corvus" || id === "tourney_3") return "champion";
+  if (id === "cassian" || id === "cotta" || id === "lupa" || id === "leo" || id === "taurus" || id === "aper" || id === "corvus" || id === "tigris" || id === "tourney_3") return "champion";
   if (id.startsWith("fox") || id === "vitus" || id === "silvan") return "fox";
   if (id.startsWith("serp") || id === "drusa" || id === "livia" || id === "kaeso" || id === "otho") return "aelia";
   if (id.startsWith("bear") || id === "hostus" || id === "gnaeus" || id === "mera") return "heavy";
   if (id.startsWith("wolf") || id === "acca" || id === "faustus" || id === "neria") return "fox";
-  if (id.startsWith("lion") || id.startsWith("raven") || id === "tourney_1") return "fox";
+  if (id.startsWith("lion") || id.startsWith("raven") || id.startsWith("tiger") || id === "tourney_1") return "fox";
   if (id.startsWith("bull") || id.startsWith("boar") || id === "tourney_2" || id === "brom") return "heavy";
   return "gladiator";
 }
@@ -2188,6 +2256,19 @@ function drawCrest(ctx: Ctx, cx: number, h: number, s: number, color: number, cr
     );
     circ(ctx, cx + 6.2 * s, S(8.4, h), 0.85 * s, 0xe8dcc8);
     circ(ctx, cx + 6.4 * s, S(8.4, h), 0.45 * s, 0x1a1210);
+    return;
+  }
+
+  if (crest === "tiger") {
+    px(ctx, cx - 10 * s, S(4, h), 3.6 * s, 8 * s, color);
+    px(ctx, cx - 9 * s, S(0, h), 2.2 * s, 6 * s, hi);
+    px(ctx, cx - 8.6 * s, S(2, h), 1.1 * s, 6 * s, 0x1a1210);
+    px(ctx, cx + 6.4 * s, S(4, h), 3.6 * s, 8 * s, color);
+    px(ctx, cx + 6.8 * s, S(0, h), 2.2 * s, 6 * s, hi);
+    px(ctx, cx + 7.4 * s, S(2, h), 1.1 * s, 6 * s, 0x1a1210);
+    px(ctx, cx - 1.2 * s, S(0, h), 2.4 * s, 7 * s, 0x1a1210);
+    px(ctx, cx - 2.4 * s, S(2, h), 4.8 * s, 4 * s, color);
+    px(ctx, cx - 0.8 * s, S(1, h), 1.6 * s, 5 * s, 0x1a1210);
     return;
   }
 

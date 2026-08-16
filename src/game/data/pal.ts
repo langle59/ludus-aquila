@@ -52,6 +52,7 @@ const PAL_TITLES: Record<BeastKind, [string, string, string, string]> = {
   bull: ["Hatchling", "Calf", "War Bull", "Taurus Rex"],
   boar: ["Hatchling", "Shoat", "War Boar", "Aper Rex"],
   eagle: ["Hatchling", "Eaglet", "War Eagle", "Aquila Rex"],
+  tiger: ["Hatchling", "Cub", "War Tiger", "Tigris Rex"],
 };
 
 export function palSkillsInBranch(branch: PalSkillBranch): PalSkillDef[] {
@@ -82,7 +83,7 @@ export function palUnlocked(save: SaveData = gameState.save): boolean {
 
 export function palTier(save: SaveData = gameState.save): PalTier {
   const n = save.defeatedHouses.length;
-  if (save.freedomWon || n >= 7) return 4;
+  if (save.freedomWon || n >= 8) return 4;
   if (n >= 5) return 3;
   if (n >= 3) return 2;
   return 1;

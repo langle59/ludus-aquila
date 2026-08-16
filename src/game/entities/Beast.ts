@@ -291,6 +291,37 @@ const PROFILES: Record<BeastKind, BeastProfile> = {
     pressIn: false,
     trick: "flyby",
   },
+  tiger: {
+    tex: "beast-tiger",
+    label: "Tiger",
+    maxHp: 52,
+    bite: 14,
+    knock: 44,
+    speed: 132,
+    lungeSpd: 290,
+    lungeMs: 180,
+    telegraphMs: 420,
+    recoverMs: 560,
+    backoffMs: 240,
+    biteRange: 20,
+    lungeHitRange: 22,
+    dmgTaken: 0.86,
+    knockTaken: 0.85,
+    invulnMs: 140,
+    parryStun: 230,
+    visScale: 1,
+    shadowScale: 1.45,
+    bodyW: 28,
+    bodyH: 14,
+    bodyOx: 2,
+    bodyOy: 4,
+    hudY: 38,
+    markY: 30,
+    markR: 8,
+    visY: 14,
+    pressIn: false,
+    trick: "feint",
+  },
   eagle: {
     tex: "beast-eagle",
     label: "Eagle",
@@ -669,7 +700,9 @@ export class ArenaBeast extends Phaser.Physics.Arcade.Sprite {
                     ? COLORS.boarHide
                     : this.kind === "raven"
                       ? COLORS.ravenBlack
-                      : COLORS.gold;
+                      : this.kind === "tiger"
+                        ? COLORS.tigerOrange
+                        : COLORS.gold;
     this.telegraph = this.scene.add.circle(this.x, this.y - p.markY, p.markR * (p.trick === "roar" ? 1.6 : 1), color, 0.88).setDepth(4000);
     this.scene.tweens.add({
       targets: this.telegraph,

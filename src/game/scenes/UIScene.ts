@@ -2119,7 +2119,7 @@ export class UIScene extends Phaser.Scene {
     if (!this.gateHouse) {
       if (gameState.save.freedomWon) ensureNight();
       const night = currentNight();
-      const c = this.box(720, 640, "ARENA GATE");
+      const c = this.box(720, 700, "ARENA GATE");
       if (night) {
         const label =
           night.kind === "weapon"
@@ -2161,15 +2161,18 @@ export class UIScene extends Phaser.Scene {
       } else {
         c.add(this.add.text(0, -250, "Choose a house", { fontFamily: "Georgia", fontSize: "18px", color: "#e8dcc8" }).setOrigin(0.5));
       }
+      const startY = night ? -124 : -214;
+      const pitch = 76;
+      const btnOff = 34;
       rivals.forEach((h, i) => {
         const unlocked = isHouseUnlocked(h.id);
         const col = i % 2;
         const row = Math.floor(i / 2);
-        const x = col === 0 ? -170 : 170;
-        const y = (night ? -134 : -200) + row * 72;
+        const x = col === 0 ? -188 : 188;
+        const y = startY + row * pitch;
         const beaten = gameState.save.defeatedHouses.includes(h.id);
         c.add(this.add.text(x, y, `${h.latinName}${beaten ? "  (beaten)" : ""}`, { fontFamily: "Georgia", fontSize: "15px", color: unlocked ? "#e8dcc8" : "#6a5a4a" }).setOrigin(0.5));
-        this.addBtn(c, x, y + 24, unlocked ? (beaten ? "Rematches" : "Enter") : "Locked", () => {
+        this.addBtn(c, x, y + btnOff, unlocked ? (beaten ? "Rematches" : "Enter") : "Locked", () => {
           if (!unlocked) {
             this.toast(houseLockHint(h.id));
             return;
@@ -2178,17 +2181,21 @@ export class UIScene extends Phaser.Scene {
           this.openGate();
         }, 160);
       });
+      const rows = Math.max(1, Math.ceil(rivals.length / 2));
+      const lastBtnY = startY + (rows - 1) * pitch + btnOff;
+      const rudisY = lastBtnY + 70;
+      const stayY = showTourney ? rudisY + 52 : lastBtnY + 70;
       if (showTourney) {
-        this.addBtn(c, 0, night ? 170 : 130, gameState.save.freedomWon ? "The Rudis (done)" : "The Rudis", () => {
+        this.addBtn(c, 0, rudisY, gameState.save.freedomWon ? "The Rudis (done)" : "The Rudis", () => {
           if (gameState.save.freedomWon) {
             this.toast("The wooden sword is already yours.");
             return;
           }
           this.gateHouse = TOURNAMENT_HOUSE.id;
           this.openGate();
-        }, 220);
+        }, 180);
       }
-      this.addBtn(c, 0, night ? 250 : 250, "Stay at the ludus", () => {
+      this.addBtn(c, 0, stayY, "Stay at the ludus", () => {
         this.gateHouse = null;
         this.closeOverlay();
       });

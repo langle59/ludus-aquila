@@ -123,7 +123,11 @@ export const DIALOGUE: Record<string, LineFn> = {
         raven_1: [`"Noxa is a cub with two blades and a flock behind her."`],
         raven_2: [`"Caius hunts in a circle. Cut it."`],
         raven_elite: [`"Vespera is night. Keep moving."`],
-        corvus: [`"Corvus will not let you plant. After him, only the Rudis."`],
+        corvus: [`"Corvus will not let you plant. After him, the stripe hunts."`],
+        tiger_1: [`"Rutila is a cub with two blades and no song. Do not wait for a warning."`],
+        tiger_2: [`"Stria keeps the spear like a waiting paw. Leave the line, then in."`],
+        tiger_elite: [`"Varro grins. The second blade is the one that names you."`],
+        tigris: [`"Tigris hunts in daylight. After him, only the Rudis."`],
       };
       if (next && tips[next]) return tips[next];
       if (found.fighter.isChampion) {

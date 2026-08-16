@@ -31,6 +31,7 @@ const STEEL: Record<string, WeaponId> = {
   taurus: "securis",
   aper: "malleus",
   corvus: "spear",
+  tigris: "dual_blades",
 };
 
 export function houseSteel(houseId: string): WeaponId {

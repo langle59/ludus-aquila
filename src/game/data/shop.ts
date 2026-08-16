@@ -33,6 +33,7 @@ export const TUNIC_HEX: Record<string, number> = {
   bull: COLORS.bullRed,
   boar: COLORS.boarHide,
   raven: COLORS.ravenBlack,
+  tiger: COLORS.tigerOrange,
 };
 
 export const PLUME_HEX: Record<string, number> = {
@@ -50,6 +51,7 @@ export const PLUME_HEX: Record<string, number> = {
   bull: 0xc44a3a,
   boar: 0x8a6850,
   raven: 0x6a6088,
+  tiger: 0xe07020,
 };
 
 export const CAPE_HEX: Record<string, number> = {
@@ -65,6 +67,7 @@ export const CAPE_HEX: Record<string, number> = {
   bull: COLORS.bullRed,
   boar: COLORS.boarHide,
   raven: COLORS.ravenBlack,
+  tiger: COLORS.tigerOrange,
 };
 
 export const TITLE_TEXT: Record<string, string> = {
@@ -80,6 +83,7 @@ export const TITLE_TEXT: Record<string, string> = {
   horn: "of the Horn",
   bristle: "of the Bristle",
   night: "of the Night",
+  stripe: "of the Stripe",
   freeman: "the Free Man",
 };
 
@@ -110,6 +114,7 @@ export const SHOP_ITEMS: ShopItem[] = [
   { id: "tunic-bull", kind: "tunic", name: "Bull tunic", description: "Oxblood cloth. It does not yield.", cost: 62, requiresOpponent: "bull_1" },
   { id: "tunic-boar", kind: "tunic", name: "Boar tunic", description: "Bristle-brown. Dust sticks to it.", cost: 66, requiresOpponent: "boar_1" },
   { id: "tunic-raven", kind: "tunic", name: "Raven tunic", description: "Night cloth with a violet edge.", cost: 70, requiresOpponent: "raven_1" },
+  { id: "tunic-tiger", kind: "tunic", name: "Tiger tunic", description: "Stripe-orange. It hunts in daylight.", cost: 74, requiresOpponent: "tiger_1" },
   { id: "plume-gold", kind: "plume", name: "Gold crest", description: "The default eagle plume.", cost: 0 },
   { id: "plume-crimson", kind: "plume", name: "Crimson crest", description: "A blood-red helmet plume.", cost: 22 },
   { id: "plume-white", kind: "plume", name: "White crest", description: "Pale feathers for the helm.", cost: 22 },
@@ -124,6 +129,7 @@ export const SHOP_ITEMS: ShopItem[] = [
   { id: "plume-bull", kind: "plume", name: "Bull crest", description: "Horns swept wide.", cost: 42, requiresOpponent: "bull_1" },
   { id: "plume-boar", kind: "plume", name: "Boar crest", description: "Bristles and tusks.", cost: 44, requiresOpponent: "boar_1" },
   { id: "plume-raven", kind: "plume", name: "Raven crest", description: "A beak and a fan of night feathers.", cost: 46, requiresOpponent: "raven_1" },
+  { id: "plume-tiger", kind: "plume", name: "Tiger crest", description: "Striped ears. A quiet hunt.", cost: 48, requiresOpponent: "tiger_1" },
   { id: "helm-gladiator", kind: "helm", name: "Galea", description: "Standard fighting helm.", cost: 0 },
   { id: "helm-lanista", kind: "helm", name: "Victor's laurel", description: "A wreath instead of a full helm.", cost: 55 },
   { id: "helm-champion", kind: "helm", name: "Champion helm", description: "Heavier crest. Looks like a title.", cost: 70 },
@@ -139,6 +145,7 @@ export const SHOP_ITEMS: ShopItem[] = [
   { id: "cape-bull", kind: "cape", name: "Bull cape", description: "Oxblood. Heavy as a charge.", cost: 58, requiresOpponent: "taurus" },
   { id: "cape-boar", kind: "cape", name: "Boar cape", description: "Bristle cloth. It sheds dust.", cost: 60, requiresOpponent: "aper" },
   { id: "cape-raven", kind: "cape", name: "Raven cape", description: "Night drape. The crowd loses you in it.", cost: 64, requiresOpponent: "corvus" },
+  { id: "cape-tiger", kind: "cape", name: "Tiger cape", description: "Orange drape with a dark edge. It does not rustle.", cost: 68, requiresOpponent: "tigris" },
   { id: "title-none", kind: "title", name: "No title", description: "Your name alone.", cost: 0 },
   { id: "title-yard", kind: "title", name: "of the Yard", description: "Shown beside your name.", cost: 20 },
   { id: "title-eagle", kind: "title", name: "of the Eagle", description: "House colours in a name.", cost: 35 },
@@ -151,6 +158,7 @@ export const SHOP_ITEMS: ShopItem[] = [
   { id: "title-horn", kind: "title", name: "of the Horn", description: "Earned against the Bull.", cost: 120, requiresOpponent: "taurus" },
   { id: "title-bristle", kind: "title", name: "of the Bristle", description: "Earned against the Boar.", cost: 130, requiresOpponent: "aper" },
   { id: "title-night", kind: "title", name: "of the Night", description: "Earned against the Raven.", cost: 140, requiresOpponent: "corvus" },
+  { id: "title-stripe", kind: "title", name: "of the Stripe", description: "Earned against the Tiger.", cost: 150, requiresOpponent: "tigris" },
   { id: "title-freeman", kind: "title", name: "the Free Man", description: "Won with the rudis. No man owns your name.", cost: 0, requiresFlag: "freedomWon" },
   { id: "scar-none", kind: "scar", name: "No scar", description: "Unmarked.", cost: 0 },
   { id: "scar-cheek", kind: "scar", name: "Cheek cut", description: "From an arena fall you were not spared. Looks only.", cost: 0, requiresFlag: "steelScar1" },
