@@ -91,30 +91,33 @@ function paintDecor(scene: Phaser.Scene, built: BuiltMap, mood: "ludus" | "arena
       { x: 4, y: 2 },
       { x: 43, y: 2 },
       { x: 3, y: 6 },
+      { x: 44, y: 6 },
       { x: 8, y: 6 },
       { x: 39, y: 6 },
-      { x: 44, y: 6 },
-      { x: 12, y: 14 },
-      { x: 33, y: 14 },
-      { x: 2, y: 20 },
-      { x: 12, y: 20 },
-      { x: 2, y: 29 },
-      { x: 12, y: 29 },
-      { x: 30, y: 24 },
-      { x: 37, y: 14 },
+      { x: 3, y: 14 },
       { x: 44, y: 14 },
-      { x: 37, y: 21 },
+      { x: 10, y: 14 },
+      { x: 37, y: 14 },
+      { x: 12, y: 14 },
+      { x: 35, y: 14 },
+      { x: 3, y: 21 },
       { x: 44, y: 21 },
-      { x: 33, y: 22 },
+      { x: 10, y: 21 },
+      { x: 37, y: 21 },
+      { x: 2, y: 22 },
       { x: 45, y: 22 },
+      { x: 14, y: 22 },
+      { x: 33, y: 22 },
+      { x: 15, y: 23 },
       { x: 32, y: 23 },
-      { x: 46, y: 23 },
+      { x: 15, y: 27 },
       { x: 32, y: 27 },
-      { x: 46, y: 27 },
-      { x: 33, y: 29 },
+      { x: 2, y: 29 },
       { x: 45, y: 29 },
-      { x: 2, y: 14 },
-      { x: 7, y: 14 },
+      { x: 14, y: 29 },
+      { x: 33, y: 29 },
+      { x: 17, y: 24 },
+      { x: 30, y: 24 },
       { x: 21, y: 31 },
       { x: 26, y: 31 },
     ];
@@ -123,8 +126,14 @@ function paintDecor(scene: Phaser.Scene, built: BuiltMap, mood: "ludus" | "arena
     }
     placeLamp(scene, 5 * TILE_SIZE + 8, 6 * TILE_SIZE + 18);
     placeLamp(scene, 42 * TILE_SIZE + 16, 6 * TILE_SIZE + 18);
-    placeLamp(scene, 14 * TILE_SIZE + 8, 24 * TILE_SIZE + 16);
-    placeLamp(scene, 14 * TILE_SIZE + 8, 27 * TILE_SIZE + 16);
+    placeLamp(scene, 15 * TILE_SIZE + 8, 24 * TILE_SIZE + 16);
+    placeLamp(scene, 15 * TILE_SIZE + 8, 27 * TILE_SIZE + 16);
+    placeLamp(scene, 32 * TILE_SIZE + 8, 24 * TILE_SIZE + 16);
+    placeLamp(scene, 32 * TILE_SIZE + 8, 27 * TILE_SIZE + 16);
+    placeLamp(scene, 12 * TILE_SIZE + 8, 16 * TILE_SIZE + 16);
+    placeLamp(scene, 12 * TILE_SIZE + 8, 19 * TILE_SIZE + 16);
+    placeLamp(scene, 35 * TILE_SIZE + 8, 16 * TILE_SIZE + 16);
+    placeLamp(scene, 35 * TILE_SIZE + 8, 19 * TILE_SIZE + 16);
   } else {
     const torches = [
       { x: 4, y: 3 },

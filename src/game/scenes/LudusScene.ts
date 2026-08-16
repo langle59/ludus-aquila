@@ -866,7 +866,12 @@ export class LudusScene extends Phaser.Scene {
     if (!this.player) return;
     const tx = Math.floor(this.player.x / TILE_SIZE);
     const ty = Math.floor(this.player.y / TILE_SIZE);
-    audio.setHall((tx >= 35 && tx <= 46 && ty >= 14 && ty <= 21) || inFeastTiles(tx, ty) || inShrineTiles(tx, ty));
+    audio.setHall(
+      (tx >= 1 && tx <= 12 && ty >= 14 && ty <= 21) ||
+        (tx >= 35 && tx <= 46 && ty >= 14 && ty <= 21) ||
+        inFeastTiles(tx, ty) ||
+        inShrineTiles(tx, ty),
+    );
     if (gameState.pendingFeast && tx < 32) {
       gameState.endFeast();
       this.seatHouse();

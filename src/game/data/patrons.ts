@@ -36,15 +36,15 @@ export const PATRONS: PatronDef[] = [
 ];
 
 export const SHRINE_NICHES: { id: PatronId; tx: number; ty: number }[] = [
-  { id: "mercury", tx: 2, ty: 21 },
-  { id: "diana", tx: 7, ty: 21 },
-  { id: "hercules", tx: 12, ty: 21 },
-  { id: "mars", tx: 2, ty: 28 },
-  { id: "nemesis", tx: 7, ty: 28 },
+  { id: "mercury", tx: 3, ty: 23 },
+  { id: "diana", tx: 8, ty: 23 },
+  { id: "hercules", tx: 12, ty: 23 },
+  { id: "mars", tx: 3, ty: 28 },
+  { id: "nemesis", tx: 8, ty: 28 },
   { id: "victoria", tx: 12, ty: 28 },
-  { id: "silvanus", tx: 13, ty: 22 },
-  { id: "vulcan", tx: 13, ty: 27 },
-  { id: "fortuna", tx: 13, ty: 24 },
+  { id: "silvanus", tx: 14, ty: 23 },
+  { id: "vulcan", tx: 14, ty: 27 },
+  { id: "fortuna", tx: 14, ty: 24 },
 ];
 
 export function getPatron(id: string | null | undefined): PatronDef | undefined {
