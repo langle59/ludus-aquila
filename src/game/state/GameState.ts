@@ -290,7 +290,7 @@ class GameState {
     this.save.injured = Boolean(parsed.injured);
     this.save.weaponWins = parsed.weaponWins ?? {};
     this.save.unlockedMastery = parsed.unlockedMastery ?? [];
-    this.save.playerHouse = parsed.playerHouse ?? null;
+    this.save.playerHouse = parsed.playerHouse && getHouse(parsed.playerHouse) ? parsed.playerHouse : null;
     this.save.tournamentWins = parsed.tournamentWins ?? 0;
     this.save.freedomWon = parsed.freedomWon ?? false;
     this.save.nightKind = parsed.nightKind === "weapon" || parsed.nightKind === "exhibition" ? parsed.nightKind : null;

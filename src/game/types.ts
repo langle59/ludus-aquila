@@ -6,7 +6,7 @@ export type WeaponId =
   | "securis"
   | "malleus";
 
-export type BeastKind = "fox" | "serpent" | "bear" | "wolf" | "lion" | "bull" | "boar" | "raven" | "tiger" | "eagle";
+export type BeastKind = "serpent" | "bear" | "wolf" | "lion" | "bull" | "boar" | "tiger" | "rhino" | "elephant" | "eagle";
 
 export type AiStyle = "aggressive" | "spear" | "heavy" | "elite" | "champion" | "defensive" | "sparring";
 
@@ -69,7 +69,6 @@ export type TunicColor =
   | "bronze"
   | "midnight"
   | "sea"
-  | "fox"
   | "ivory"
   | "obsidian"
   | "sand"
@@ -80,8 +79,9 @@ export type TunicColor =
   | "lion"
   | "bull"
   | "boar"
-  | "raven"
-  | "tiger";
+  | "tiger"
+  | "rhino"
+  | "elephant";
 
 export type AttackKind = "light" | "heavy" | "special";
 export type AttackShape = "slash" | "thrust" | "slam";

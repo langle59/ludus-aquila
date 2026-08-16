@@ -11,15 +11,15 @@ export class BootScene extends Phaser.Scene {
 
   preload(): void {
     this.load.image("wolf-src", "beasts/wolf.png");
-    this.load.image("fox-src", "beasts/fox.png");
     this.load.image("serpent-src", "beasts/serpent.png");
     this.load.image("bear-src", "beasts/bear.png");
     this.load.image("lion-src", "beasts/lion.png");
     this.load.image("bull-src", "beasts/bull.png");
     this.load.image("boar-src", "beasts/boar.png");
-    this.load.image("raven-src", "beasts/raven.png");
     this.load.image("eagle-src", "beasts/eagle.png");
     this.load.image("tiger-src", "beasts/tiger.png");
+    this.load.image("rhino-src", "beasts/rhino.png");
+    this.load.image("elephant-src", "beasts/elephant.png");
     this.load.image("axe-src", "weapons/axe.png");
     this.load.image("hammer-src", "weapons/hammer.png");
     this.load.on("loaderror", () => {

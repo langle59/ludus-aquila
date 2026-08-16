@@ -43,16 +43,16 @@ export const PAL_TINTS: { id: PalTintId; name: string; hint: string }[] = [
 ];
 
 const PAL_TITLES: Record<BeastKind, [string, string, string, string]> = {
-  fox: ["Hatchling", "Cub", "War Fox", "Vulpes Rex"],
   serpent: ["Hatchling", "Coil", "War Serpent", "Serpens Rex"],
   wolf: ["Hatchling", "Pup", "War Wolf", "Lupus Rex"],
-  raven: ["Hatchling", "Fledgling", "War Raven", "Corvus Rex"],
   bear: ["Hatchling", "Cub", "War Bear", "Ursus Rex"],
   lion: ["Hatchling", "Cub", "War Lion", "Leo Rex"],
   bull: ["Hatchling", "Calf", "War Bull", "Taurus Rex"],
   boar: ["Hatchling", "Shoat", "War Boar", "Aper Rex"],
   eagle: ["Hatchling", "Eaglet", "War Eagle", "Aquila Rex"],
   tiger: ["Hatchling", "Cub", "War Tiger", "Tigris Rex"],
+  rhino: ["Hatchling", "Calf", "War Rhino", "Rhinoceros Rex"],
+  elephant: ["Hatchling", "Calf", "War Elephant", "Elephas Rex"],
 };
 
 export function palSkillsInBranch(branch: PalSkillBranch): PalSkillDef[] {
@@ -272,7 +272,7 @@ export function palCombatStats(save: SaveData = gameState.save): {
 } {
   const base = palStats(palTier(save));
   const kind = palKind(save);
-  const scaleCap = kind === "bear" || kind === "bull" || kind === "boar" ? 0.62 : 1.05;
+  const scaleCap = kind === "bear" || kind === "bull" || kind === "boar" || kind === "rhino" || kind === "elephant" ? 0.62 : 1.05;
   let maxHp = base.maxHp;
   let bite = base.bite;
   let knock = base.knock;

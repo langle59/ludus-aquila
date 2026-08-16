@@ -23,15 +23,15 @@ export type NightBout = {
 };
 
 const STEEL: Record<string, WeaponId> = {
-  vulpes: "dual_blades",
   serpens: "spear",
-  ursus: "securis",
   lupus: "dual_blades",
-  leo: "gladius",
-  taurus: "securis",
   aper: "malleus",
-  corvus: "spear",
+  taurus: "securis",
   tigris: "dual_blades",
+  leo: "gladius",
+  ursus: "securis",
+  rhinoceros: "securis",
+  elephas: "malleus",
 };
 
 export function houseSteel(houseId: string): WeaponId {

@@ -30,11 +30,6 @@ const ROMAN = [
 ];
 
 const HOUSE_NAMES: Record<string, HouseNamePack> = {
-  vulpes: {
-    given: ["Vitus", "Silvan", "Nerina", "Fausta", "Lucan", "Celsa", "Varro", "Sabina"],
-    nick: ["Swift", "Grin", "Cub", "Reed", "Dust", "Fox"],
-    ring: ["Dust-Step", "Fox Cub", "Sand-Grin", "Reed-Step", "Quick Fox"],
-  },
   serpens: {
     given: ["Livia", "Caelia", "Priscus", "Helvia", "Nestor", "Sura"],
     nick: ["Coil", "Scale", "Fang", "Green", "Reed"],
@@ -65,10 +60,15 @@ const HOUSE_NAMES: Record<string, HouseNamePack> = {
     nick: ["Tusk", "Bristle", "Hide", "Dust", "Root"],
     ring: ["Dust-Tusk", "Bristle", "Mud Hide", "Root-Tusk"],
   },
-  corvus: {
-    given: ["Umbra", "Noctua", "Vesper", "Pullus", "Nyx", "Corva"],
-    nick: ["Night", "Dusk", "Omen", "Wing", "Ash"],
-    ring: ["Night-Wing", "Dark Omen", "Dusk", "Ash Wing"],
+  rhinoceros: {
+    given: ["Cornutus", "Nasica", "Platea", "Naso", "Cornelia", "Horatius"],
+    nick: ["Horn", "Hide", "Charge", "Plate", "Tusk"],
+    ring: ["Iron-Horn", "Grey Hide", "Dust Charge", "Plate-Horn"],
+  },
+  elephas: {
+    given: ["Barus", "Turris", "Indus", "Baro", "Ivory", "Sura"],
+    nick: ["Ivory", "Tower", "Hide", "Tusk", "War"],
+    ring: ["Ivory-Tusk", "War Tower", "Grey Hide", "Dust Ivory"],
   },
   tigris: {
     given: ["Rutila", "Stria", "Amba", "Varro", "Tigrina", "Rutilus"],

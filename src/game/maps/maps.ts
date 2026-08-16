@@ -33,7 +33,7 @@ export function arenaMetaFor(houseId: string): MapDef {
   };
 }
 
-export const ARENA_META: MapDef = arenaMetaFor("vulpes");
+export const ARENA_META: MapDef = arenaMetaFor("serpens");
 
 export interface BuiltMap {
   cols: number;
@@ -210,7 +210,7 @@ function popSolids(
   return [];
 }
 
-export function buildArena(houseId = "vulpes"): BuiltMap {
+export function buildArena(houseId = "serpens"): BuiltMap {
   const cols = ARENA_META.cols;
   const rows = ARENA_META.rows;
   const tiles: BuiltMap["tiles"] = [];

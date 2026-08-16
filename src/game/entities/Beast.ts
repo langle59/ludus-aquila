@@ -43,37 +43,6 @@ type BeastProfile = {
 };
 
 const PROFILES: Record<BeastKind, BeastProfile> = {
-  fox: {
-    tex: "beast-fox",
-    label: "Fox",
-    maxHp: 32,
-    bite: 8,
-    knock: 36,
-    speed: 100,
-    lungeSpd: 240,
-    lungeMs: 200,
-    telegraphMs: 560,
-    recoverMs: 760,
-    backoffMs: 380,
-    biteRange: 16,
-    lungeHitRange: 18,
-    dmgTaken: 0.92,
-    knockTaken: 1,
-    invulnMs: 160,
-    parryStun: 280,
-    visScale: 1,
-    shadowScale: 0.9,
-    bodyW: 14,
-    bodyH: 10,
-    bodyOx: 6,
-    bodyOy: 4,
-    hudY: 28,
-    markY: 22,
-    markR: 6,
-    visY: 10,
-    pressIn: false,
-    trick: "feint",
-  },
   serpent: {
     tex: "beast-serpent",
     label: "Serpent",
@@ -260,37 +229,6 @@ const PROFILES: Record<BeastKind, BeastProfile> = {
     pressIn: true,
     trick: "frenzy",
   },
-  raven: {
-    tex: "beast-raven",
-    label: "Raven",
-    maxHp: 38,
-    bite: 11,
-    knock: 32,
-    speed: 120,
-    lungeSpd: 340,
-    lungeMs: 260,
-    telegraphMs: 360,
-    recoverMs: 520,
-    backoffMs: 260,
-    biteRange: 12,
-    lungeHitRange: 16,
-    dmgTaken: 0.95,
-    knockTaken: 1.1,
-    invulnMs: 120,
-    parryStun: 260,
-    visScale: 1,
-    shadowScale: 0.65,
-    bodyW: 10,
-    bodyH: 8,
-    bodyOx: 4,
-    bodyOy: 4,
-    hudY: 22,
-    markY: 18,
-    markR: 5,
-    visY: 8,
-    pressIn: false,
-    trick: "flyby",
-  },
   tiger: {
     tex: "beast-tiger",
     label: "Tiger",
@@ -321,6 +259,68 @@ const PROFILES: Record<BeastKind, BeastProfile> = {
     visY: 14,
     pressIn: false,
     trick: "feint",
+  },
+  rhino: {
+    tex: "beast-rhino",
+    label: "Rhino",
+    maxHp: 80,
+    bite: 16,
+    knock: 76,
+    speed: 58,
+    lungeSpd: 290,
+    lungeMs: 400,
+    telegraphMs: 680,
+    recoverMs: 440,
+    backoffMs: 160,
+    biteRange: 26,
+    lungeHitRange: 30,
+    dmgTaken: 0.56,
+    knockTaken: 0.26,
+    invulnMs: 230,
+    parryStun: 130,
+    visScale: 1,
+    shadowScale: 1.8,
+    bodyW: 28,
+    bodyH: 16,
+    bodyOx: 2,
+    bodyOy: 2,
+    hudY: 48,
+    markY: 40,
+    markR: 10,
+    visY: 18,
+    pressIn: true,
+    trick: "charge",
+  },
+  elephant: {
+    tex: "beast-elephant",
+    label: "Elephant",
+    maxHp: 104,
+    bite: 18,
+    knock: 72,
+    speed: 46,
+    lungeSpd: 190,
+    lungeMs: 340,
+    telegraphMs: 760,
+    recoverMs: 480,
+    backoffMs: 180,
+    biteRange: 32,
+    lungeHitRange: 36,
+    dmgTaken: 0.5,
+    knockTaken: 0.22,
+    invulnMs: 270,
+    parryStun: 110,
+    visScale: 1,
+    shadowScale: 2.05,
+    bodyW: 34,
+    bodyH: 20,
+    bodyOx: 2,
+    bodyOy: 2,
+    hudY: 56,
+    markY: 48,
+    markR: 12,
+    visY: 22,
+    pressIn: true,
+    trick: "slam",
   },
   eagle: {
     tex: "beast-eagle",
@@ -645,8 +645,10 @@ export class ArenaBeast extends Phaser.Physics.Arcade.Sprite {
     } else if (this.kind === "serpent") {
       const reared = this.aiState === "telegraph" ? -14 : 0;
       this.vis.setAngle(reared + Math.sin(now / 150) * 9);
-    } else if (this.kind === "bear" && this.aiState === "telegraph") {
-      this.vis.setAngle(this.facing.x < 0 ? -8 : 8);
+    } else if (this.kind === "bear" || this.kind === "elephant") {
+      this.vis.setAngle(this.aiState === "telegraph" ? (this.facing.x < 0 ? -8 : 8) : 0);
+    } else if (this.kind === "rhino" && this.aiState === "telegraph") {
+      this.vis.setAngle(this.facing.x < 0 ? -6 : 6);
     } else {
       this.vis.setAngle(0);
     }
@@ -684,24 +686,24 @@ export class ArenaBeast extends Phaser.Physics.Arcade.Sprite {
     this.telegraph?.destroy();
     const color = short
       ? 0xc4b49a
-      : this.kind === "fox"
-        ? COLORS.foxOrange
-        : this.kind === "serpent"
-          ? COLORS.serpentGreen
-          : this.kind === "wolf"
-            ? COLORS.wolfGrey
-            : this.kind === "bear"
-              ? COLORS.bearBrown
-              : this.kind === "lion"
-                ? COLORS.lionGold
-                : this.kind === "bull"
-                  ? COLORS.bullRed
-                  : this.kind === "boar"
-                    ? COLORS.boarHide
-                    : this.kind === "raven"
-                      ? COLORS.ravenBlack
-                      : this.kind === "tiger"
-                        ? COLORS.tigerOrange
+      : this.kind === "serpent"
+        ? COLORS.serpentGreen
+        : this.kind === "wolf"
+          ? COLORS.wolfGrey
+          : this.kind === "bear"
+            ? COLORS.bearBrown
+            : this.kind === "lion"
+              ? COLORS.lionGold
+              : this.kind === "bull"
+                ? COLORS.bullRed
+                : this.kind === "boar"
+                  ? COLORS.boarHide
+                  : this.kind === "tiger"
+                    ? COLORS.tigerOrange
+                    : this.kind === "rhino"
+                      ? COLORS.rhinoHide
+                      : this.kind === "elephant"
+                        ? COLORS.elephantGrey
                         : COLORS.gold;
     this.telegraph = this.scene.add.circle(this.x, this.y - p.markY, p.markR * (p.trick === "roar" ? 1.6 : 1), color, 0.88).setDepth(4000);
     this.scene.tweens.add({

@@ -411,7 +411,9 @@ export function allRivalsBeaten(): boolean {
   const openedRudis =
     Boolean(s.freedomWon) || (s.tournamentWins ?? 0) > 0 || s.currentObjective.startsWith("tournament");
   if (!openedRudis) return false;
-  return rivals.filter((h) => h.id !== "tigris").every((h) => s.defeatedHouses.includes(h.id));
+  return rivals
+    .filter((h) => h.id !== "tigris" && h.id !== "rhinoceros" && h.id !== "elephas")
+    .every((h) => s.defeatedHouses.includes(h.id));
 }
 
 export function tournamentUnlocked(): boolean {

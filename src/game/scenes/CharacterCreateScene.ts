@@ -5,7 +5,7 @@ import type { TunicColor } from "../types";
 import { audio } from "../systems/audio";
 import { makeBodyTexture } from "../systems/assets";
 import { TUNIC_HEX } from "../entities/World";
-import { HOUSES, houseCreateTunics } from "../data/houses";
+import { houseCreateTunics, sortedHouses } from "../data/houses";
 import { generateHouseName } from "../data/names";
 
 const TUNIC_SWATCH_LABEL: Record<TunicColor, string> = {
@@ -14,7 +14,6 @@ const TUNIC_SWATCH_LABEL: Record<TunicColor, string> = {
   bronze: "bronze",
   midnight: "dusk",
   sea: "sea",
-  fox: "fox",
   ivory: "ivory",
   obsidian: "black",
   sand: "sand",
@@ -25,15 +24,16 @@ const TUNIC_SWATCH_LABEL: Record<TunicColor, string> = {
   lion: "gold",
   bull: "blood",
   boar: "hide",
-  raven: "night",
   tiger: "stripe",
+  rhino: "horn",
+  elephant: "grey",
 };
 
 export class CharacterCreateScene extends Phaser.Scene {
   private nameValue = "Valens";
-  private tunic: TunicColor = "fox";
-  private houseId = HOUSES[0]?.id ?? "vulpes";
-  private palette: TunicColor[] = houseCreateTunics(HOUSES[0]?.id ?? "vulpes");
+  private tunic: TunicColor = "serpent";
+  private houseId = sortedHouses()[0]?.id ?? "serpens";
+  private palette: TunicColor[] = houseCreateTunics(sortedHouses()[0]?.id ?? "serpens");
   private nameText!: Phaser.GameObjects.Text;
   private preview!: Phaser.GameObjects.Image;
   private selectedRing!: Phaser.GameObjects.Rectangle;
@@ -141,7 +141,7 @@ export class CharacterCreateScene extends Phaser.Scene {
       .setOrigin(0.5);
 
     const houseHint = this.add
-      .text(780, 226, HOUSES[0]?.philosophy ?? "", {
+      .text(780, 226, sortedHouses()[0]?.philosophy ?? "", {
         fontFamily: "Georgia",
         fontSize: "14px",
         color: "#c4b8a4",
@@ -151,7 +151,7 @@ export class CharacterCreateScene extends Phaser.Scene {
       .setOrigin(0.5);
 
     this.houseRing = this.add.rectangle(0, 0, 246, 54, 0x000000, 0).setStrokeStyle(2, COLORS.gold);
-    HOUSES.forEach((h, i) => {
+    sortedHouses().forEach((h, i) => {
       const col = i % 2;
       const row = Math.floor(i / 2);
       const x = 640 + col * 270;

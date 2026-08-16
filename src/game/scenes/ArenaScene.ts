@@ -79,7 +79,7 @@ export class ArenaScene extends Phaser.Scene {
     this.campMs = 0;
     this.turtleMs = 0;
     this.pressMs = 0;
-    this.opponentId = gameState.pendingArenaOpponent ?? "fox_1";
+    this.opponentId = gameState.pendingArenaOpponent ?? "serp_1";
     const found = getRival(this.opponentId);
     if (!found) {
       this.leave(false);
@@ -136,13 +136,15 @@ export class ArenaScene extends Phaser.Scene {
     const beastKind = this.championBeastKind(found.house.beastKind, fighter.isChampion);
     if (beastKind) {
       const spawnPad =
-        beastKind === "bear" || beastKind === "bull"
-          ? 88
-          : beastKind === "boar" || beastKind === "wolf" || beastKind === "lion" || beastKind === "tiger"
-            ? 72
-            : beastKind === "serpent"
-              ? 70
-              : 56;
+        beastKind === "elephant"
+          ? 96
+          : beastKind === "bear" || beastKind === "bull" || beastKind === "rhino"
+            ? 88
+            : beastKind === "boar" || beastKind === "wolf" || beastKind === "lion" || beastKind === "tiger"
+              ? 72
+              : beastKind === "serpent"
+                ? 70
+                : 56;
       this.beast = new ArenaBeast(this, this.enemy.x + spawnPad, this.enemy.y + 10, beastKind);
       this.beastSeenAlive = true;
       this.physics.add.collider(this.beast, solids);

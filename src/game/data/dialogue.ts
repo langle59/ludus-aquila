@@ -92,42 +92,42 @@ export const DIALOGUE: Record<string, LineFn> = {
     const found = next ? getRival(next) : undefined;
     if (found) {
       const tips: Record<string, string[]> = {
-        fox_1: [`"The gate is open. ${found.house.latinName} sent a cub named Vitus — fast, sloppy, proud."`, `"Dodge his first rush. Then make him pay. Come back standing."`],
-        fox_2: [`"Nerina is a spear. Sidestep, then step in. Do not charge the point."`],
-        fox_elite: [`"Silvan is no cub. Close the gap or he will bleed you in pieces."`],
-        cassian: [`"Cassian feints. When his shoulders drop, the flurry is coming. Do not freeze."`],
-        serp_1: [`"Livia taught the door. Range first. Always."`],
+        serp_1: [`"The gate is open. ${found.house.latinName} sent a cub named Livia — range first, always."`, `"Dodge the point. Then make her pay. Come back standing."`],
         serp_2: [`"Kaeso's net is a question. Do not answer it with your feet planted."`],
         serp_elite: [`"Otho is still water. Come make a mistake, or do not."`],
-        drusa: [`"She will throw the net when you rush. Parry or roll the first beat, then punish."`],
+        drusa: [`"She will throw the net when you rush. Parry or roll the first beat, then punish. After her, the pack hunts."`],
         bear_1: [`"Hostus is a door. Do not bounce. Plant, then cut."`],
         bear_2: [`"Gnaeus swings like a falling beam. Do not be under it."`],
         bear_elite: [`"Mera is frost. Dodge the first slam. Then get inside it."`],
-        cotta: [`"Cotta is winter. A bear that misses is a door you can kick."`],
+        cotta: [`"Cotta is winter. A bear that misses is a door you can kick. After him, the horn."`],
         wolf_1: [`"Acca is a cub with two blades. Do not get proud."`],
         wolf_2: [`"Faustus hunts in a circle. Cut the circle or he will bleed you in pieces."`],
         wolf_elite: [`"Neria is night. Keep moving. Parry the first cut."`],
-        lupa: [`"She will not let you plant. Keep moving. The second cut is the one that names you."`],
+        lupa: [`"She will not let you plant. Keep moving. The second cut is the one that names you. After her, the bristle."`],
         lion_1: [`"Aulus fights like a man who has never been told no. Make him hear it."`],
         lion_2: [`"Sabina keeps you at the point. Same lesson as a spear house. Sidestep, then in."`],
         lion_elite: [`"Rufinus grins. The second blade is the one that matters."`],
-        leo: [`"Leo wants you to kneel to the idea of him. Hit the man, not the name."`],
+        leo: [`"Leo wants you to kneel to the idea of him. Hit the man, not the name. After him, the hide."`],
         bull_1: [`"Spurius charges. Leave the line. Then cut."`],
         bull_2: [`"Flavia's axe is a horn. Do not be in front of it."`],
         bull_elite: [`"Nasica paws once. That is your warning."`],
-        taurus: [`"The Bull does not feint. It arrives. Roll the first rush."`],
+        taurus: [`"The Bull does not feint. It arrives. Roll the first rush. After him, the stripe."`],
         boar_1: [`"Cossus wants you to hit first so he can hit harder. Do not play that game."`],
         boar_2: [`"Maia swings slow until she does not. Same as any axe."`],
         boar_elite: [`"Tullus eats dancers. Plant, then move after he commits."`],
-        aper: [`"The Boar takes a hit to give a worse one. Do not trade with him."`],
-        raven_1: [`"Noxa is a cub with two blades and a flock behind her."`],
-        raven_2: [`"Caius hunts in a circle. Cut it."`],
-        raven_elite: [`"Vespera is night. Keep moving."`],
-        corvus: [`"Corvus will not let you plant. After him, the stripe hunts."`],
+        aper: [`"The Boar takes a hit to give a worse one. Do not trade with him. After him, the charge."`],
         tiger_1: [`"Rutila is a cub with two blades and no song. Do not wait for a warning."`],
         tiger_2: [`"Stria keeps the spear like a waiting paw. Leave the line, then in."`],
         tiger_elite: [`"Varro grins. The second blade is the one that names you."`],
-        tigris: [`"Tigris hunts in daylight. After him, only the Rudis."`],
+        tigris: [`"Tigris hunts in daylight. After him, the pride waits."`],
+        rhino_1: [`"Cornutus sets his feet like a wall. Leave the line, or do not."`],
+        rhino_2: [`"Corniger paws once. That is your warning. Do not be in front of the horn."`],
+        rhino_elite: [`"Platea does not blink. Hide first. Then horn."`],
+        rhinoceros: [`"The Rhino takes the line you thought was safe. After him, the ivory."`],
+        elephant_1: [`"Barus is a door. Do not bounce. Plant, then wait."`],
+        elephant_2: [`"Turris lifts the hammer like a gate-bar. Do not be under it."`],
+        elephant_elite: [`"Indus does not hurry. The second slam is the one that names you."`],
+        elephas: [`"The Elephant arrives slowly. After him, only the Rudis."`],
       };
       if (next && tips[next]) return tips[next];
       if (found.fighter.isChampion) {
@@ -172,14 +172,14 @@ export const DIALOGUE: Record<string, LineFn> = {
       return [`"Free. Still here. The shield does not care about wood or steel. Keep it high."`];
     }
     if (allRivalsBeaten()) {
-      return [`"Seven houses. The Rudis is a different sand. I will be at the gate when you walk back."`];
+      return [`"Eight houses. The Rudis is a different sand. I will be at the gate when you walk back."`];
     }
     const n = beaten();
     const pledged = pledgedHouse();
     if (pledged?.id === "lupus" && n === 0) {
       return [`"Wolf cloth. Good. The yard eats the slow. Keep the shield high."`, `"Walk up and click SPAR. I will tap you, not bury you."`];
     }
-    if (n >= 4) return [`"${n} houses. Cassian was fast. The later ones are worse. You were patient. That is how walls outlast storms."`];
+    if (n >= 4) return [`"${n} houses. The later ones are worse. You were patient. That is how walls outlast storms."`];
     if (n >= 2) return [`"Two houses at least. You walked out. Keep the shield high in the arena. Pride makes openings."`];
     if (n >= 1) return [`"A champion is down. You were patient. That is how walls outlast storms."`];
     if (afterAnyWin()) {
@@ -208,8 +208,8 @@ export const DIALOGUE: Record<string, LineFn> = {
       return [`"You beat the circuit. Fine. I still want that rematch before you take the wood."`];
     }
     const pledged = pledgedHouse();
-    if (pledged?.id === "vulpes") {
-      return [`"Fox cloth. Finally someone who might keep up."`, `"Click SPAR. I will even let you swing first."`];
+    if (pledged?.id === "serpens") {
+      return [`"Serpent cloth. Range first. Fine."`, `"Click SPAR. I will even let you swing first."`];
     }
     const n = beaten();
     if (n >= 4) return [`"You keep coming back with other houses' dust on you. Do not get slow. I still want that rematch."`];
@@ -233,7 +233,7 @@ export const DIALOGUE: Record<string, LineFn> = {
       return [`"Ha! The circuit fell. The hammer in the armory has your name on it if you earned it. Swing slow. Hit once."`];
     }
     const pledged = pledgedHouse();
-    if (pledged?.id === "ursus" || pledged?.id === "aper" || pledged?.id === "taurus") {
+    if (pledged?.id === "ursus" || pledged?.id === "aper" || pledged?.id === "taurus" || pledged?.id === "rhinoceros" || pledged?.id === "elephas") {
       return [`"${houseCloth()} cloth. Heavy feet. I like that."`, `"I will spar if you click SPAR. Go easy on an old oak."`];
     }
     const n = beaten();

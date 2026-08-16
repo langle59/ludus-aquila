@@ -908,7 +908,7 @@ export class LudusScene extends Phaser.Scene {
     });
     kb.on("keydown-F6", () => {
       skipTutorial();
-      gameState.pendingArenaOpponent = rivalHouses()[0]?.fighters[0]?.id ?? "fox_1";
+      gameState.pendingArenaOpponent = rivalHouses()[0]?.fighters[0]?.id ?? "serp_1";
       this.goArena();
     });
     kb.on("keydown-F7", () => {

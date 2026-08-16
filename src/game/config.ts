@@ -32,6 +32,8 @@ export const COLORS = {
   boarHide: 0x5a4030,
   ravenBlack: 0x3a3450,
   tigerOrange: 0xd46818,
+  rhinoHide: 0x6a6870,
+  elephantGrey: 0x9a9aa0,
   uiDark: 0x1a1210,
   uiPanel: 0x2a1c16,
   hp: 0xb33a2b,
