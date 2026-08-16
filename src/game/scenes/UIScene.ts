@@ -514,6 +514,12 @@ export class UIScene extends Phaser.Scene {
     this.renderPause();
   }
 
+  private unstuck(): void {
+    bus.emit("unstuck");
+    this.toast("Moved to open ground.");
+    this.closeOverlay();
+  }
+
   private renderPause(): void {
     if (this.pausePage === "skills") {
       this.renderSkillTree();
@@ -527,10 +533,11 @@ export class UIScene extends Phaser.Scene {
       this.renderRename();
       return;
     }
-    const c = this.box(520, this.pausePage === "settings" || this.pausePage === "controls" || this.pausePage === "stats" ? 680 : 560, "PAUSED");
+    const c = this.box(520, this.pausePage === "settings" || this.pausePage === "controls" || this.pausePage === "stats" ? 680 : this.pausePage === "root" ? 600 : 560, "PAUSED");
     if (this.pausePage === "root") {
       const items: [string, () => void][] = [
         ["Resume", () => this.closeOverlay()],
+        ["Unstuck", () => this.unstuck()],
         ["Skill Tree", () => ((this.pausePage = "skills"), this.renderPause())],
         ["Customize", () => this.openShop()],
         ["Gladiator Stats", () => ((this.pausePage = "stats"), this.renderPause())],
@@ -541,7 +548,7 @@ export class UIScene extends Phaser.Scene {
         ["Save Game", () => { gameState.persist(); this.toast(`Game saved (file ${gameState.activeSlot}).`); this.closeOverlay(); }],
         ["Return to Main Menu", () => this.toMenu()],
       ];
-      items.forEach((it, i) => this.addBtn(c, 0, -190 + i * 44, it[0], it[1]));
+      items.forEach((it, i) => this.addBtn(c, 0, -210 + i * 42, it[0], it[1]));
       return;
     }
     if (this.pausePage === "stats") {

@@ -3,7 +3,7 @@ import { TILE_SIZE, HUD_CAM_PAD } from "../config";
 import { gameState } from "../state/GameState";
 import { bus } from "../systems/bus";
 import { audio } from "../systems/audio";
-import { paintMap, labelMap } from "../systems/worldRender";
+import { paintMap, labelMap, animateBrazier, placeLamp } from "../systems/worldRender";
 import { arenaMetaFor, buildArena } from "../maps/maps";
 import { Fighter, attachHpBar } from "../entities/Fighter";
 import { WorldProp } from "../entities/World";
@@ -13,7 +13,7 @@ import { CombatAI } from "../systems/ai";
 import { bodyStyleFor } from "../systems/assets";
 import { burst, floatNumber, resolveHits } from "../systems/combat";
 import { getRival, houseCrowdTint, isTournamentId } from "../data/houses";
-import { applyArenaVictory, applyArenaDefeat, nextHouseAfter, nextUnlockedOpponent, playerCombatStats } from "../systems/progression";
+import { applyArenaVictory, applyArenaDefeat, nextHouseAfter, nextUnlockedOpponent, playerCombatStats, wantsFeast } from "../systems/progression";
 import { getWeapon } from "../data/weapons";
 import { palBrought, palCombatStats, palKind } from "../data/pal";
 import { CombatInput } from "../systems/input";
@@ -60,6 +60,7 @@ export class ArenaScene extends Phaser.Scene {
   private campMs = 0;
   private turtleMs = 0;
   private pressMs = 0;
+  private fromNight = false;
 
   constructor() {
     super("ArenaScene");
@@ -90,6 +91,7 @@ export class ArenaScene extends Phaser.Scene {
     this.campMs = 0;
     this.turtleMs = 0;
     this.pressMs = 0;
+    this.fromNight = gameState.pendingNight;
     this.opponentId = gameState.pendingArenaOpponent ?? "serp_1";
     const found = getRival(this.opponentId);
     if (!found) {
@@ -185,19 +187,35 @@ export class ArenaScene extends Phaser.Scene {
     }
 
     const propTex: Record<string, string> = {
-      column: "prop-column",
       crate: "prop-crate",
       barrel: "prop-barrel",
+      brazier: "prop-brazier",
+      hay: "prop-hay",
+      lamp: "prop-lamp",
+      vine: "prop-pit-vine",
+      "pit-ring": "prop-pit-ring",
+      "pit-skull": "prop-pit-skull",
+      "pit-tusk": "prop-pit-tusk",
+      "pit-horn": "prop-pit-horn",
+      "pit-log": "prop-pit-log",
+      "pit-ivory": "prop-pit-ivory",
     };
+    const soft = new Set(["hay", "vine", "lamp"]);
     for (const p of built.props) {
       const tex = propTex[p.kind];
       if (!tex) continue;
+      if (soft.has(p.kind)) {
+        if (p.kind === "lamp") placeLamp(this, p.x, p.y);
+        else this.add.image(p.x, p.y, tex).setDepth(p.y);
+        continue;
+      }
       const prop = new WorldProp(this, p.x, p.y, p.kind, tex, true);
       if (house.id === "leo") prop.setTint(0xd4a84b);
       this.physics.add.collider(this.player, prop);
       this.physics.add.collider(this.enemy, prop);
       if (this.beast) this.physics.add.collider(this.beast, prop);
       if (this.pal) this.physics.add.collider(this.pal, prop);
+      if (p.kind === "brazier") animateBrazier(this, p.x, p.y);
     }
 
     this.combat = new CombatInput(this);
@@ -218,6 +236,7 @@ export class ArenaScene extends Phaser.Scene {
     bus.on("cosmetics-changed", this.onCosmeticsChanged, this);
     bus.on("player-snared", this.onPlayerSnared, this);
     bus.on("judgment-pick", this.onJudgmentPick, this);
+    bus.on("unstuck", this.onUnstuck, this);
     this.nextTossAt = this.time.now + 1800;
 
     bus.emit("dialogue", {
@@ -242,6 +261,7 @@ export class ArenaScene extends Phaser.Scene {
       bus.off("cosmetics-changed", this.onCosmeticsChanged, this);
       bus.off("player-snared", this.onPlayerSnared, this);
       bus.off("judgment-pick", this.onJudgmentPick, this);
+      bus.off("unstuck", this.onUnstuck, this);
       audio.setCrowd(false);
       audio.setMusicMood("yard");
     });
@@ -434,6 +454,19 @@ export class ArenaScene extends Phaser.Scene {
     const live = this.combatants().filter((c) => c.alive);
     return live.length ? Phaser.Utils.Array.GetRandom(live) : this.player;
   }
+
+  private onUnstuck = (): void => {
+    if (!this.sys.isActive() || this.ended) return;
+    const x = (this.sand.x0 + this.sand.x1) / 2;
+    const y = this.sand.y1 - 40;
+    this.player.setPosition(x, y);
+    const body = this.player.body as Phaser.Physics.Arcade.Body | undefined;
+    if (body) {
+      body.enable = true;
+      body.reset(x, y);
+      body.setVelocity(0, 0);
+    }
+  };
 
   private onCosmeticsChanged = (): void => {
     const look = playerLook();
@@ -810,11 +843,13 @@ export class ArenaScene extends Phaser.Scene {
         : followed
           ? "The crowd called iugula. Steel. The stands roar.\n\n"
           : "They begged missio. You put steel in anyway.\n\n";
-      const chain = won && isTournamentId(this.opponentId) && this.opponentId !== "tourney_3";
+      const chain = won && isTournamentId(this.opponentId) && this.opponentId !== "tourney_3" && !gameState.save.freedomWon;
+      const feast = wantsFeast(this.opponentId, this.fromNight) && !chain;
+      if (feast) extra += "\n\nThe house waits in the feast.";
       bus.emit("result", {
         title: missio ? "Missio" : "Iugula",
         body: `${missioLine}${fighter.victory.join("\n")}\n\n+${r.denarii} denarii   +${r.xp} XP${r.leveled ? "\nYou grow stronger." : ""}${extra}`,
-        action: chain ? "Next bout" : "Return to the ludus",
+        action: chain ? "Next bout" : feast ? "Join the feast" : "Return to the ludus",
       });
     } else {
       const night = gameState.pendingNight;
@@ -849,7 +884,8 @@ export class ArenaScene extends Phaser.Scene {
     }
     gameState.pendingArenaOpponent = null;
     clearNightEntry();
-    gameState.restoreVitals();
+    if (won && wantsFeast(this.opponentId, this.fromNight)) gameState.beginFeast();
+    else gameState.restoreVitals();
     gameState.persist();
     bus.emit("return-ludus");
   }

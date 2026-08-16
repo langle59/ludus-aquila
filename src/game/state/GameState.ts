@@ -1,6 +1,6 @@
 import type { ObjectiveId, SaveData, SettingsData, TunicColor, WeaponId } from "../types";
 import { DEFAULT_KEYBINDS } from "../types";
-import { ACTIVE_SLOT_KEY, SAVE_KEY, SAVE_SLOT_COUNT, SETTINGS_KEY, saveSlotKey } from "../config";
+import { ACTIVE_SLOT_KEY, SAVE_KEY, SAVE_SLOT_COUNT, SETTINGS_KEY, TILE_SIZE, saveSlotKey } from "../config";
 import { getHouse } from "../data/houses";
 
 export type SaveSlotId = 1 | 2 | 3;
@@ -115,6 +115,9 @@ class GameState {
   pendingArenaOpponent: string | null = null;
   pendingNight = false;
   pendingForcedWeapon: WeaponId | null = null;
+  pendingFeast = false;
+  feastWineDrunk = false;
+  feastBeerDrunk = false;
   lastResult: {
     kind: "win" | "lose" | "spar";
     title: string;
@@ -235,7 +238,26 @@ class GameState {
     this.pendingArenaOpponent = null;
     this.pendingNight = false;
     this.pendingForcedWeapon = null;
+    this.pendingFeast = false;
+    this.feastWineDrunk = false;
+    this.feastBeerDrunk = false;
     this.lastResult = null;
+  }
+
+  beginFeast(): void {
+    this.pendingFeast = true;
+    this.feastWineDrunk = false;
+    this.feastBeerDrunk = false;
+    const x = 38 * TILE_SIZE + TILE_SIZE / 2;
+    const y = 26 * TILE_SIZE + TILE_SIZE / 2;
+    this.save.position = { x, y, scene: "ludus" };
+    const max = this.save.stats.maxHealth - (this.save.injured ? 8 : 0);
+    this.save.health = Math.max(16, Math.round(max * 0.48));
+    this.save.stamina = Math.max(10, Math.round(this.save.stats.maxStamina * 0.42));
+  }
+
+  endFeast(): void {
+    this.pendingFeast = false;
   }
 
   startNew(name: string, tunic: TunicColor, playerHouse: string | null = null): void {

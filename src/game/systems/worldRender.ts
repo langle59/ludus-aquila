@@ -4,6 +4,12 @@ import type { BuiltMap } from "../maps/maps";
 
 const VARIANT_BASES = new Set([
   "tile-sand",
+  "tile-sand-coil",
+  "tile-sand-mud",
+  "tile-sand-stripe",
+  "tile-sand-stone",
+  "tile-sand-ivory",
+  "tile-sand-earth",
   "tile-dirt",
   "tile-stone",
   "tile-wood",
@@ -90,11 +96,19 @@ function paintDecor(scene: Phaser.Scene, built: BuiltMap, mood: "ludus" | "arena
       { x: 12, y: 14 },
       { x: 33, y: 14 },
       { x: 12, y: 24 },
-      { x: 33, y: 24 },
+      { x: 30, y: 24 },
       { x: 37, y: 14 },
       { x: 44, y: 14 },
       { x: 37, y: 21 },
       { x: 44, y: 21 },
+      { x: 33, y: 22 },
+      { x: 45, y: 22 },
+      { x: 32, y: 23 },
+      { x: 46, y: 23 },
+      { x: 32, y: 27 },
+      { x: 46, y: 27 },
+      { x: 33, y: 29 },
+      { x: 45, y: 29 },
       { x: 2, y: 14 },
       { x: 7, y: 14 },
       { x: 21, y: 31 },
@@ -103,10 +117,6 @@ function paintDecor(scene: Phaser.Scene, built: BuiltMap, mood: "ludus" | "arena
     for (const t of torches) {
       placeTorch(scene, t.x * TILE_SIZE + 16, t.y * TILE_SIZE + 10);
     }
-    scene.add.image(10 * TILE_SIZE + 16, 8 * TILE_SIZE + 22, "prop-lintel").setDepth(8 * TILE_SIZE + 6);
-    scene.add.image(37 * TILE_SIZE + 16, 8 * TILE_SIZE + 22, "prop-lintel").setDepth(8 * TILE_SIZE + 6);
-    scene.add.image(35 * TILE_SIZE + 16, 17 * TILE_SIZE + 22, "prop-lintel").setDepth(17 * TILE_SIZE + 6);
-    scene.add.image(8 * TILE_SIZE + 16, 16 * TILE_SIZE + 22, "prop-lintel").setDepth(16 * TILE_SIZE + 6);
     placeLamp(scene, 5 * TILE_SIZE + 8, 6 * TILE_SIZE + 18);
     placeLamp(scene, 42 * TILE_SIZE + 16, 6 * TILE_SIZE + 18);
   } else {
@@ -117,14 +127,15 @@ function paintDecor(scene: Phaser.Scene, built: BuiltMap, mood: "ludus" | "arena
       { x: 27, y: 18 },
     ];
     for (const t of torches) {
-      placeTorch(scene, t.x * TILE_SIZE + 16, t.y * TILE_SIZE + 8);
+      placeTorch(scene, t.x * TILE_SIZE + 16, t.y * TILE_SIZE + 8, built.torchTint);
     }
   }
 }
 
-function placeTorch(scene: Phaser.Scene, x: number, y: number): void {
+function placeTorch(scene: Phaser.Scene, x: number, y: number, tint?: number): void {
   scene.add.image(x, y, "prop-torch").setDepth(y + 8);
   const glow = scene.add.image(x, y - 6, "fx-glow").setDepth(y + 7).setAlpha(0.55).setBlendMode(Phaser.BlendModes.ADD);
+  if (tint) glow.setTint(tint);
   scene.tweens.add({
     targets: glow,
     alpha: { from: 0.35, to: 0.7 },
@@ -135,7 +146,30 @@ function placeTorch(scene: Phaser.Scene, x: number, y: number): void {
   });
 }
 
-function placeLamp(scene: Phaser.Scene, x: number, y: number): void {
+export function animateBrazier(scene: Phaser.Scene, x: number, y: number): void {
+  const glow = scene.add.image(x, y - 10, "fx-glow").setDepth(y + 4).setAlpha(0.5).setScale(0.85).setBlendMode(Phaser.BlendModes.ADD);
+  scene.tweens.add({
+    targets: glow,
+    alpha: { from: 0.28, to: 0.7 },
+    scale: { from: 0.7, to: 1.15 },
+    duration: 380 + Math.random() * 160,
+    yoyo: true,
+    repeat: -1,
+  });
+  for (let i = 0; i < 3; i++) {
+    const mote = scene.add.image(x + (i - 1) * 5, y - 8, "fx-mote").setDepth(y + 5).setTint(0xffc070).setAlpha(0.7);
+    scene.tweens.add({
+      targets: mote,
+      y: y - 22 - i * 4,
+      alpha: 0,
+      duration: 900 + i * 180,
+      repeat: -1,
+      delay: i * 120,
+    });
+  }
+}
+
+export function placeLamp(scene: Phaser.Scene, x: number, y: number): void {
   scene.add.image(x, y, "prop-lamp").setDepth(y + 6);
   const glow = scene.add.image(x, y - 8, "fx-glow").setDepth(y + 5).setAlpha(0.4).setScale(0.7).setBlendMode(Phaser.BlendModes.ADD);
   scene.tweens.add({

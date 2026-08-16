@@ -35,6 +35,10 @@ function houseCloth(): string {
   return pledgedHouse()?.animalName ?? "Eagle";
 }
 
+function feastLast(): string {
+  return lastBeatenAnimal() ?? "that house";
+}
+
 function consumeWelcome(npcId: string): string | null {
   const houseId = Object.keys(gameState.save.dialogueFlags)
     .filter((k) => k.startsWith("home-") && gameState.save.dialogueFlags[k])
@@ -52,6 +56,12 @@ function consumeWelcome(npcId: string): string | null {
 export const DIALOGUE: Record<string, LineFn> = {
   lanista: () => {
     const s = gameState.save;
+    if (gameState.pendingFeast) {
+      return [
+        `"I heard the shout from the sand. The house is in the feast."`,
+        `"Drink. Then come back when the cup is empty."`,
+      ];
+    }
     if (s.injured) {
       return [
         `"You limp. Rest in Quarters for a few denarii, or drink unguent."`,
@@ -181,6 +191,12 @@ export const DIALOGUE: Record<string, LineFn> = {
   titus: () => {
     const home = consumeWelcome("titus");
     if (home) return [`"You came back. ${home} cloth on the other side of the sand, and you still standing. That is how a wall is built."`];
+    if (gameState.pendingFeast) {
+      return [
+        `"The ${feastLast()} is down. Sit. A wall that never drinks still cracks."`,
+        `"The cup takes the ache. Then we talk steel."`,
+      ];
+    }
     if (gameState.save.injured) {
       return [`"You limp. Rest in Quarters, or drink the vial. A wall with a crack still falls."`];
     }
@@ -219,6 +235,12 @@ export const DIALOGUE: Record<string, LineFn> = {
   rufus: () => {
     const home = consumeWelcome("rufus");
     if (home) return [`"You beat ${home} and you still look surprised. Yard. You and me. Unless you are scared of a friend."`];
+    if (gameState.pendingFeast) {
+      return [
+        `"You beat the ${feastLast()}. Drink before I take the table."`,
+        `"If the beer is gone I will laugh. If you sit I might not."`,
+      ];
+    }
     if (gameState.save.freedomWon) {
       return [
         `"Free. Fine. Sit. I still want that rematch, but dice first."`,
@@ -252,6 +274,12 @@ export const DIALOGUE: Record<string, LineFn> = {
   brom: () => {
     const home = consumeWelcome("brom");
     if (home) return [`"Ha! ${home} fell. Come eat. Even an oak is proud today."`];
+    if (gameState.pendingFeast) {
+      return [
+        `"Ha! The ${feastLast()} fell. Sit. Even an oak is proud today."`,
+        `"The beer is honest. The wine is a liar. Drink both."`,
+      ];
+    }
     if (gameState.save.freedomWon) {
       return [`"Ha! Wood in your hand. Come eat. The hammer is yours if you want the weight."`];
     }
@@ -282,6 +310,12 @@ export const DIALOGUE: Record<string, LineFn> = {
   aelia: () => {
     const home = consumeWelcome("aelia");
     if (home) return [`"${home} was a problem of range or weight. You answered it. That is the whole craft."`];
+    if (gameState.pendingFeast) {
+      return [
+        `"The ${feastLast()} crowded you. You made space. Sit."`,
+        `"A cup is not a spear. Drink anyway."`,
+      ];
+    }
     if (gameState.save.freedomWon) {
       return [`"A free step is still a step. Measure it."`];
     }
@@ -355,4 +389,6 @@ export const AREA_HINTS: Record<string, string> = {
   fountain: "A stone basin. The water is warm.",
   trophy: "A mount on the wall. Press E to inspect it.",
   dice: "The oval table. Rufus keeps a seat. Press E.",
+  wine: "Wine in the mug. Press E.",
+  beer: "Beer in the mug. Press E.",
 };

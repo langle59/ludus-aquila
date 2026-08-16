@@ -225,6 +225,12 @@ export function generatePlaceholderAssets(scene: Phaser.Scene): void {
   makeFloorFamily(scene, "tile-stone", 0x8a8478, 0x6a6458, 0xa8a090, "flag");
   makeFloorFamily(scene, "tile-wood", 0x7a4e2c, 0x5a3418, 0x9a6a42, "plank");
   makeFloorFamily(scene, "tile-wood-pale", 0x8a6240, 0x6a4428, 0xb08a5a, "plank");
+  makeFloorFamily(scene, "tile-sand-coil", 0x6a7a48, 0x4a5a30, 0x8a9a60, "sand");
+  makeFloorFamily(scene, "tile-sand-mud", 0x8a6a40, 0x5a4018, 0xa88858, "dirt");
+  makeFloorFamily(scene, "tile-sand-stripe", 0xc49a50, 0x8a6428, 0xe8c878, "sand");
+  makeFloorFamily(scene, "tile-sand-stone", 0x9a9488, 0x6a6458, 0xb8b0a4, "flag");
+  makeFloorFamily(scene, "tile-sand-ivory", 0xc8b898, 0xa09070, 0xe0d4b8, "sand");
+  makeFloorFamily(scene, "tile-sand-earth", 0x6a4a28, 0x4a3018, 0x8a6240, "dirt");
   makeWallFamily(scene);
   makeBanner(scene, "tile-banner-red", COLORS.crimson);
   makeBanner(scene, "tile-banner-serpent", COLORS.serpentGreen);
@@ -1489,6 +1495,146 @@ function makeDecor(scene: Phaser.Scene): void {
     px(ctx, 24, 36, 10, 8, COLORS.foxOrange);
     px(ctx, 36, 34, 10, 8, 0x2f6b62);
     px(ctx, 14, 36, 6, 2, 0xc4b49a, 0.5);
+  });
+  makeRug(scene, "tile-feast-rug", 0x6a2420, 0x3a1410, COLORS.gold);
+  canvasTex(scene, "prop-feast-table", 84, 36, (ctx) => {
+    px(ctx, 8, 26, 10, 10, 0x4a2c10);
+    px(ctx, 66, 26, 10, 10, 0x4a2c10);
+    px(ctx, 4, 10, 76, 18, 0x5a3a18);
+    px(ctx, 6, 10, 72, 5, 0x8a6a44);
+    px(ctx, 8, 14, 68, 2, 0x3a2414, 0.45);
+    oval(ctx, 22, 16, 6, 4, 0xe8dcc8);
+    oval(ctx, 22, 15, 4, 2, 0xc45a1a, 0.85);
+    oval(ctx, 42, 17, 8, 4, 0xd8c08a);
+    px(ctx, 38, 15, 10, 4, 0xc4a66e);
+    oval(ctx, 62, 16, 5, 3, 0xe8dcc8);
+    oval(ctx, 62, 15, 3, 2, 0x6a3e24, 0.9);
+    px(ctx, 18, 20, 12, 2, 0xf0e6d2, 0.7);
+    px(ctx, 50, 20, 14, 2, 0xe8dcc8, 0.55);
+  });
+  canvasTex(scene, "prop-amphora", 22, 36, (ctx) => {
+    px(ctx, 8, 2, 6, 6, 0x6a3e24);
+    px(ctx, 9, 0, 4, 4, 0x5a3018);
+    oval(ctx, 11, 20, 9, 13, 0x8a4a28);
+    oval(ctx, 11, 20, 7, 11, 0xa85a32);
+    px(ctx, 4, 14, 4, 8, 0x6a3e24);
+    px(ctx, 14, 14, 4, 8, 0x6a3e24);
+    oval(ctx, 11, 12, 6, 4, 0x6a3e24);
+    px(ctx, 8, 18, 6, 2, COLORS.gold, 0.55);
+    oval(ctx, 11, 10, 3, 2, 0x3a2010, 0.5);
+  });
+  canvasTex(scene, "prop-jug", 18, 24, (ctx) => {
+    px(ctx, 6, 2, 6, 4, 0x6a2420);
+    oval(ctx, 9, 14, 7, 8, 0x8a3a2a);
+    oval(ctx, 9, 14, 5, 6, 0xa84838);
+    px(ctx, 13, 8, 4, 7, 0x6a2420);
+    oval(ctx, 9, 8, 4, 3, 0x6a2420);
+    px(ctx, 7, 12, 4, 2, COLORS.gold, 0.5);
+    oval(ctx, 9, 7, 2, 1, 0xc45a1a, 0.8);
+  });
+  canvasTex(scene, "prop-keg", 30, 32, (ctx) => {
+    oval(ctx, 15, 18, 13, 12, 0x5a3a18);
+    oval(ctx, 15, 18, 11, 10, 0x7a5230);
+    px(ctx, 3, 14, 24, 3, 0x3a2414);
+    px(ctx, 3, 22, 24, 3, 0x3a2414);
+    oval(ctx, 15, 8, 8, 5, 0x6b4a2f);
+    circ(ctx, 15, 18, 3, 0x3a2414);
+    circ(ctx, 15, 18, 1.5, 0xc4a66e);
+    px(ctx, 14, 6, 2, 4, 0x4a2c10);
+  });
+  canvasTex(scene, "prop-brazier", 40, 36, (ctx) => {
+    px(ctx, 8, 28, 6, 8, 0x3a3a42);
+    px(ctx, 26, 28, 6, 8, 0x3a3a42);
+    oval(ctx, 20, 22, 16, 8, 0x4a4a52);
+    oval(ctx, 20, 20, 14, 6, 0x2a2a32);
+    circ(ctx, 20, 16, 8, 0xc45a1a);
+    circ(ctx, 20, 14, 5, 0xe07030);
+    circ(ctx, 20, 12, 3, 0xffe080);
+    px(ctx, 12, 18, 16, 2, 0x6a6458, 0.5);
+  });
+  canvasTex(scene, "prop-mug-wine", 28, 20, (ctx) => {
+    px(ctx, 11, 8, 3, 7, 0x6a2420);
+    oval(ctx, 6, 13, 6, 6, 0x6a2420);
+    oval(ctx, 6, 13, 4, 4, 0x8a3a2a);
+    oval(ctx, 6, 11, 4, 2, 0x4a1410);
+    px(ctx, 23, 7, 4, 8, 0x6a2420);
+    px(ctx, 25, 8, 2, 6, 0x8a3a2a);
+    oval(ctx, 17, 12, 7, 7, 0x6a2420);
+    oval(ctx, 17, 12, 5, 5, 0x8a3a2a);
+    oval(ctx, 17, 10, 5, 3, 0x4a1410);
+    oval(ctx, 17, 9, 4, 2, 0x6a1810, 0.85);
+    px(ctx, 14, 11, 6, 2, COLORS.gold, 0.45);
+  });
+  canvasTex(scene, "prop-mug-beer", 28, 20, (ctx) => {
+    px(ctx, 11, 8, 3, 7, 0x5a3a18);
+    oval(ctx, 6, 13, 6, 6, 0x5a3a18);
+    oval(ctx, 6, 13, 4, 4, 0x7a5230);
+    oval(ctx, 6, 11, 4, 2, 0xe8dcc8);
+    px(ctx, 23, 7, 4, 8, 0x5a3a18);
+    px(ctx, 25, 8, 2, 6, 0x8a6a44);
+    oval(ctx, 17, 12, 7, 7, 0x5a3a18);
+    oval(ctx, 17, 12, 5, 5, 0x7a5230);
+    oval(ctx, 17, 10, 5, 3, 0xc45a1a);
+    oval(ctx, 17, 9, 4, 2, 0xe8dcc8);
+    px(ctx, 15, 8, 4, 1, 0xf0e6d2, 0.8);
+    px(ctx, 14, 11, 6, 2, 0xc4a66e, 0.5);
+  });
+  canvasTex(scene, "prop-platter", 28, 14, (ctx) => {
+    oval(ctx, 14, 8, 12, 5, 0x8a8478);
+    oval(ctx, 14, 7, 10, 4, 0xc4bcb0);
+    oval(ctx, 14, 7, 6, 2, 0xe8dcc8, 0.7);
+    px(ctx, 10, 6, 4, 2, 0xc45a1a, 0.65);
+    px(ctx, 16, 6, 3, 2, 0xd8c08a, 0.8);
+  });
+  canvasTex(scene, "prop-pit-ring", 22, 18, (ctx) => {
+    circ(ctx, 11, 10, 8, 0x6a5a28);
+    circ(ctx, 11, 10, 6, 0xc4a66e);
+    circ(ctx, 11, 10, 4, 0x3a2a10);
+    px(ctx, 10, 2, 2, 4, 0x8a6a44);
+  });
+  canvasTex(scene, "prop-pit-skull", 20, 22, (ctx) => {
+    oval(ctx, 10, 10, 8, 7, 0xe8dcc8);
+    oval(ctx, 10, 10, 6, 5, 0xf0e6d2);
+    circ(ctx, 7, 9, 2, 0x1a1210);
+    circ(ctx, 13, 9, 2, 0x1a1210);
+    px(ctx, 9, 14, 2, 3, 0x1a1210, 0.7);
+    px(ctx, 6, 18, 8, 3, 0xd8c08a);
+  });
+  canvasTex(scene, "prop-pit-tusk", 24, 20, (ctx) => {
+    px(ctx, 4, 14, 16, 4, 0x5a3a18);
+    oval(ctx, 6, 10, 4, 8, 0xe8dcc8);
+    oval(ctx, 18, 10, 4, 8, 0xe8dcc8);
+    px(ctx, 5, 4, 3, 8, 0xf0e6d2);
+    px(ctx, 17, 4, 3, 8, 0xf0e6d2);
+  });
+  canvasTex(scene, "prop-pit-horn", 24, 22, (ctx) => {
+    px(ctx, 4, 16, 16, 4, 0x4a4038);
+    px(ctx, 6, 6, 4, 12, 0xc4bcb0);
+    px(ctx, 14, 4, 4, 14, 0xd8c08a);
+    px(ctx, 7, 2, 3, 6, 0xe8dcc8);
+    px(ctx, 15, 1, 3, 6, 0xf0e6d2);
+  });
+  canvasTex(scene, "prop-pit-vine", 18, 36, (ctx) => {
+    px(ctx, 8, 0, 3, 36, 0x2f6b4a);
+    px(ctx, 4, 8, 10, 2, 0x3a7a48);
+    px(ctx, 2, 18, 8, 2, 0x2f6b4a);
+    px(ctx, 10, 26, 6, 2, 0x4a8a50);
+    circ(ctx, 5, 9, 2, 0xc45a1a, 0.7);
+    circ(ctx, 14, 27, 2, 0xc45a1a, 0.6);
+  });
+  canvasTex(scene, "prop-pit-log", 32, 16, (ctx) => {
+    oval(ctx, 16, 8, 14, 6, 0x5a3a18);
+    oval(ctx, 16, 8, 12, 4, 0x7a5230);
+    circ(ctx, 4, 8, 5, 0x8a6a44);
+    circ(ctx, 4, 8, 3, 0x4a2c10);
+    px(ctx, 10, 6, 16, 2, 0x3a2414, 0.45);
+  });
+  canvasTex(scene, "prop-pit-ivory", 18, 40, (ctx) => {
+    px(ctx, 6, 8, 6, 28, 0xe8dcc8);
+    px(ctx, 7, 8, 2, 28, 0xf0e6d2, 0.7);
+    px(ctx, 4, 4, 10, 6, 0xd8c08a);
+    px(ctx, 4, 34, 10, 6, 0xc4bcb0);
+    px(ctx, 8, 0, 2, 6, COLORS.gold, 0.7);
   });
 }
 

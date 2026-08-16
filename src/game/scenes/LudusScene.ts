@@ -3,8 +3,8 @@ import { TILE_SIZE, HUD_CAM_PAD } from "../config";
 import { gameState } from "../state/GameState";
 import { bus } from "../systems/bus";
 import { audio } from "../systems/audio";
-import { paintMap, labelMap, animateFountain, animateTrough } from "../systems/worldRender";
-import { buildLudus, LUDUS_META } from "../maps/maps";
+import { paintMap, labelMap, animateFountain, animateTrough, animateBrazier } from "../systems/worldRender";
+import { buildLudus, inFeastTiles, LUDUS_META } from "../maps/maps";
 import { Fighter, attachHpBar } from "../entities/Fighter";
 import { NpcActor, TrainingDummy, WorldProp } from "../entities/World";
 import { playerLook } from "../data/shop";
@@ -13,7 +13,7 @@ import { resolveHits, dummyStrikeFeedback } from "../systems/combat";
 import { DIALOGUE } from "../data/dialogue";
 import { getNpc, HOUSE_GLADIATORS, LANISTA } from "../data/gladiators";
 import { markTutorial, skipTutorial } from "../systems/objectives";
-import { applySparReward, applyDummyXp, pledgedHouse, playerCombatStats, rivalHouses } from "../systems/progression";
+import { applySparReward, applyDummyXp, pledgedHouse, playerCombatStats, rivalHouses, drinkFeast } from "../systems/progression";
 import { palCombatStats, palDisplayName, palTexture, palUnlocked } from "../data/pal";
 import { getHouse } from "../data/houses";
 import { bodyStyleFor } from "../systems/assets";
@@ -138,13 +138,21 @@ export class LudusScene extends Phaser.Scene {
       this.player.setWeapon(gameState.save.equippedWeapon);
       this.player.stats = { ...playerCombatStats() };
       this.player.revive(true);
-      gameState.restoreVitals();
+      if (gameState.pendingFeast) {
+        const p = gameState.save.position;
+        this.player.setPosition(p.x, p.y);
+        body?.reset(p.x, p.y);
+        this.player.health = gameState.save.health;
+        this.player.stamina = gameState.save.stamina;
+      } else {
+        gameState.restoreVitals();
+      }
       bus.emit("minimap-scene", "ludus");
       audio.setMusicMood("yard");
       this.refreshHall();
       this.refreshRoost();
       if (gameState.save.freedomWon) ensureNight();
-      if (gameState.save.freedomWon && !gameState.save.dialogueFlags.freedomSpeech) {
+      if (gameState.save.freedomWon && !gameState.save.dialogueFlags.freedomSpeech && !gameState.pendingFeast) {
         gameState.save.dialogueFlags.freedomSpeech = true;
         gameState.persist();
         this.time.delayedCall(400, () => {
@@ -164,6 +172,7 @@ export class LudusScene extends Phaser.Scene {
     bus.on("skills-changed", this.onSkillsChanged, this);
     bus.on("cosmetics-changed", this.onCosmeticsChanged, this);
     bus.on("roost-changed", this.onRoostChanged, this);
+    bus.on("unstuck", this.onUnstuck, this);
 
     this.events.on("shutdown", () => {
       bus.off("weapon-changed", this.onWeapon, this);
@@ -177,6 +186,7 @@ export class LudusScene extends Phaser.Scene {
       bus.off("skills-changed", this.onSkillsChanged, this);
       bus.off("cosmetics-changed", this.onCosmeticsChanged, this);
       bus.off("roost-changed", this.onRoostChanged, this);
+      bus.off("unstuck", this.onUnstuck, this);
       bus.emit("spar-available", { show: false });
       bus.emit("talk-available", { show: false });
       bus.emit("minimap-scene", "none");
@@ -302,11 +312,43 @@ export class LudusScene extends Phaser.Scene {
         this.physics.add.collider(this.player, table);
         this.interactables.push({ kind: "dice", x: p.x, y: p.y });
         this.tableLock = this.add.image(p.x, p.y - 6, "prop-dice-lock").setDepth(p.y + 1);
+      } else if (p.kind === "feast-table") {
+        const t = new WorldProp(this, p.x, p.y, "feast-table", "prop-feast-table", true);
+        this.physics.add.collider(this.player, t);
+      } else if (p.kind === "amphora") {
+        const a = new WorldProp(this, p.x, p.y, "amphora", "prop-amphora", true);
+        this.physics.add.collider(this.player, a);
+      } else if (p.kind === "keg") {
+        const k = new WorldProp(this, p.x, p.y, "keg", "prop-keg", true);
+        this.physics.add.collider(this.player, k);
+      } else if (p.kind === "wine") {
+        this.add.image(p.x, p.y, "prop-mug-wine").setDepth(p.y + 2);
+        this.interactables.push({ kind: "wine", x: p.x, y: p.y });
+      } else if (p.kind === "beer") {
+        this.add.image(p.x, p.y, "prop-mug-beer").setDepth(p.y + 2);
+        this.interactables.push({ kind: "beer", x: p.x, y: p.y });
+      } else if (p.kind === "brazier") {
+        const b = new WorldProp(this, p.x, p.y, "brazier", "prop-brazier", true);
+        this.physics.add.collider(this.player, b);
+        animateBrazier(this, p.x, p.y);
+      } else if (p.kind === "platter") {
+        this.add.image(p.x, p.y, "prop-platter").setDepth(2);
+      } else if (p.kind === "column") {
+        const c = new WorldProp(this, p.x, p.y, "column", "prop-column", true);
+        this.physics.add.collider(this.player, c);
       }
     }
   }
 
-  private hallSlotCols(count: number): number[] {
+  private hallSlotCols(count: number, southWall = false): number[] {
+    if (southWall) {
+      if (count >= 5) return [36, 38, 43, 45, 46];
+      if (count === 4) return [37, 38, 43, 45];
+      if (count === 3) return [37, 38, 44];
+      if (count === 2) return [38, 44];
+      if (count === 1) return [38];
+      return [];
+    }
     if (count >= 4) return [37, 40, 43, 45];
     if (count === 3) return [38, 41, 44];
     if (count === 2) return [39, 43];
@@ -319,7 +361,7 @@ export class LudusScene extends Phaser.Scene {
     this.trophyGfx = [];
     this.interactables = this.interactables.filter((it) => it.kind !== "trophy");
     this.tableLock?.setVisible(!gameState.save.freedomWon);
-    this.seatRufus();
+    this.seatHouse();
 
     const houses = rivalHouses();
     const north = houses.slice(0, 4);
@@ -358,7 +400,53 @@ export class LudusScene extends Phaser.Scene {
       });
     };
     place(north, this.hallSlotCols(north.length), 15);
-    place(south, this.hallSlotCols(south.length), 20);
+    place(south, this.hallSlotCols(south.length, true), 20);
+  }
+
+  private seatHouse(): void {
+    if (gameState.pendingFeast) this.seatFeast();
+    else this.returnYardSeats();
+  }
+
+  private returnYardSeats(): void {
+    const posts: Record<string, string> = {
+      titus: "titus",
+      brom: "brom",
+      aelia: "aelia",
+      rufus: "rufus",
+    };
+    for (const [id, key] of Object.entries(posts)) {
+      const npc = this.npcs.find((n) => n.npcId === id);
+      const pos = this.built.spawns[key];
+      if (!npc || !pos) continue;
+      npc.place(pos.x, pos.y);
+      const it = this.interactables.find((item) => item.kind === "npc" && item.id === id);
+      if (it) {
+        it.x = pos.x;
+        it.y = pos.y;
+      }
+    }
+    this.seatRufus();
+  }
+
+  private seatFeast(): void {
+    const seats: Record<string, string> = {
+      titus: "titusFeast",
+      brom: "bromFeast",
+      aelia: "aeliaFeast",
+      rufus: "rufusFeast",
+    };
+    for (const [id, key] of Object.entries(seats)) {
+      const npc = this.npcs.find((n) => n.npcId === id);
+      const pos = this.built.spawns[key];
+      if (!npc || !pos) continue;
+      npc.place(pos.x, pos.y);
+      const it = this.interactables.find((item) => item.kind === "npc" && item.id === id);
+      if (it) {
+        it.x = pos.x;
+        it.y = pos.y;
+      }
+    }
   }
 
   private seatRufus(): void {
@@ -376,6 +464,7 @@ export class LudusScene extends Phaser.Scene {
   }
 
   private npcCanSpar(id: string): boolean {
+    if (gameState.pendingFeast) return false;
     if (id === "rufus" && rufusAtTable()) return false;
     return getNpc(id).canSpar;
   }
@@ -551,6 +640,10 @@ export class LudusScene extends Phaser.Scene {
       bus.emit("table");
       return;
     }
+    if (n.kind === "wine" || n.kind === "beer") {
+      this.drink(n.kind);
+      return;
+    }
     if (n.kind === "gate") {
       if (!gameState.save.tutorialComplete) {
         bus.emit("dialogue", {
@@ -586,6 +679,29 @@ export class LudusScene extends Phaser.Scene {
         },
       });
     }
+  }
+
+  private drink(kind: "wine" | "beer"): void {
+    if (!gameState.pendingFeast) {
+      bus.emit("toast", "The house drinks after a champion falls.");
+      return;
+    }
+    const result = drinkFeast(kind);
+    if (result === "empty") {
+      bus.emit(
+        "toast",
+        "The mug is empty until the next house falls.",
+      );
+      return;
+    }
+    this.player.stats = { ...playerCombatStats() };
+    this.player.health = gameState.save.health;
+    this.player.stamina = gameState.save.stamina;
+    audio.sfx("ui");
+    bus.emit(
+      "toast",
+      kind === "wine" ? "The wine is dark. The ache eases." : "Brom laughs. The beer is honest.",
+    );
   }
 
   private onSparRequest = (): void => {
@@ -683,6 +799,22 @@ export class LudusScene extends Phaser.Scene {
     this.refreshRoost();
   };
 
+  private onUnstuck = (): void => {
+    if (!this.sys.isActive() || this.scene.isSleeping()) return;
+    const dummy = this.built.spawns.dummy;
+    const yard = this.built.spawns.player;
+    const pos = this.sparring && dummy ? { x: dummy.x, y: dummy.y + 48 } : yard;
+    if (!pos) return;
+    this.player.setPosition(pos.x, pos.y);
+    const body = this.player.body as Phaser.Physics.Arcade.Body | undefined;
+    if (body) {
+      body.enable = true;
+      body.reset(pos.x, pos.y);
+      body.setVelocity(0, 0);
+    }
+    gameState.save.position = { x: pos.x, y: pos.y, scene: "ludus" };
+  };
+
   private onSkillsChanged = (): void => {
     this.player.refreshSkills();
     this.player.health = gameState.save.health;
@@ -707,7 +839,18 @@ export class LudusScene extends Phaser.Scene {
     if (!this.player) return;
     const tx = Math.floor(this.player.x / TILE_SIZE);
     const ty = Math.floor(this.player.y / TILE_SIZE);
-    audio.setHall(tx >= 35 && tx <= 46 && ty >= 14 && ty <= 21);
+    audio.setHall((tx >= 35 && tx <= 46 && ty >= 14 && ty <= 21) || inFeastTiles(tx, ty));
+    if (gameState.pendingFeast && tx < 32) {
+      gameState.endFeast();
+      this.seatHouse();
+      if (gameState.save.freedomWon && !gameState.save.dialogueFlags.freedomSpeech) {
+        gameState.save.dialogueFlags.freedomSpeech = true;
+        gameState.persist();
+        this.time.delayedCall(400, () => {
+          bus.emit("dialogue", { name: LANISTA.name, lines: DIALOGUE.lanista() });
+        });
+      }
+    }
     if (this.uiLocked()) {
       this.player.setVelocity(0, 0);
       this.player.syncVisuals(this.time.now);
@@ -844,6 +987,10 @@ export class LudusScene extends Phaser.Scene {
                     ? gameState.save.freedomWon
                       ? "TABLE"
                       : "LOCKED"
+                    : n.kind === "wine"
+                      ? "WINE"
+                      : n.kind === "beer"
+                        ? "BEER"
                     : "TALK";
       bus.emit("talk-available", { show: true, label: talkLabel });
       this.nearestHint!.setVisible(true).setPosition(this.player.x, this.player.y + 28);
@@ -867,6 +1014,10 @@ export class LudusScene extends Phaser.Scene {
                       ? gameState.save.freedomWon
                         ? "E  Table"
                         : "E  Locked"
+                      : n.kind === "wine"
+                        ? "E  Wine"
+                        : n.kind === "beer"
+                          ? "E  Beer"
                       : "";
       this.nearestHint!.setText(label);
       this.npcs.forEach((npc) => npc.setPrompt(n.id === npc.npcId, this.npcCanSpar(npc.npcId) ? "SPAR / E" : "E  Talk"));
@@ -893,6 +1044,7 @@ export class LudusScene extends Phaser.Scene {
       if (it.kind === "gate") marks.push({ x: it.x, y: it.y, color: 0xc45a1a, kind: "gate" });
       if (it.kind === "trophy") marks.push({ x: it.x, y: it.y, color: 0xc4a060, kind: "trophy" });
       if (it.kind === "dice") marks.push({ x: it.x, y: it.y, color: 0xd4a84b, kind: "dice" });
+      if (it.kind === "wine" || it.kind === "beer") marks.push({ x: it.x, y: it.y, color: 0xa33b2b, kind: "feast" });
     }
     bus.emit("minimap", {
       show: true,

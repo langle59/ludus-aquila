@@ -65,6 +65,21 @@ export class WorldProp extends Phaser.Physics.Arcade.Image {
     if (kind === "dice") this.setSize(56, 18);
     if (kind === "trough") this.setSize(28, 14);
     if (kind === "perch") this.setSize(18, 12);
+    if (kind === "feast-table") this.setSize(64, 16);
+    if (kind === "amphora") this.setSize(14, 16);
+    if (kind === "jug" || kind === "wine") this.setSize(12, 12);
+    if (kind === "keg" || kind === "beer") this.setSize(20, 16);
+    if (kind === "brazier") this.setSize(22, 14);
+    if (kind === "pit-ring") this.setSize(16, 12);
+    if (kind === "pit-skull") this.setSize(14, 12);
+    if (kind === "pit-tusk") this.setSize(18, 12);
+    if (kind === "pit-horn") this.setSize(18, 12);
+    if (kind === "pit-log") this.setSize(26, 12);
+    if (kind === "pit-ivory") {
+      this.setOrigin(0.5, 1);
+      this.setSize(12, 12);
+      this.setOffset(3, 28);
+    }
     if (solid) this.refreshBody();
     if (!solid) this.disableBody();
   }

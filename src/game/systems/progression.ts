@@ -228,6 +228,7 @@ export function applyArenaVictory(opponentId: string): { denarii: number; xp: nu
   if (!found) return { denarii: 0, xp: 0, leveled: false };
   const { house, fighter } = found;
   const s = gameState.save;
+  const wasNight = gameState.pendingNight;
   const firstWin = !s.defeatedOpponents.includes(opponentId);
   if (firstWin) s.defeatedOpponents.push(opponentId);
   const rawXp = firstWin ? fighter.rewards.xp : Math.round(fighter.rewards.xp * 0.5);
@@ -310,7 +311,11 @@ export function applyArenaVictory(opponentId: string): { denarii: number; xp: nu
   }
   bumpReputation();
   advanceAfterWin(opponentId);
-  gameState.restoreVitals();
+  if (!wasNight && wantsFeast(opponentId)) {
+    /* leave() begins the feast tired — do not top off here */
+  } else {
+    gameState.restoreVitals();
+  }
   gameState.persist();
   return {
     denarii,
@@ -395,6 +400,31 @@ function advanceAfterWin(id: string): void {
     return;
   }
   gameState.setObjective(s.tutorialComplete ? "defeat_rival" : "first_arena");
+}
+
+export function wantsFeast(opponentId: string, night = false): boolean {
+  if (night) return false;
+  if (getRival(opponentId)?.fighter.isChampion) return true;
+  return isTournamentId(opponentId) && gameState.save.freedomWon;
+}
+
+export function drinkFeast(kind: "wine" | "beer"): "ok" | "empty" {
+  if (kind === "wine" && gameState.feastWineDrunk) return "empty";
+  if (kind === "beer" && gameState.feastBeerDrunk) return "empty";
+  if (kind === "wine") gameState.feastWineDrunk = true;
+  else gameState.feastBeerDrunk = true;
+  const s = gameState.save;
+  const maxH = s.stats.maxHealth - (s.injured ? 8 : 0);
+  s.health = Math.min(maxH, s.health + 28);
+  s.stamina = Math.min(s.stats.maxStamina, s.stamina + 22);
+  if (s.injured) {
+    s.injured = false;
+    const extra = s.stats.maxHealth - maxH;
+    s.health = Math.min(s.stats.maxHealth, s.health + extra);
+    bus.emit("skills-changed");
+  }
+  gameState.persist();
+  return "ok";
 }
 
 export function rivalHouses() {
