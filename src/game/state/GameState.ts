@@ -92,6 +92,7 @@ export function createNewSave(playerName: string, tunic: TunicColor, playerHouse
     injured: false,
     weaponWins: {},
     unlockedMastery: [],
+    activePrayer: null,
   };
 }
 
@@ -327,6 +328,7 @@ class GameState {
     this.save.nightKind = parsed.nightKind === "weapon" || parsed.nightKind === "exhibition" ? parsed.nightKind : null;
     this.save.nightOpponent = parsed.nightOpponent ?? null;
     this.save.nightWins = parsed.nightWins ?? 0;
+    this.save.activePrayer = parsed.activePrayer ?? null;
     this.save.version = 2;
     const legacyObj = parsed.currentObjective as string;
     const known: SaveData["currentObjective"][] = [
@@ -371,9 +373,10 @@ class GameState {
   }
 
   restoreVitals(): void {
-    const max = this.save.stats.maxHealth - (this.save.injured ? 8 : 0);
+    const p = this.save.activePrayer;
+    const max = this.save.stats.maxHealth - (this.save.injured ? 8 : 0) + (p === "silvanus" ? 12 : 0);
     this.save.health = max;
-    this.save.stamina = this.save.stats.maxStamina;
+    this.save.stamina = this.save.stats.maxStamina + (p === "lares" ? 8 : 0);
   }
 
   setObjective(id: ObjectiveId): void {

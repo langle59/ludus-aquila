@@ -4,7 +4,7 @@ import { gameState } from "../state/GameState";
 import { bus } from "../systems/bus";
 import { audio } from "../systems/audio";
 import { paintMap, labelMap, animateFountain, animateTrough, animateBrazier } from "../systems/worldRender";
-import { buildLudus, inFeastTiles, LUDUS_META } from "../maps/maps";
+import { buildLudus, inFeastTiles, inShrineTiles, LUDUS_META } from "../maps/maps";
 import { Fighter, attachHpBar } from "../entities/Fighter";
 import { NpcActor, TrainingDummy, WorldProp } from "../entities/World";
 import { playerLook } from "../data/shop";
@@ -14,6 +14,7 @@ import { DIALOGUE } from "../data/dialogue";
 import { getNpc, HOUSE_GLADIATORS, LANISTA } from "../data/gladiators";
 import { markTutorial, skipTutorial } from "../systems/objectives";
 import { applySparReward, applyDummyXp, pledgedHouse, playerCombatStats, rivalHouses, drinkFeast } from "../systems/progression";
+import { SHRINE_NICHES, patronUnlocked } from "../data/patrons";
 import { palCombatStats, palDisplayName, palTexture, palUnlocked } from "../data/pal";
 import { getHouse } from "../data/houses";
 import { bodyStyleFor } from "../systems/assets";
@@ -54,6 +55,7 @@ export class LudusScene extends Phaser.Scene {
   private dummyCapTold = false;
   private built = buildLudus();
   private trophyGfx: Phaser.GameObjects.GameObject[] = [];
+  private shrineGfx: Phaser.GameObjects.GameObject[] = [];
   private tableLock?: Phaser.GameObjects.Image;
 
   constructor() {
@@ -66,6 +68,7 @@ export class LudusScene extends Phaser.Scene {
     this.interactables = [];
     this.roostGfx = [];
     this.trophyGfx = [];
+    this.shrineGfx = [];
     this.sparring = null;
     this.hiddenNpc = undefined;
     this.awaitingSpar = null;
@@ -112,6 +115,7 @@ export class LudusScene extends Phaser.Scene {
     this.spawnProps();
     this.refreshRoost();
     this.refreshHall();
+    this.refreshShrine();
     if (gameState.save.freedomWon) ensureNight();
 
     this.nearestHint = this.add
@@ -151,6 +155,7 @@ export class LudusScene extends Phaser.Scene {
       audio.setMusicMood("yard");
       this.refreshHall();
       this.refreshRoost();
+      this.refreshShrine();
       if (gameState.save.freedomWon) ensureNight();
       if (gameState.save.freedomWon && !gameState.save.dialogueFlags.freedomSpeech && !gameState.pendingFeast) {
         gameState.save.dialogueFlags.freedomSpeech = true;
@@ -267,6 +272,12 @@ export class LudusScene extends Phaser.Scene {
         const f = new WorldProp(this, p.x, p.y, "fountain", "prop-fountain", true);
         this.physics.add.collider(this.player, f);
         animateFountain(this, p.x, p.y);
+      } else if (p.kind === "lararium") {
+        const altar = new WorldProp(this, p.x, p.y, "lararium", "prop-lararium", true);
+        this.physics.add.collider(this.player, altar);
+        this.interactables.push({ kind: "altar", x: p.x, y: p.y });
+      } else if (p.kind === "altar") {
+        this.add.image(p.x, p.y + 4, "prop-altar").setDepth(p.y);
       } else if (p.kind === "crate") {
         const c = new WorldProp(this, p.x, p.y, "crate", "prop-crate", true);
         this.physics.add.collider(this.player, c);
@@ -401,6 +412,18 @@ export class LudusScene extends Phaser.Scene {
     };
     place(north, this.hallSlotCols(north.length), 15);
     place(south, this.hallSlotCols(south.length, true), 20);
+  }
+
+  private refreshShrine(): void {
+    for (const g of this.shrineGfx) g.destroy();
+    this.shrineGfx = [];
+    for (const slot of SHRINE_NICHES) {
+      const x = slot.tx * TILE_SIZE + TILE_SIZE / 2;
+      const y = slot.ty * TILE_SIZE + TILE_SIZE / 2;
+      const lit = patronUnlocked(slot.id);
+      const niche = this.add.image(x, y - 6, lit ? "prop-niche-lit" : "prop-niche-empty").setDepth(y);
+      this.shrineGfx.push(niche);
+    }
   }
 
   private seatHouse(): void {
@@ -606,6 +629,10 @@ export class LudusScene extends Phaser.Scene {
     }
     if (n.kind === "shop") {
       bus.emit("shop");
+      return;
+    }
+    if (n.kind === "altar") {
+      bus.emit("shrine");
       return;
     }
     if (n.kind === "pal") {
@@ -839,7 +866,7 @@ export class LudusScene extends Phaser.Scene {
     if (!this.player) return;
     const tx = Math.floor(this.player.x / TILE_SIZE);
     const ty = Math.floor(this.player.y / TILE_SIZE);
-    audio.setHall((tx >= 35 && tx <= 46 && ty >= 14 && ty <= 21) || inFeastTiles(tx, ty));
+    audio.setHall((tx >= 35 && tx <= 46 && ty >= 14 && ty <= 21) || inFeastTiles(tx, ty) || inShrineTiles(tx, ty));
     if (gameState.pendingFeast && tx < 32) {
       gameState.endFeast();
       this.seatHouse();
@@ -952,12 +979,12 @@ export class LudusScene extends Phaser.Scene {
     }
     gameState.save.health = this.player.health;
     gameState.save.stamina = this.player.stamina;
-    gameState.save.stats = { ...this.player.stats, ...gameState.save.stats };
-    this.player.stats.maxHealth = gameState.save.stats.maxHealth;
-    this.player.stats.maxStamina = gameState.save.stats.maxStamina;
-    this.player.stats.attack = gameState.save.stats.attack;
-    this.player.stats.defense = gameState.save.stats.defense;
-    this.player.stats.agility = gameState.save.stats.agility;
+    const live = playerCombatStats();
+    this.player.stats.maxHealth = live.maxHealth;
+    this.player.stats.maxStamina = live.maxStamina;
+    this.player.stats.attack = live.attack;
+    this.player.stats.defense = live.defense;
+    this.player.stats.agility = live.agility;
     this.emitMinimap();
 
     const n = this.nearest();
@@ -991,6 +1018,8 @@ export class LudusScene extends Phaser.Scene {
                       ? "WINE"
                       : n.kind === "beer"
                         ? "BEER"
+                        : n.kind === "altar"
+                          ? "PRAY"
                     : "TALK";
       bus.emit("talk-available", { show: true, label: talkLabel });
       this.nearestHint!.setVisible(true).setPosition(this.player.x, this.player.y + 28);
@@ -1018,6 +1047,8 @@ export class LudusScene extends Phaser.Scene {
                         ? "E  Wine"
                         : n.kind === "beer"
                           ? "E  Beer"
+                          : n.kind === "altar"
+                            ? "E  Pray"
                       : "";
       this.nearestHint!.setText(label);
       this.npcs.forEach((npc) => npc.setPrompt(n.id === npc.npcId, this.npcCanSpar(npc.npcId) ? "SPAR / E" : "E  Talk"));
@@ -1045,6 +1076,7 @@ export class LudusScene extends Phaser.Scene {
       if (it.kind === "trophy") marks.push({ x: it.x, y: it.y, color: 0xc4a060, kind: "trophy" });
       if (it.kind === "dice") marks.push({ x: it.x, y: it.y, color: 0xd4a84b, kind: "dice" });
       if (it.kind === "wine" || it.kind === "beer") marks.push({ x: it.x, y: it.y, color: 0xa33b2b, kind: "feast" });
+      if (it.kind === "altar") marks.push({ x: it.x, y: it.y, color: 0xe8c96a, kind: "shrine" });
     }
     bus.emit("minimap", {
       show: true,
@@ -1100,6 +1132,7 @@ export class LudusScene extends Phaser.Scene {
         gameState.persist();
         this.refreshRoost();
         this.refreshHall();
+        this.refreshShrine();
         bus.emit("toast", `${first.animalName} beaten — next house open`);
       }
     });
@@ -1119,6 +1152,7 @@ export class LudusScene extends Phaser.Scene {
       gameState.persist();
       this.refreshRoost();
       this.refreshHall();
+      this.refreshShrine();
       bus.emit("toast", "Circuit beaten — Rudis open");
     });
     this.add

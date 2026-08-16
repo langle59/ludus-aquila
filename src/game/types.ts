@@ -237,6 +237,7 @@ export interface SaveData {
   injured: boolean;
   weaponWins: Partial<Record<WeaponId, number>>;
   unlockedMastery: string[];
+  activePrayer: string | null;
 }
 
 export interface SettingsData {

@@ -391,4 +391,5 @@ export const AREA_HINTS: Record<string, string> = {
   dice: "The oval table. Rufus keeps a seat. Press E.",
   wine: "Wine in the mug. Press E.",
   beer: "Beer in the mug. Press E.",
+  altar: "The lararium. Press E to pray.",
 };

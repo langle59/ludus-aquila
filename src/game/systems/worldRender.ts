@@ -12,6 +12,7 @@ const VARIANT_BASES = new Set([
   "tile-sand-earth",
   "tile-dirt",
   "tile-stone",
+  "tile-shrine",
   "tile-wood",
   "tile-wood-pale",
   "tile-yard",
@@ -95,7 +96,10 @@ function paintDecor(scene: Phaser.Scene, built: BuiltMap, mood: "ludus" | "arena
       { x: 44, y: 6 },
       { x: 12, y: 14 },
       { x: 33, y: 14 },
-      { x: 12, y: 24 },
+      { x: 2, y: 20 },
+      { x: 12, y: 20 },
+      { x: 2, y: 29 },
+      { x: 12, y: 29 },
       { x: 30, y: 24 },
       { x: 37, y: 14 },
       { x: 44, y: 14 },
@@ -119,6 +123,8 @@ function paintDecor(scene: Phaser.Scene, built: BuiltMap, mood: "ludus" | "arena
     }
     placeLamp(scene, 5 * TILE_SIZE + 8, 6 * TILE_SIZE + 18);
     placeLamp(scene, 42 * TILE_SIZE + 16, 6 * TILE_SIZE + 18);
+    placeLamp(scene, 14 * TILE_SIZE + 8, 24 * TILE_SIZE + 16);
+    placeLamp(scene, 14 * TILE_SIZE + 8, 27 * TILE_SIZE + 16);
   } else {
     const torches = [
       { x: 4, y: 3 },

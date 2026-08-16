@@ -85,6 +85,7 @@ export class ArenaScene extends Phaser.Scene {
     this.spectators = [];
     this.cheerUntil = 0;
     this.favor = palBrought() ? 50 : 45;
+    if (gameState.save.activePrayer === "nemesis") this.favor = Math.max(this.favor, 60);
     this.houseTint = 0xffffff;
     this.firstBlood = false;
     this.beastSeenAlive = false;

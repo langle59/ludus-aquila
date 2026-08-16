@@ -223,6 +223,7 @@ export function generatePlaceholderAssets(scene: Phaser.Scene): void {
   makeFloorFamily(scene, "tile-sand", 0xd2b47a, 0xb89458, 0xe8d4a4, "sand");
   makeFloorFamily(scene, "tile-dirt", 0x9a7548, 0x7a5a32, 0xb89060, "dirt");
   makeFloorFamily(scene, "tile-stone", 0x8a8478, 0x6a6458, 0xa8a090, "flag");
+  makeFloorFamily(scene, "tile-shrine", 0xc4bcb0, 0x9a9488, 0xe0d8cc, "flag");
   makeFloorFamily(scene, "tile-wood", 0x7a4e2c, 0x5a3418, 0x9a6a42, "plank");
   makeFloorFamily(scene, "tile-wood-pale", 0x8a6240, 0x6a4428, 0xb08a5a, "plank");
   makeFloorFamily(scene, "tile-sand-coil", 0x6a7a48, 0x4a5a30, 0x8a9a60, "sand");
@@ -1801,6 +1802,58 @@ function makeInteriorProps(scene: Phaser.Scene): void {
       circ(ctx, 12 + i * 6, 10, 3, 0x6a6458);
       circ(ctx, 12 + i * 6, 10, 1, 0x8a8478);
     }
+  });
+  canvasTex(scene, "prop-lararium", 40, 56, (ctx) => {
+    px(ctx, 4, 48, 32, 8, 0x4a3018);
+    px(ctx, 6, 48, 28, 3, 0x6b4a28);
+    px(ctx, 8, 10, 24, 40, 0x5a3a18);
+    px(ctx, 10, 12, 20, 36, 0x3a2414);
+    px(ctx, 8, 10, 24, 4, 0x8a6a44);
+    px(ctx, 12, 6, 16, 6, 0x6b4a28);
+    px(ctx, 14, 2, 12, 6, COLORS.gold, 0.85);
+    px(ctx, 16, 0, 8, 4, 0xe8c96a);
+    circ(ctx, 20, 26, 7, 0xc4bcb0);
+    circ(ctx, 20, 24, 5, 0xe8dcc8);
+    px(ctx, 18, 22, 2, 2, 0x2a2218);
+    px(ctx, 22, 22, 2, 2, 0x2a2218);
+    px(ctx, 19, 28, 3, 2, 0x6a2420, 0.7);
+    px(ctx, 12, 38, 6, 6, 0xc4a66e);
+    px(ctx, 22, 38, 6, 6, 0xc4a66e);
+    circ(ctx, 12, 16, 3, 0xffc070, 0.8);
+    circ(ctx, 28, 16, 3, 0xffc070, 0.8);
+    px(ctx, 10, 44, 20, 2, COLORS.gold, 0.55);
+  });
+  canvasTex(scene, "prop-altar", 44, 28, (ctx) => {
+    px(ctx, 6, 18, 8, 10, 0x6a6458);
+    px(ctx, 30, 18, 8, 10, 0x6a6458);
+    px(ctx, 4, 8, 36, 14, 0x8a8478);
+    px(ctx, 6, 8, 32, 4, 0xc4bcb0);
+    px(ctx, 8, 12, 28, 2, COLORS.gold, 0.45);
+    oval(ctx, 16, 14, 5, 3, 0x6a2420);
+    oval(ctx, 28, 14, 4, 3, 0x4a5c6e);
+    circ(ctx, 22, 6, 3, 0xffc070, 0.75);
+  });
+  canvasTex(scene, "prop-niche-empty", 28, 40, (ctx) => {
+    px(ctx, 2, 4, 24, 34, 0x6a6458);
+    px(ctx, 4, 6, 20, 30, 0x4a4038);
+    px(ctx, 6, 8, 16, 24, 0x3a322c);
+    px(ctx, 2, 4, 24, 3, 0x8a8478);
+    px(ctx, 10, 34, 8, 4, 0x5a544c);
+  });
+  canvasTex(scene, "prop-niche-lit", 28, 40, (ctx) => {
+    px(ctx, 2, 4, 24, 34, 0x6a6458);
+    px(ctx, 4, 6, 20, 30, 0x4a4038);
+    px(ctx, 6, 8, 16, 24, 0x2a2218);
+    px(ctx, 2, 4, 24, 3, 0xc4a66e);
+    circ(ctx, 14, 18, 6, 0xc4bcb0);
+    circ(ctx, 14, 16, 4, 0xe8dcc8);
+    px(ctx, 12, 14, 2, 2, 0x2a2218);
+    px(ctx, 16, 14, 2, 2, 0x2a2218);
+    px(ctx, 8, 28, 4, 4, COLORS.gold, 0.7);
+    px(ctx, 16, 28, 4, 4, COLORS.gold, 0.7);
+    circ(ctx, 8, 12, 2, 0xffc070, 0.75);
+    circ(ctx, 20, 12, 2, 0xffc070, 0.75);
+    px(ctx, 10, 34, 8, 4, 0x5a544c);
   });
 }
 

@@ -14,6 +14,7 @@ import { makeBodyTexture } from "../systems/assets";
 import { SKILL_BRANCHES, skillsInBranch, type SkillDef } from "../data/skills";
 import { SHOP_ITEMS, SHOP_TABS, TUNIC_HEX, PLUME_HEX, CAPE_HEX, ownsCosmetic, shopUnlocked, shopLockHint, equippedId, displayTitle, lookWithItem, previewTitle, type ShopKind } from "../data/shop";
 import { palAnimalName, palBondHint, palBondProgress, palBrought, palCombatStats, palDisplayName, palNextHint, palSkillsInBranch, palTexture, palTier, palTintColor, palTintId, palTitle, palUnlocked, canUnlockPalSkill, hasPalSkill, unlockPalSkill, PAL_SKILL_BRANCHES, PAL_TINTS, rollPalName, setPalTint, togglePalBrought, type PalSkillDef } from "../data/pal";
+import { PATRONS, getPatron, patronUnlocked, patronLockHint, prayTo, prayerHudLine } from "../data/patrons";
 import { generateHouseName } from "../data/names";
 import { ACTION_LABELS, controlsHelpText, eventToKeyName, mergedKeybinds, prettyKey, trySetBind, type CombatAction } from "../systems/input";
 import { enterMenu } from "../systems/playFlow";
@@ -30,6 +31,7 @@ export class UIScene extends Phaser.Scene {
   private denariiLabel!: Phaser.GameObjects.Text;
   private titleLabel!: Phaser.GameObjects.Text;
   private objectiveLabel!: Phaser.GameObjects.Text;
+  private prayerLabel!: Phaser.GameObjects.Text;
   private bossWrap: Phaser.GameObjects.GameObject[] = [];
   private favorWrap: Phaser.GameObjects.GameObject[] = [];
   private favorMarker?: Phaser.GameObjects.Rectangle;
@@ -191,6 +193,19 @@ export class UIScene extends Phaser.Scene {
       .setScrollFactor(0)
       .setDepth(100);
 
+    this.prayerLabel = this.add
+      .text(GAME_WIDTH / 2, 46, "", {
+        fontFamily: "Cinzel, Georgia",
+        fontSize: "13px",
+        color: "#e8c96a",
+        backgroundColor: "#1a1210cc",
+        padding: { x: 12, y: 4 },
+      })
+      .setOrigin(0.5, 0)
+      .setScrollFactor(0)
+      .setDepth(100)
+      .setVisible(false);
+
     this.comboLabel = this.add
       .text(GAME_WIDTH / 2, 118, "", {
         fontFamily: "Cinzel, Georgia",
@@ -226,6 +241,7 @@ export class UIScene extends Phaser.Scene {
     bus.on("spar-available", this.setSparButton, this);
     bus.on("talk-available", this.setTalkButton, this);
     bus.on("shop", this.openShop, this);
+    bus.on("shrine", this.openShrine, this);
     bus.on("roost", this.openRoost, this);
     bus.on("dice", this.openTable, this);
     bus.on("table", this.openTable, this);
@@ -372,6 +388,7 @@ export class UIScene extends Phaser.Scene {
       bus.off("spar-available", this.setSparButton, this);
       bus.off("talk-available", this.setTalkButton, this);
       bus.off("shop", this.openShop, this);
+      bus.off("shrine", this.openShrine, this);
       bus.off("roost", this.openRoost, this);
       bus.off("dice", this.openTable, this);
       bus.off("table", this.openTable, this);
@@ -388,8 +405,9 @@ export class UIScene extends Phaser.Scene {
 
   update(): void {
     const s = gameState.save;
-    const hpW = 180 * Phaser.Math.Clamp(s.health / Math.max(1, s.stats.maxHealth), 0, 1);
-    const stW = 180 * Phaser.Math.Clamp(s.stamina / Math.max(1, s.stats.maxStamina), 0, 1);
+    const live = playerCombatStats();
+    const hpW = 180 * Phaser.Math.Clamp(s.health / Math.max(1, live.maxHealth), 0, 1);
+    const stW = 180 * Phaser.Math.Clamp(s.stamina / Math.max(1, live.maxStamina), 0, 1);
     this.hpFill.width = hpW;
     this.stamFill.width = stW;
     this.unguentFill.width = 180 * Phaser.Math.Clamp((s.unguent ?? 0) / UNGUENT_MAX, 0, 1);
@@ -402,6 +420,8 @@ export class UIScene extends Phaser.Scene {
     this.denariiLabel.setText(`${s.denarii} denarii`);
     this.titleLabel.setText(displayTitle());
     this.objectiveLabel.setText(currentObjectiveText());
+    const prayer = prayerHudLine();
+    this.prayerLabel.setText(prayer).setVisible(Boolean(prayer));
     this.musicMuteText?.setText(audio.musicMuteLabel());
     if (this.comboLabel.visible && this.time.now > this.comboHideAt) {
       this.comboLabel.setAlpha(Math.max(0, this.comboLabel.alpha - 0.08));
@@ -563,7 +583,7 @@ export class UIScene extends Phaser.Scene {
         .text(
           0,
           -10,
-          `${s.playerName}  ·  Lv ${s.level}  ·  ${s.reputation}\nXP ${Math.floor(s.xp)} / ${s.xpToNext}\nSkill points: ${s.statPoints}${hurt}\n\nHealth ${Math.round(live.maxHealth)}\nStamina ${Math.round(live.maxStamina)}\nUnguent vials ${s.unguent ?? 0} / 3\nAttack ${live.attack.toFixed(1)}\nDefense ${live.defense.toFixed(1)}\nAgility ${live.agility.toFixed(1)}${palLine}`,
+          `${s.playerName}  ·  Lv ${s.level}  ·  ${s.reputation}\nXP ${Math.floor(s.xp)} / ${s.xpToNext}\nSkill points: ${s.statPoints}${hurt}\n\nHealth ${Math.round(live.maxHealth)}\nStamina ${Math.round(live.maxStamina)}\nUnguent vials ${s.unguent ?? 0} / 3\nAttack ${live.attack.toFixed(1)}\nDefense ${live.defense.toFixed(1)}\nAgility ${live.agility.toFixed(1)}${s.activePrayer ? `\nPrayer  ${getPatron(s.activePrayer)?.name ?? s.activePrayer}` : ""}${palLine}`,
           { fontFamily: "Georgia", fontSize: "16px", color: "#e8dcc8", align: "center" },
         )
         .setOrigin(0.5);
@@ -2032,6 +2052,53 @@ export class UIScene extends Phaser.Scene {
       }
     });
     c.add([card, gem, name, status]);
+  }
+
+  openShrine(): void {
+    const c = this.box(720, 640, "SHRINE");
+    const active = getPatron(gameState.save.activePrayer);
+    c.add(
+      this.add
+        .text(0, -268, active ? `${active.name} walks with you.` : "No prayer. One blessing, until you fall.", {
+          fontFamily: "Georgia",
+          fontSize: "15px",
+          color: "#d4a84b",
+        })
+        .setOrigin(0.5),
+    );
+    PATRONS.forEach((p, i) => {
+      const y = -220 + i * 46;
+      const unlocked = patronUnlocked(p.id);
+      const selected = gameState.save.activePrayer === p.id;
+      const card = this.add
+        .rectangle(0, y, 620, 42, selected ? 0x3a281c : 0x1a1210, 0.96)
+        .setStrokeStyle(selected ? 2 : 1, selected ? COLORS.gold : unlocked ? 0x6a5a3a : 0x3a3028);
+      const name = this.add
+        .text(-292, y - 8, p.name, {
+          fontFamily: "Cinzel, Georgia",
+          fontSize: "16px",
+          color: unlocked ? "#e8dcc8" : "#6a5a4a",
+        })
+        .setOrigin(0, 0.5);
+      const detail = this.add
+        .text(-292, y + 10, unlocked ? p.blessing : patronLockHint(p), {
+          fontFamily: "Georgia",
+          fontSize: "13px",
+          color: selected ? "#8ecf6a" : unlocked ? "#d4a84b" : "#6a5a4a",
+        })
+        .setOrigin(0, 0.5);
+      c.add([card, name, detail]);
+      if (unlocked) {
+        card.setInteractive({ useHandCursor: true });
+        card.on("pointerover", () => card.setFillStyle(0x4a3424));
+        card.on("pointerout", () => card.setFillStyle(selected ? 0x3a281c : 0x1a1210));
+        card.on("pointerdown", () => {
+          prayTo(p.id);
+          this.closeOverlay();
+        });
+      }
+    });
+    this.addBtn(c, 0, 280, "Close", () => this.closeOverlay(), 180);
   }
 
   openArmory(): void {

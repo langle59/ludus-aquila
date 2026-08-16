@@ -6,6 +6,7 @@ import { TOURNAMENT_HOUSE, TOURNAMENT_ORDER } from "../data/tournament";
 import { getSkill } from "../data/skills";
 import { SHOP_ITEMS, shopUnlocked } from "../data/shop";
 import { grantPalPoint, grantPalXp, palAnimalName, palBrought, palTier, palTitle, palUnlocked } from "../data/pal";
+import { applyPrayerStats, prayerDodgeIframes, prayerMoveSpeed, clearPrayer } from "../data/patrons";
 import { recordWeaponWin } from "../data/weapons";
 import { bus } from "./bus";
 import { completeNight, ensureNight, arenaWeapon } from "./nights";
@@ -39,7 +40,7 @@ export function playerCombatStats(): FighterStats {
     s.maxHealth -= 8;
     s.attack -= 0.5;
   }
-  return s;
+  return applyPrayerStats(s);
 }
 
 export function clearInjury(): boolean {
@@ -72,11 +73,11 @@ export function getSkillMods(): SkillMods {
     attackStamina: hasSkill("opening_cut") ? -2 : 0,
     specialMult: hasSkill("killing_blow") ? 1.35 : 1,
     dodgeCost: hasSkill("low_stance") ? -6 : 0,
-    dodgeIframes: hasSkill("fox_step") ? 140 : 0,
+    dodgeIframes: (hasSkill("fox_step") ? 140 : 0) + prayerDodgeIframes(),
     dodgeSpeed: hasSkill("fox_step") ? 50 : 0,
     regen: (hasSkill("second_wind") ? 10 : 0) + (hasSkill("deep_breath") ? 6 : 0),
     blockBonus: hasSkill("iron_wall") ? 0.14 : 0,
-    moveSpeed: hasSkill("quick_step") ? 14 : 0,
+    moveSpeed: (hasSkill("quick_step") ? 14 : 0) + prayerMoveSpeed(),
     perfectDodgeWindow: hasSkill("ghost_step") ? 50 : 0,
     comboStamina: hasSkill("relentless") ? 3 : 0,
     blockChip: hasSkill("guarded_heart") ? 0.5 : 1,
@@ -134,8 +135,8 @@ export function addXp(amount: number): { leveled: boolean; newLevel: number } {
     s.stats.defense += 0.4;
     s.stats.agility += 0.3;
     s.statPoints += 1;
-    s.health = s.stats.maxHealth - (s.injured ? 8 : 0);
-    s.stamina = s.stats.maxStamina;
+    s.health = s.stats.maxHealth - (s.injured ? 8 : 0) + (s.activePrayer === "silvanus" ? 12 : 0);
+    s.stamina = s.stats.maxStamina + (s.activePrayer === "lares" ? 8 : 0);
     s.dummyHits = 0;
     leveled = true;
     gained += 1;
@@ -245,6 +246,8 @@ export function applyArenaVictory(opponentId: string): { denarii: number; xp: nu
         ? `Weapon night. The editor pays extra. +${finishedNight.bonusDenarii} denarii.`
         : `Exhibition. The editor pays extra. +${finishedNight.bonusDenarii} denarii.`;
   }
+  if (s.activePrayer === "victoria") xp = Math.round(xp * 1.15);
+  if (s.activePrayer === "fortuna") denarii = Math.round(denarii * 1.2);
   addDenarii(denarii);
   const { leveled } = addXp(xp);
   recordWeaponWin(arenaWeapon());
@@ -332,6 +335,10 @@ export function applyArenaDefeat(spared = false): void {
   if (!spared) {
     addDenarii(-5);
     grantSteelScar();
+    if (gameState.save.activePrayer) {
+      clearPrayer();
+      bus.emit("toast", "The prayer fades.");
+    }
   }
   if (!spared || nightLoss) {
     gameState.save.injured = true;
@@ -414,13 +421,13 @@ export function drinkFeast(kind: "wine" | "beer"): "ok" | "empty" {
   if (kind === "wine") gameState.feastWineDrunk = true;
   else gameState.feastBeerDrunk = true;
   const s = gameState.save;
-  const maxH = s.stats.maxHealth - (s.injured ? 8 : 0);
-  s.health = Math.min(maxH, s.health + 28);
-  s.stamina = Math.min(s.stats.maxStamina, s.stamina + 22);
+  const live = playerCombatStats();
+  s.health = Math.min(live.maxHealth, s.health + 28);
+  s.stamina = Math.min(live.maxStamina, s.stamina + 22);
   if (s.injured) {
     s.injured = false;
-    const extra = s.stats.maxHealth - maxH;
-    s.health = Math.min(s.stats.maxHealth, s.health + extra);
+    const healed = playerCombatStats();
+    s.health = Math.min(healed.maxHealth, s.health + (healed.maxHealth - live.maxHealth));
     bus.emit("skills-changed");
   }
   gameState.persist();

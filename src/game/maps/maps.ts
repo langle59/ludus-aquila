@@ -16,6 +16,7 @@ export const LUDUS_META: MapDef = {
   labels: [
     { x: 23.5, y: 2.2, text: "LANISTA" },
     { x: 4.5, y: 13.35, text: "ROOST" },
+    { x: 7.5, y: 19.4, text: "SHRINE" },
     { x: 6, y: 7.2, text: "ARMORY" },
     { x: 42, y: 7.2, text: "QUARTERS" },
     { x: 40.5, y: 13.35, text: "HALL" },
@@ -133,6 +134,8 @@ export function buildLudus(): BuiltMap {
   addRect(tiles, solids, "tile-wall", 1, 19, 8, 19, true);
   addRect(tiles, solids, "tile-wood", 8, 16, 8, 17);
   solids.push(...popSolids(solids, 8, 16, 8, 17));
+  addRect(tiles, solids, "tile-wood", 4, 19, 5, 19);
+  solids.push(...popSolids(solids, 4, 19, 5, 19));
   spawns.pal = cell(4, 16);
   props.push({ kind: "perch", ...cell(3, 15) });
   props.push({ kind: "nest", ...cell(4, 16) });
@@ -211,9 +214,23 @@ export function buildLudus(): BuiltMap {
   spawns.titus = cell(18, 21);
   spawns.rufus = cell(29, 21);
 
-  props.push({ kind: "fountain", ...cell(6, 22) });
-  props.push({ kind: "crate", ...cell(9, 23) });
-  props.push({ kind: "crate", ...cell(10, 24) });
+  addRect(tiles, solids, "tile-shrine", 1, 20, 14, 29);
+  addRect(tiles, solids, "tile-mosaic", 5, 23, 10, 26);
+  addRect(tiles, solids, "tile-wall", 1, 20, 14, 20, true);
+  addRect(tiles, solids, "tile-wall", 1, 29, 14, 29, true);
+  addRect(tiles, solids, "tile-wall", 14, 20, 14, 29, true);
+  addRect(tiles, solids, yardBanner, 2, 20, 3, 20, true);
+  addRect(tiles, solids, yardBanner, 12, 20, 13, 20, true);
+  addRect(tiles, solids, "tile-shrine", 4, 20, 5, 20);
+  solids.push(...popSolids(solids, 4, 20, 5, 20));
+  addRect(tiles, solids, "tile-shrine", 14, 25, 14, 26);
+  solids.push(...popSolids(solids, 14, 25, 14, 26));
+  addRect(tiles, solids, "tile-stone", 15, 25, 15, 26);
+  addRect(tiles, solids, "tile-dirt", 16, 22, 16, 26);
+  popSolids(solids, 16, 22, 16, 26);
+  props.push({ kind: "lararium", ...cell(2, 25) });
+  props.push({ kind: "altar", ...cell(3, 25) });
+  spawns.shrine = cell(2, 25);
 
   addRect(tiles, solids, "tile-stone", 1, 31, 46, 34);
   addRect(tiles, solids, yardBanner, 2, 31, 3, 31, true);
@@ -233,6 +250,10 @@ export function buildLudus(): BuiltMap {
 
 export function inFeastTiles(tx: number, ty: number): boolean {
   return tx >= 32 && tx <= 46 && ty >= 22 && ty <= 29;
+}
+
+export function inShrineTiles(tx: number, ty: number): boolean {
+  return tx >= 1 && tx <= 14 && ty >= 20 && ty <= 29;
 }
 
 function popSolids(
