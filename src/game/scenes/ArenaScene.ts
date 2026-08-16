@@ -6,6 +6,7 @@ import { audio } from "../systems/audio";
 import { paintMap, labelMap } from "../systems/worldRender";
 import { arenaMetaFor, buildArena } from "../maps/maps";
 import { Fighter, attachHpBar } from "../entities/Fighter";
+import { WorldProp } from "../entities/World";
 import { ArenaBeast, type BeastKind } from "../entities/Beast";
 import { playerLook } from "../data/shop";
 import { CombatAI } from "../systems/ai";
@@ -64,6 +65,16 @@ export class ArenaScene extends Phaser.Scene {
     super("ArenaScene");
   }
 
+  init(): void {
+    this.ended = false;
+    this.resolving = false;
+    this.awaitingJudgment = false;
+    this.blockingHeld = false;
+    this.beast = undefined;
+    this.pal = undefined;
+    this.spectators = [];
+  }
+
   create(): void {
     this.ended = false;
     this.resolving = false;
@@ -90,11 +101,12 @@ export class ArenaScene extends Phaser.Scene {
     const solids = paintMap(this, built, "arena");
     labelMap(this, arenaMetaFor(house.id).labels);
     this.cameras.main.setBounds(0, -HUD_CAM_PAD, built.cols * TILE_SIZE, built.rows * TILE_SIZE + HUD_CAM_PAD);
+    const pad = house.id === "serpens" ? 5 : 4;
     this.sand = {
-      x0: 4 * TILE_SIZE,
-      y0: 4 * TILE_SIZE,
-      x1: (built.cols - 4) * TILE_SIZE,
-      y1: (built.rows - 4) * TILE_SIZE,
+      x0: pad * TILE_SIZE,
+      y0: pad * TILE_SIZE,
+      x1: (built.cols - pad) * TILE_SIZE,
+      y1: (built.rows - pad) * TILE_SIZE,
     };
     const houseTint = houseCrowdTint(house.id);
     this.houseTint = houseTint;
@@ -145,7 +157,10 @@ export class ArenaScene extends Phaser.Scene {
               : beastKind === "serpent"
                 ? 70
                 : 56;
-      this.beast = new ArenaBeast(this, this.enemy.x + spawnPad, this.enemy.y + 10, beastKind);
+      const margin = beastKind === "elephant" ? 56 : 44;
+      const bx = Phaser.Math.Clamp(this.enemy.x + spawnPad, this.sand.x0 + margin, this.sand.x1 - margin);
+      const by = Phaser.Math.Clamp(this.enemy.y + 10, this.sand.y0 + margin, this.sand.y1 - margin);
+      this.beast = new ArenaBeast(this, bx, by, beastKind);
       this.beastSeenAlive = true;
       this.physics.add.collider(this.beast, solids);
       this.physics.add.collider(this.beast, this.player);
@@ -169,6 +184,22 @@ export class ArenaScene extends Phaser.Scene {
       if (this.beast) this.physics.add.collider(this.pal, this.beast);
     }
 
+    const propTex: Record<string, string> = {
+      column: "prop-column",
+      crate: "prop-crate",
+      barrel: "prop-barrel",
+    };
+    for (const p of built.props) {
+      const tex = propTex[p.kind];
+      if (!tex) continue;
+      const prop = new WorldProp(this, p.x, p.y, p.kind, tex, true);
+      if (house.id === "leo") prop.setTint(0xd4a84b);
+      this.physics.add.collider(this.player, prop);
+      this.physics.add.collider(this.enemy, prop);
+      if (this.beast) this.physics.add.collider(this.beast, prop);
+      if (this.pal) this.physics.add.collider(this.pal, prop);
+    }
+
     this.combat = new CombatInput(this);
     this.input.keyboard?.addCapture([Phaser.Input.Keyboard.KeyCodes.SPACE]);
     this.game.canvas.focus();
@@ -178,6 +209,7 @@ export class ArenaScene extends Phaser.Scene {
     bus.emit("favor-show", { them: houseTint });
     bus.emit("favor", this.favor);
     if (this.pal) bus.emit("pal-hp-show");
+    audio.setMusicMood("arena");
     audio.setCrowd(true);
     audio.roar("hit");
     bus.on("player-attack", this.doAttack, this);
@@ -211,6 +243,7 @@ export class ArenaScene extends Phaser.Scene {
       bus.off("player-snared", this.onPlayerSnared, this);
       bus.off("judgment-pick", this.onJudgmentPick, this);
       audio.setCrowd(false);
+      audio.setMusicMood("yard");
     });
   }
 
@@ -784,12 +817,17 @@ export class ArenaScene extends Phaser.Scene {
         action: chain ? "Next bout" : "Return to the ludus",
       });
     } else {
+      const night = gameState.pendingNight;
       applyArenaDefeat(missio);
       bus.emit("result", {
         title: missio ? "Spared" : "Defeat",
-        body: missio
-          ? `${fighter.defeat.join("\n")}\n\nThe crowd wants you back. Marcellus' men drag you from the sand.\nYou wake in the ludus. Nothing you earned is lost.`
-          : `${fighter.defeat.join("\n")}\n\nYou fall. The stands go quiet.\nYou wake in the ludus. A few denarii are lost. The fall left a mark — equip scars in Quarters.`,
+        body: night
+          ? missio
+            ? `${fighter.defeat.join("\n")}\n\nThe editor's night still marked you. You wake hurt. Rest in Quarters, or drink unguent.`
+            : `${fighter.defeat.join("\n")}\n\nYou fall under the lamps. You wake hurt. A few denarii are lost.`
+          : missio
+            ? `${fighter.defeat.join("\n")}\n\nThe crowd wants you back. Marcellus' men drag you from the sand.\nYou wake in the ludus. Nothing you earned is lost.`
+            : `${fighter.defeat.join("\n")}\n\nYou fall. The stands go quiet.\nYou wake in the ludus. A few denarii are lost. The fall left a mark — equip scars in Quarters.`,
         action: "Return to the ludus",
       });
     }

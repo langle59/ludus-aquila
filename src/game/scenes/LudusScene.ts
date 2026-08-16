@@ -60,11 +60,32 @@ export class LudusScene extends Phaser.Scene {
     super("LudusScene");
   }
 
+  init(): void {
+    this.npcs = [];
+    this.dummies = [];
+    this.interactables = [];
+    this.roostGfx = [];
+    this.trophyGfx = [];
+    this.sparring = null;
+    this.hiddenNpc = undefined;
+    this.awaitingSpar = null;
+    this.tableLock = undefined;
+    this.palSprite = undefined;
+    this.palNameTag = undefined;
+    this.palShadow = undefined;
+    this.nearestHint = undefined;
+    this.blockingHeld = false;
+    this.dummyCapTold = false;
+    this.roostIdleArmed = false;
+    this.built = buildLudus();
+  }
+
   create(): void {
     this.solids = paintMap(this, this.built, "ludus");
     labelMap(this, LUDUS_META.labels);
     this.cameras.main.setBounds(0, -HUD_CAM_PAD, this.built.cols * TILE_SIZE, this.built.rows * TILE_SIZE + HUD_CAM_PAD);
     this.cameras.main.setZoom(1);
+    audio.setMusicMood("yard");
 
     const spawn = gameState.save.position.x
       ? { x: gameState.save.position.x, y: gameState.save.position.y }
@@ -119,6 +140,7 @@ export class LudusScene extends Phaser.Scene {
       this.player.revive(true);
       gameState.restoreVitals();
       bus.emit("minimap-scene", "ludus");
+      audio.setMusicMood("yard");
       this.refreshHall();
       this.refreshRoost();
       if (gameState.save.freedomWon) ensureNight();
@@ -578,7 +600,7 @@ export class LudusScene extends Phaser.Scene {
       return Phaser.Math.Distance.Between(this.player.x, this.player.y, npc.x, npc.y) < 90;
     });
     if (nearby) this.startSpar(nearby.npcId);
-    else bus.emit("toast", "Stand next to Titus or Rufus first");
+    else bus.emit("toast", "Stand next to Titus, Rufus, Brom, or Aelia first");
   };
 
   private onYield = (): void => {

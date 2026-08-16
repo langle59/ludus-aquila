@@ -2,6 +2,7 @@ import type { TunicColor } from "../types";
 import type { BodyStyle } from "../systems/assets";
 import { COLORS } from "../config";
 import { gameState } from "../state/GameState";
+import { getRival } from "./houses";
 
 export type ShopKind = "tunic" | "plume" | "helm" | "cape" | "scar" | "title";
 
@@ -21,7 +22,6 @@ export const TUNIC_HEX: Record<string, number> = {
   bronze: 0xb08a3a,
   midnight: 0x3a2a58,
   sea: 0x2f6b62,
-  fox: COLORS.foxOrange,
   ivory: 0xe8dcc8,
   obsidian: 0x1c1410,
   sand: 0xc4a66e,
@@ -32,7 +32,6 @@ export const TUNIC_HEX: Record<string, number> = {
   lion: COLORS.lionGold,
   bull: COLORS.bullRed,
   boar: COLORS.boarHide,
-  raven: COLORS.ravenBlack,
   tiger: COLORS.tigerOrange,
   rhino: COLORS.rhinoHide,
   elephant: COLORS.elephantGrey,
@@ -42,7 +41,6 @@ export const PLUME_HEX: Record<string, number> = {
   gold: COLORS.gold,
   crimson: COLORS.crimson,
   white: COLORS.white,
-  fox: COLORS.foxOrange,
   emerald: 0x3a8a5a,
   sky: 0x5a8ab8,
   bronze: 0xb08a3a,
@@ -52,7 +50,6 @@ export const PLUME_HEX: Record<string, number> = {
   lion: 0xe8c96a,
   bull: 0xc44a3a,
   boar: 0x8a6850,
-  raven: 0x6a6088,
   tiger: 0xe07020,
   rhino: 0xa8a090,
   elephant: 0xc8c4b8,
@@ -62,7 +59,6 @@ export const CAPE_HEX: Record<string, number> = {
   none: 0,
   crimson: COLORS.crimson,
   ivory: 0xe8dcc8,
-  fox: COLORS.foxOrange,
   bronze: 0xb08a3a,
   bear: COLORS.bearBrown,
   wolf: COLORS.wolfGrey,
@@ -70,7 +66,6 @@ export const CAPE_HEX: Record<string, number> = {
   lion: COLORS.lionGold,
   bull: COLORS.bullRed,
   boar: COLORS.boarHide,
-  raven: COLORS.ravenBlack,
   tiger: COLORS.tigerOrange,
   rhino: COLORS.rhinoHide,
   elephant: COLORS.elephantGrey,
@@ -80,7 +75,6 @@ export const TITLE_TEXT: Record<string, string> = {
   none: "",
   yard: "of the Yard",
   eagle: "of the Eagle",
-  foxbane: "Foxbane",
   arena: "of the Arena",
   hide: "of the Hide",
   pack: "of the Pack",
@@ -88,7 +82,6 @@ export const TITLE_TEXT: Record<string, string> = {
   pride: "of the Pride",
   horn: "of the Horn",
   bristle: "of the Bristle",
-  night: "of the Night",
   stripe: "of the Stripe",
   tusk: "of the Tusk",
   ivory: "of the Ivory",
@@ -182,10 +175,19 @@ export function ownsCosmetic(id: string): boolean {
   return (gameState.save.ownedCosmetics ?? []).includes(id);
 }
 
+function pledgedOwnsOpponent(opponentId: string): boolean {
+  const pledged = gameState.save.playerHouse;
+  if (!pledged) return false;
+  return getRival(opponentId)?.house.id === pledged;
+}
+
 export function shopUnlocked(item: ShopItem): boolean {
   if (item.requiresFlag === "freedomWon") return Boolean(gameState.save.freedomWon);
   if (item.requiresFlag && !gameState.save.storyFlags[item.requiresFlag]) return false;
-  if (item.requiresOpponent) return gameState.save.defeatedOpponents.includes(item.requiresOpponent);
+  if (item.requiresOpponent) {
+    if (gameState.save.defeatedOpponents.includes(item.requiresOpponent)) return true;
+    return pledgedOwnsOpponent(item.requiresOpponent);
+  }
   return true;
 }
 
@@ -193,7 +195,11 @@ export function shopLockHint(item: ShopItem): string {
   if (item.requiresFlag === "freedomWon") return "Win the Rudis first.";
   if (item.requiresFlag?.startsWith("steelScar")) return "Lose an arena fight without being spared.";
   if (item.requiresFlag) return "That mark is still locked.";
-  return "Win the matching arena fight first.";
+  if (item.requiresOpponent) {
+    if (pledgedOwnsOpponent(item.requiresOpponent)) return "Yours by pledge.";
+    return "Win that house's fight first.";
+  }
+  return "Win that house's fight first.";
 }
 
 export function lookWithItem(itemId: string | null): ReturnType<typeof playerLook> {

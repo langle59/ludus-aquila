@@ -3,6 +3,7 @@ import { GAME_HEIGHT, GAME_WIDTH, COLORS } from "../config";
 import { gameState, type SaveSlotId, type SaveSlotSummary } from "../state/GameState";
 import { audio } from "../systems/audio";
 import { controlsHelpText } from "../systems/input";
+import { enterLudus } from "../systems/playFlow";
 
 export class MenuScene extends Phaser.Scene {
   private overlay: "none" | "settings" | "controls" | "files" | "confirm" = "none";
@@ -396,7 +397,6 @@ export class MenuScene extends Phaser.Scene {
 
   private continueSlot(slot: SaveSlotId): void {
     if (!gameState.loadSlot(slot)) return;
-    this.scene.launch("UIScene");
-    this.scene.start("LudusScene");
+    enterLudus(this);
   }
 }

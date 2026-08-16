@@ -2332,7 +2332,7 @@ function drawBody(ctx: Ctx, w: number, h: number, tunic: number, accent: number,
   const cx = w / 2;
   const s = h / 58;
   const skin = style === "heavy" ? mix(SKIN, 0x8a5a30, 0.15) : SKIN;
-  const wide = style === "heavy" ? 1.18 : style === "lanista" ? 1.08 : 1;
+  const wide = style === "heavy" ? 1.18 : style === "lanista" ? 1.08 : style === "fox" ? 0.86 : 1;
 
   px(ctx, cx - 7 * s * wide, S(42, h), 5 * s, 12 * s, 0x3a2a18);
   px(ctx, cx + 2 * s * wide, S(42, h), 5 * s, 12 * s, 0x3a2a18);

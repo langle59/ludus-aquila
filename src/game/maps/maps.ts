@@ -223,21 +223,96 @@ export function buildArena(houseId = "serpens"): BuiltMap {
   addRect(tiles, solids, "tile-wall", 0, rows - 1, cols - 1, rows - 1, true);
   addRect(tiles, solids, "tile-wall", 0, 0, 0, rows - 1, true);
   addRect(tiles, solids, "tile-wall", cols - 1, 0, cols - 1, rows - 1, true);
-  const banner = houseBannerTex(houseId);
+  const banner = houseId === "rudis" ? "tile-banner-red" : houseBannerTex(houseId);
   addRect(tiles, solids, banner, 1, 1, cols - 2, 1);
   addRect(tiles, solids, banner, 1, rows - 2, cols - 2, rows - 2);
-  addRect(tiles, solids, "tile-wall", 2, 2, cols - 3, 2, true);
-  addRect(tiles, solids, "tile-wall", 2, rows - 3, cols - 3, rows - 3, true);
-  addRect(tiles, solids, "tile-wall", 2, 2, 2, rows - 3, true);
-  addRect(tiles, solids, "tile-wall", cols - 3, 2, cols - 3, rows - 3, true);
-  addRect(tiles, solids, "tile-sand", 3, 3, cols - 4, rows - 4);
 
-  spawns.player = cell(16, 16);
-  spawns.enemy = cell(16, 6);
-  props.push({ kind: "column", ...cell(5, 5) });
-  props.push({ kind: "column", ...cell(26, 5) });
-  props.push({ kind: "column", ...cell(5, 16) });
-  props.push({ kind: "column", ...cell(26, 16) });
+  const family =
+    houseId === "serpens"
+      ? "coil"
+      : houseId === "lupus" || houseId === "tigris"
+        ? "hunt"
+        : houseId === "aper" || houseId === "taurus" || houseId === "rhinoceros"
+          ? "charge"
+          : houseId === "leo"
+            ? "pride"
+            : houseId === "ursus" || houseId === "elephas"
+              ? "slam"
+              : "open";
+
+  if (family === "coil") {
+    addRect(tiles, solids, "tile-wall", 3, 3, cols - 4, 3, true);
+    addRect(tiles, solids, "tile-wall", 3, rows - 4, cols - 4, rows - 4, true);
+    addRect(tiles, solids, "tile-wall", 3, 3, 3, rows - 4, true);
+    addRect(tiles, solids, "tile-wall", cols - 4, 3, cols - 4, rows - 4, true);
+    addRect(tiles, solids, "tile-sand", 4, 4, cols - 5, rows - 5);
+    spawns.player = cell(16, 15);
+    spawns.enemy = cell(16, 7);
+    props.push({ kind: "column", ...cell(8, 7) });
+    props.push({ kind: "column", ...cell(23, 7) });
+    props.push({ kind: "column", ...cell(8, 14) });
+    props.push({ kind: "column", ...cell(23, 14) });
+  } else if (family === "charge") {
+    addRect(tiles, solids, "tile-wall", 2, 2, cols - 3, 2, true);
+    addRect(tiles, solids, "tile-wall", 2, rows - 3, cols - 3, rows - 3, true);
+    addRect(tiles, solids, "tile-wall", 2, 2, 2, rows - 3, true);
+    addRect(tiles, solids, "tile-wall", cols - 3, 2, cols - 3, rows - 3, true);
+    addRect(tiles, solids, "tile-sand", 3, 3, cols - 4, rows - 4);
+    spawns.player = cell(16, 17);
+    spawns.enemy = cell(16, 5);
+    props.push({ kind: "column", ...cell(4, 8) });
+    props.push({ kind: "column", ...cell(27, 8) });
+    props.push({ kind: "column", ...cell(4, 13) });
+    props.push({ kind: "column", ...cell(27, 13) });
+  } else if (family === "slam") {
+    addRect(tiles, solids, "tile-wall", 2, 2, cols - 3, 2, true);
+    addRect(tiles, solids, "tile-wall", 2, rows - 3, cols - 3, rows - 3, true);
+    addRect(tiles, solids, "tile-wall", 2, 2, 2, rows - 3, true);
+    addRect(tiles, solids, "tile-wall", cols - 3, 2, cols - 3, rows - 3, true);
+    addRect(tiles, solids, "tile-sand", 3, 3, cols - 4, rows - 4);
+    spawns.player = cell(16, 14);
+    spawns.enemy = cell(16, 8);
+    props.push({ kind: "column", ...cell(6, 6) });
+    props.push({ kind: "column", ...cell(25, 6) });
+    props.push({ kind: "column", ...cell(6, 15) });
+    props.push({ kind: "column", ...cell(25, 15) });
+    props.push({ kind: "crate", ...cell(5, 10) });
+    props.push({ kind: "crate", ...cell(26, 10) });
+    props.push({ kind: "barrel", ...cell(5, 12) });
+    props.push({ kind: "barrel", ...cell(26, 12) });
+  } else if (family === "pride") {
+    addRect(tiles, solids, "tile-wall", 2, 2, cols - 3, 2, true);
+    addRect(tiles, solids, "tile-wall", 2, rows - 3, cols - 3, rows - 3, true);
+    addRect(tiles, solids, "tile-wall", 2, 2, 2, rows - 3, true);
+    addRect(tiles, solids, "tile-wall", cols - 3, 2, cols - 3, rows - 3, true);
+    addRect(tiles, solids, "tile-sand", 3, 3, cols - 4, rows - 4);
+    spawns.player = cell(16, 16);
+    spawns.enemy = cell(16, 6);
+    props.push({ kind: "column", ...cell(8, 6) });
+    props.push({ kind: "column", ...cell(23, 6) });
+    props.push({ kind: "column", ...cell(8, 15) });
+    props.push({ kind: "column", ...cell(23, 15) });
+  } else if (family === "hunt") {
+    addRect(tiles, solids, "tile-wall", 2, 2, cols - 3, 2, true);
+    addRect(tiles, solids, "tile-wall", 2, rows - 3, cols - 3, rows - 3, true);
+    addRect(tiles, solids, "tile-wall", 2, 2, 2, rows - 3, true);
+    addRect(tiles, solids, "tile-wall", cols - 3, 2, cols - 3, rows - 3, true);
+    addRect(tiles, solids, "tile-sand", 3, 3, cols - 4, rows - 4);
+    spawns.player = cell(16, 16);
+    spawns.enemy = cell(16, 6);
+    props.push({ kind: "column", ...cell(4, 10) });
+    props.push({ kind: "column", ...cell(27, 10) });
+    props.push({ kind: "column", ...cell(4, 12) });
+    props.push({ kind: "column", ...cell(27, 12) });
+  } else {
+    addRect(tiles, solids, "tile-wall", 2, 2, cols - 3, 2, true);
+    addRect(tiles, solids, "tile-wall", 2, rows - 3, cols - 3, rows - 3, true);
+    addRect(tiles, solids, "tile-wall", 2, 2, 2, rows - 3, true);
+    addRect(tiles, solids, "tile-wall", cols - 3, 2, cols - 3, rows - 3, true);
+    addRect(tiles, solids, "tile-sand", 3, 3, cols - 4, rows - 4);
+    spawns.player = cell(16, 16);
+    spawns.enemy = cell(16, 6);
+  }
 
   return { cols, rows, solids, spawns, props, tiles };
 }

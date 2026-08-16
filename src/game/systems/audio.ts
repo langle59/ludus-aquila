@@ -22,6 +22,7 @@ class AudioSystem {
   private ctx: AudioContext | null = null;
   private musicTimer: number | null = null;
   private musicOn = false;
+  private musicMood: "yard" | "arena" = "yard";
   private stepCooldown = 0;
   private hallOn = false;
   private hallSource: AudioBufferSourceNode | null = null;
@@ -344,29 +345,36 @@ class AudioSystem {
     }, 300);
   }
 
+  setMusicMood(mood: "yard" | "arena"): void {
+    this.musicMood = mood;
+  }
+
   startMusic(): void {
     if (this.musicOn) return;
     const ctx = this.ensure();
     if (!ctx) return;
     this.musicOn = true;
-    const notes = [196, 233, 262, 196, 175, 196, 233, 294];
+    const yardNotes = [175, 196, 220, 196, 165, 175, 196, 220];
+    const arenaNotes = [196, 262, 330, 392, 330, 262, 196, 294];
     let i = 0;
     const tick = () => {
       if (!this.musicOn || !this.ctx) return;
       const vol = gameState.settings.musicVolume;
+      const arena = this.musicMood === "arena";
       if (vol > 0.01 && !gameState.settings.musicMuted) {
         const o = this.ctx.createOscillator();
         const g = this.ctx.createGain();
-        o.type = "triangle";
+        o.type = arena ? "square" : "triangle";
+        const notes = arena ? arenaNotes : yardNotes;
         o.frequency.value = notes[i % notes.length];
-        g.gain.value = 0.04 * vol;
+        g.gain.value = (arena ? 0.038 : 0.022) * vol;
         o.connect(g);
         g.connect(this.ctx.destination);
         o.start();
-        o.stop(this.ctx.currentTime + 0.35);
+        o.stop(this.ctx.currentTime + (arena ? 0.26 : 0.5));
       }
       i += 1;
-      this.musicTimer = window.setTimeout(tick, 420);
+      this.musicTimer = window.setTimeout(tick, arena ? 300 : 560);
     };
     tick();
   }

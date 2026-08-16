@@ -3,6 +3,7 @@ import { generatePlaceholderAssets } from "../systems/assets";
 import { gameState } from "../state/GameState";
 import { audio } from "../systems/audio";
 import { skipTutorial } from "../systems/objectives";
+import { enterLudus } from "../systems/playFlow";
 
 export class BootScene extends Phaser.Scene {
   constructor() {
@@ -43,11 +44,7 @@ export class BootScene extends Phaser.Scene {
       gameState.setActiveSlot(1);
       gameState.startNew("Valens", "crimson");
       if (skip) skipTutorial();
-      const mgr = this.scene.manager;
-      mgr.stop("MenuScene");
-      mgr.stop("CharacterCreateScene");
-      mgr.start("LudusScene");
-      mgr.start("UIScene");
+      enterLudus(this);
     };
 
     this.scene.start("MenuScene");

@@ -7,6 +7,7 @@ import { makeBodyTexture } from "../systems/assets";
 import { TUNIC_HEX } from "../entities/World";
 import { houseCreateTunics, sortedHouses } from "../data/houses";
 import { generateHouseName } from "../data/names";
+import { enterLudus } from "../systems/playFlow";
 
 const TUNIC_SWATCH_LABEL: Record<TunicColor, string> = {
   crimson: "crimson",
@@ -255,7 +256,6 @@ export class CharacterCreateScene extends Phaser.Scene {
   private begin(): void {
     audio.sfx("ui");
     gameState.startNew(this.nameValue || "Valens", this.tunic, this.houseId);
-    this.scene.launch("UIScene");
-    this.scene.start("LudusScene");
+    enterLudus(this);
   }
 }

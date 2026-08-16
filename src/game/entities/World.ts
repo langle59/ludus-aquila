@@ -47,6 +47,11 @@ export class WorldProp extends Phaser.Physics.Arcade.Image {
     scene.add.existing(this);
     scene.physics.add.existing(this, true);
     this.setDepth(y);
+    if (kind === "column") {
+      this.setOrigin(0.5, 1);
+      this.setSize(18, 14);
+      this.setOffset(9, 58);
+    }
     if (kind === "rack") this.setSize(30, 16);
     if (kind === "crate") this.setSize(22, 16);
     if (kind === "fountain") this.setSize(28, 20);

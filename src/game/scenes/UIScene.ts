@@ -1,13 +1,13 @@
 import Phaser from "phaser";
-import { COLORS, GAME_HEIGHT, GAME_WIDTH, UNGUENT_COST, UNGUENT_MAX } from "../config";
+import { COLORS, GAME_HEIGHT, GAME_WIDTH, REST_COST, UNGUENT_COST, UNGUENT_MAX } from "../config";
 import { gameState } from "../state/GameState";
 import { bus } from "../systems/bus";
 import { currentObjectiveText } from "../systems/objectives";
 import { WEAPON_ORDER, getWeapon, masteryHint, masteryLevel, weaponIconKey } from "../data/weapons";
 import { getHouse, houseTitleColor, isTournamentId } from "../data/houses";
 import { TOURNAMENT_HOUSE } from "../data/tournament";
-import { isOpponentUnlocked, canUnlockSkill, unlockSkill, hasSkill, buyCosmetic, buyUnguent, isHouseUnlocked, houseLockHint, rivalHouses, tournamentUnlocked, clearInjury, playerCombatStats } from "../systems/progression";
-import { currentNight, enterNight, ensureNight, arenaWeapon } from "../systems/nights";
+import { isOpponentUnlocked, canUnlockSkill, unlockSkill, hasSkill, buyCosmetic, buyUnguent, isHouseUnlocked, houseLockHint, rivalHouses, tournamentUnlocked, restInjury, playerCombatStats } from "../systems/progression";
+import { currentNight, enterNight, ensureNight, arenaWeapon, nightEditorLine } from "../systems/nights";
 import { TABLE_BETS, TABLE_GAMES, takeTableBet, settleTakenBet, rollAleaDice, aleaOutcome, freshDeck, drawCard, handTotal, isNatural, dealerShouldHit, blackjackCompare, cardTex, type AleaResult, type Card, type BlackjackOutcome } from "../systems/gambling";
 import { audio } from "../systems/audio";
 import { makeBodyTexture } from "../systems/assets";
@@ -16,6 +16,7 @@ import { SHOP_ITEMS, SHOP_TABS, TUNIC_HEX, PLUME_HEX, CAPE_HEX, ownsCosmetic, sh
 import { palAnimalName, palBondHint, palBondProgress, palBrought, palCombatStats, palDisplayName, palNextHint, palSkillsInBranch, palTexture, palTier, palTintColor, palTintId, palTitle, palUnlocked, canUnlockPalSkill, hasPalSkill, unlockPalSkill, PAL_SKILL_BRANCHES, PAL_TINTS, rollPalName, setPalTint, togglePalBrought, type PalSkillDef } from "../data/pal";
 import { generateHouseName } from "../data/names";
 import { ACTION_LABELS, controlsHelpText, eventToKeyName, mergedKeybinds, prettyKey, trySetBind, type CombatAction } from "../systems/input";
+import { enterMenu } from "../systems/playFlow";
 
 type MenuPage = "root" | "stats" | "skills" | "equipment" | "objectives" | "controls" | "settings" | "keybinds" | "rename";
 
@@ -101,6 +102,27 @@ export class UIScene extends Phaser.Scene {
 
   constructor() {
     super("UIScene");
+  }
+
+  init(): void {
+    this.overlay = null;
+    this.dimmer = null;
+    this.dialogueBox = null;
+    this.dialogueLines = [];
+    this.dialogueIndex = 0;
+    this.dialogueDone = undefined;
+    this.resultPending = false;
+    this.judgmentOpen = false;
+    this.judgmentWrap = [];
+    this.bossWrap = [];
+    this.favorWrap = [];
+    this.gateHouse = null;
+    this.waitingBind = null;
+    this.pausePage = "root";
+    this.aleaBusy = false;
+    this.aleaPending = null;
+    this.bjBusy = false;
+    this.bj = null;
   }
 
   create(): void {
@@ -694,7 +716,7 @@ export class UIScene extends Phaser.Scene {
     const points = gameState.save.statPoints;
     c.add(
       this.add
-        .text(0, -292, points > 0 ? `${points} skill point${points === 1 ? "" : "s"} to spend  ·  click a glowing node` : "Earn XP to level up and unlock skills", {
+        .text(0, -292, points > 0 ? `${points} skill point${points === 1 ? "" : "s"} — they go to this tree. Click a glowing node.` : "Earn XP to level up. Points go to the skill tree.", {
           fontFamily: "Georgia",
           fontSize: "16px",
           color: "#e8dcc8",
@@ -1015,9 +1037,11 @@ export class UIScene extends Phaser.Scene {
         c,
         -530,
         292,
-        "Rest  ·  clear injury",
+        "Rest  ·  " + REST_COST + " denarii",
         () => {
-          if (clearInjury()) this.toast("You rest. The ache leaves you.");
+          const result = restInjury();
+          if (result === "ok") this.toast("You rest. The ache leaves you.");
+          else if (result === "poor") this.toast("Not enough denarii.");
           else this.toast("You are not injured.");
           this.openShop();
         },
@@ -1087,7 +1111,7 @@ export class UIScene extends Phaser.Scene {
           ? "Locked — win the Rudis"
           : item.requiresFlag
             ? "Locked — lose an arena fight without being spared"
-            : "Locked — win that house first"
+            : shopLockHint(item)
         : previewing
           ? equipped
             ? "Preview  ·  wearing"
@@ -2121,18 +2145,14 @@ export class UIScene extends Phaser.Scene {
       const night = currentNight();
       const c = this.box(720, 700, "ARENA GATE");
       if (night) {
-        const label =
-          night.kind === "weapon"
-            ? `Tonight  ·  Weapon night  ·  ${night.weaponName}`
-            : "Tonight  ·  Exhibition";
         c.add(
           this.add
-            .text(0, -268, label, { fontFamily: "Cinzel, Georgia", fontSize: "15px", color: "#e8c96a" })
+            .text(0, -268, nightEditorLine(night), { fontFamily: "Cinzel, Georgia", fontSize: "15px", color: "#e8c96a" })
             .setOrigin(0.5),
         );
         c.add(
           this.add
-            .text(0, -246, `${night.fighterName} of ${night.houseName}  ·  +${night.bonusDenarii} denarii`, {
+            .text(0, -246, `${night.fighterName} of ${night.houseName}  ·  ${night.kind === "weapon" ? night.weaponName + "  ·  " : ""}+${night.bonusDenarii} denarii`, {
               fontFamily: "Georgia",
               fontSize: "14px",
               color: "#e8dcc8",
@@ -2186,11 +2206,7 @@ export class UIScene extends Phaser.Scene {
       const rudisY = lastBtnY + 70;
       const stayY = showTourney ? rudisY + 52 : lastBtnY + 70;
       if (showTourney) {
-        this.addBtn(c, 0, rudisY, gameState.save.freedomWon ? "The Rudis (done)" : "The Rudis", () => {
-          if (gameState.save.freedomWon) {
-            this.toast("The wooden sword is already yours.");
-            return;
-          }
+        this.addBtn(c, 0, rudisY, gameState.save.freedomWon ? "The Rudis (rematch)" : "The Rudis", () => {
           this.gateHouse = TOURNAMENT_HOUSE.id;
           this.openGate();
         }, 180);
@@ -2211,6 +2227,11 @@ export class UIScene extends Phaser.Scene {
       const y = -175 + i * 70;
       const status = !open ? "Locked" : beaten ? "Rematch" : f.isChampion || isTournamentId(f.id) ? "FIGHT" : "Fight";
       c.add(this.add.text(0, y, `${f.name}  ·  ${f.title}  ·  ${getWeapon(f.weapon).shortName}`, { fontFamily: "Georgia", fontSize: "16px", color: open ? "#e8dcc8" : "#6a5a4a" }).setOrigin(0.5));
+      if (!open) {
+        const prev = house.fighters[i - 1];
+        const hint = i <= 0 ? "Beat the previous house first." : `Beat ${prev?.name ?? "the previous fighter"} first.`;
+        c.add(this.add.text(0, y + 22, hint, { fontFamily: "Georgia", fontSize: "13px", color: "#6a5a4a" }).setOrigin(0.5));
+      }
       if (open) {
         this.addBtn(c, 0, y + 26, status, () => {
           gameState.pendingArenaOpponent = f.id;
@@ -2844,12 +2865,8 @@ export class UIScene extends Phaser.Scene {
   };
 
   private toMenu(): void {
-    gameState.persist();
     this.hideJudgment();
     this.closeOverlay();
-    this.scene.stop("LudusScene");
-    this.scene.stop("ArenaScene");
-    this.scene.start("MenuScene");
-    this.scene.stop();
+    enterMenu(this, true);
   }
 }

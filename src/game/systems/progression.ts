@@ -1,6 +1,6 @@
 import type { FighterStats, ReputationTier, SkillId, WeaponId } from "../types";
 import { gameState, xpForLevel } from "../state/GameState";
-import { UNGUENT_COST, UNGUENT_MAX } from "../config";
+import { UNGUENT_COST, UNGUENT_MAX, REST_COST } from "../config";
 import { getHouse, getRival, isTournamentId, sortedHouses } from "../data/houses";
 import { TOURNAMENT_HOUSE, TOURNAMENT_ORDER } from "../data/tournament";
 import { getSkill } from "../data/skills";
@@ -50,6 +50,17 @@ export function clearInjury(): boolean {
   bus.emit("toast", "The ache leaves you.");
   bus.emit("skills-changed");
   return true;
+}
+
+export function restInjury(): "ok" | "poor" | "healthy" {
+  if (!gameState.save.injured) return "healthy";
+  if (gameState.save.denarii < REST_COST) return "poor";
+  addDenarii(-REST_COST);
+  gameState.save.injured = false;
+  gameState.restoreVitals();
+  gameState.persist();
+  bus.emit("skills-changed");
+  return "ok";
 }
 
 export function hasSkill(id: SkillId): boolean {
@@ -195,22 +206,6 @@ export function equipCosmetic(id: string): void {
   bus.emit("cosmetics-changed");
 }
 
-export function spendStat(stat: "maxHealth" | "maxStamina" | "attack" | "defense" | "agility"): boolean {
-  const s = gameState.save;
-  if (s.statPoints <= 0) return false;
-  s.statPoints -= 1;
-  if (stat === "maxHealth") {
-    s.stats.maxHealth += 8;
-    s.health += 8;
-  } else if (stat === "maxStamina") {
-    s.stats.maxStamina += 6;
-    s.stamina += 6;
-  } else {
-    s.stats[stat] += 1;
-  }
-  return true;
-}
-
 export function bumpReputation(): void {
   const s = gameState.save;
   const wins = s.defeatedOpponents.length;
@@ -328,11 +323,14 @@ export function applyArenaVictory(opponentId: string): { denarii: number; xp: nu
 }
 
 export function applyArenaDefeat(spared = false): void {
+  const nightLoss = gameState.pendingNight;
   if (!spared) {
     addDenarii(-5);
     grantSteelScar();
+  }
+  if (!spared || nightLoss) {
     gameState.save.injured = true;
-    bus.emit("toast", "The body remembers the fall.");
+    bus.emit("toast", nightLoss && spared ? "The night still marked you." : "The body remembers the fall.");
   }
   gameState.restoreVitals();
   gameState.persist();

@@ -228,12 +228,19 @@ class GameState {
     return this.slotSummaries().some(Boolean);
   }
 
-  startNew(name: string, tunic: TunicColor, playerHouse: string | null = null): void {
-    this.save = createNewSave(name.trim() || "Gladiator", tunic, playerHouse);
+  resetSession(): void {
+    this.paused = false;
+    this.inDialogue = false;
+    this.inMenu = false;
     this.pendingArenaOpponent = null;
     this.pendingNight = false;
     this.pendingForcedWeapon = null;
     this.lastResult = null;
+  }
+
+  startNew(name: string, tunic: TunicColor, playerHouse: string | null = null): void {
+    this.resetSession();
+    this.save = createNewSave(name.trim() || "Gladiator", tunic, playerHouse);
     this.persist();
   }
 
@@ -247,7 +254,9 @@ class GameState {
       const raw = localStorage.getItem(saveSlotKey(this.activeSlot));
       if (!raw) return false;
       const parsed = JSON.parse(raw) as SaveData;
-      return this.applyParsed(parsed);
+      const ok = this.applyParsed(parsed);
+      if (ok) this.resetSession();
+      return ok;
     } catch {
       return false;
     }

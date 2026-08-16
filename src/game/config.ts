@@ -4,6 +4,7 @@ export const TILE_SIZE = 32;
 export const HUD_CAM_PAD = 120;
 export const UNGUENT_MAX = 3;
 export const UNGUENT_COST = 16;
+export const REST_COST = 8;
 export const SAVE_KEY = "ludus-aquila-save-v1";
 export const SAVE_SLOT_COUNT = 3;
 export const ACTIVE_SLOT_KEY = "ludus-aquila-active-slot-v1";

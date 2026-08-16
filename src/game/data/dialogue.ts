@@ -1,6 +1,6 @@
 import type { ObjectiveId } from "../types";
 import { gameState } from "../state/GameState";
-import { getRival } from "./houses";
+import { getHouse, getRival } from "./houses";
 import {
   allRivalsBeaten,
   nextUnlockedOpponent,
@@ -8,12 +8,19 @@ import {
   rivalHouses,
 } from "../systems/progression";
 import { palAnimalName, palBrought, palNextHint, palTier, palTitle, palUnlocked } from "./pal";
-import { ensureNight } from "../systems/nights";
+import { ensureNight, nightEditorLine } from "../systems/nights";
 
 type LineFn = () => string[];
 
 function beaten(): number {
   return gameState.save.defeatedHouses.length;
+}
+
+function lastBeatenAnimal(): string | null {
+  const ids = gameState.save.defeatedHouses;
+  const last = ids[ids.length - 1];
+  if (!last) return null;
+  return getHouse(last)?.animalName ?? null;
 }
 
 function afterAnyWin(): boolean {
@@ -45,19 +52,25 @@ function consumeWelcome(npcId: string): string | null {
 export const DIALOGUE: Record<string, LineFn> = {
   lanista: () => {
     const s = gameState.save;
+    if (s.injured) {
+      return [
+        `"You limp. Rest in Quarters for a few denarii, or drink unguent."`,
+        `"I will not send a broken man to the sand."`,
+      ];
+    }
     if (s.freedomWon) {
       const night = ensureNight();
       if (night?.kind === "weapon") {
         return [
           `"The rudis is yours. The editor still pays."`,
-          `"Tonight is steel. ${night.fighterName} of ${night.houseName}. You fight with the ${night.weaponName}."`,
+          `"${nightEditorLine(night)} You fight with the ${night.weaponName}."`,
           `"Take the south gate. The yard is still yours after."`,
         ];
       }
       if (night) {
         return [
           `"The rudis is yours. The editor still wants a name on the sand."`,
-          `"Tonight: ${night.fighterName} of ${night.houseName}. A purse fight. Come back heavier."`,
+          `"${nightEditorLine(night)} A purse fight. Come back heavier."`,
         ];
       }
       return [
@@ -168,6 +181,9 @@ export const DIALOGUE: Record<string, LineFn> = {
   titus: () => {
     const home = consumeWelcome("titus");
     if (home) return [`"You came back. ${home} cloth on the other side of the sand, and you still standing. That is how a wall is built."`];
+    if (gameState.save.injured) {
+      return [`"You limp. Rest in Quarters, or drink the vial. A wall with a crack still falls."`];
+    }
     if (gameState.save.freedomWon) {
       return [`"Free. Still here. The shield does not care about wood or steel. Keep it high."`];
     }
@@ -175,13 +191,18 @@ export const DIALOGUE: Record<string, LineFn> = {
       return [`"Eight houses. The Rudis is a different sand. I will be at the gate when you walk back."`];
     }
     const n = beaten();
+    const last = lastBeatenAnimal();
     const pledged = pledgedHouse();
     if (pledged?.id === "lupus" && n === 0) {
       return [`"Wolf cloth. Good. The yard eats the slow. Keep the shield high."`, `"Walk up and click SPAR. I will tap you, not bury you."`];
     }
+    if (last === "Elephant" && !gameState.save.freedomWon) {
+      return [`"Ivory down. Only wood left. Keep the shield high for the Rudis."`];
+    }
+    if (last === "Rhino") return [`"The horn is down. The last house is a wall with a memory. Patience."`];
     if (n >= 4) return [`"${n} houses. The later ones are worse. You were patient. That is how walls outlast storms."`];
     if (n >= 2) return [`"Two houses at least. You walked out. Keep the shield high in the arena. Pride makes openings."`];
-    if (n >= 1) return [`"A champion is down. You were patient. That is how walls outlast storms."`];
+    if (n >= 1) return [`"A champion is down${last ? ` — the ${last}` : ""}. You were patient. That is how walls outlast storms."`];
     if (afterAnyWin()) {
       return [
         `"Not bad. Maybe the lanista was not wrong about you."`,
@@ -212,6 +233,11 @@ export const DIALOGUE: Record<string, LineFn> = {
       return [`"Serpent cloth. Range first. Fine."`, `"Click SPAR. I will even let you swing first."`];
     }
     const n = beaten();
+    const last = lastBeatenAnimal();
+    if (last === "Elephant" && !gameState.save.freedomWon) {
+      return [`"Ivory. Fine. I still want that rematch before you take the wood."`];
+    }
+    if (last === "Rhino") return [`"The horn fell. Do not get slow before the last house. I still want that rematch."`];
     if (n >= 4) return [`"You keep coming back with other houses' dust on you. Do not get slow. I still want that rematch."`];
     if (n >= 1) return [`"Funny. When you arrived, I thought you'd last a week."`, `"Do not get slow now. I still want that rematch."`];
     if (afterAnyWin()) {
@@ -237,8 +263,13 @@ export const DIALOGUE: Record<string, LineFn> = {
       return [`"${houseCloth()} cloth. Heavy feet. I like that."`, `"I will spar if you click SPAR. Go easy on an old oak."`];
     }
     const n = beaten();
+    const last = lastBeatenAnimal();
+    if (last === "Elephant" && !gameState.save.freedomWon) {
+      return [`"Ha! Ivory down. The hammer likes you. Swing slow. Hit once."`];
+    }
+    if (last === "Rhino") return [`"Ha! The horn fell. One house left. Swing slow. Hit once."`];
     if (n >= 5) return [`"Ha! Five houses. The hammer likes you. Swing slow. Hit once."`];
-    if (n >= 1) return [`"Ha! A champion fell. The axe in the armory has your name on it. Swing slow. Hit once."`];
+    if (n >= 1) return [`"Ha! A champion fell${last ? ` — the ${last}` : ""}. The axe in the armory has your name on it. Swing slow. Hit once."`];
     if (afterAnyWin()) {
       return [`"You breathe better now. Good. Heavy steel waits for those who wait."`];
     }
@@ -262,8 +293,13 @@ export const DIALOGUE: Record<string, LineFn> = {
       return [`"Serpent cloth. You already know the conversation at a distance."`, `"Click SPAR if you want a lesson. I will keep you at the point."`];
     }
     const n = beaten();
+    const last = lastBeatenAnimal();
+    if (last === "Elephant" && !gameState.save.freedomWon) {
+      return [`"Ivory was a problem of weight. You answered it. The Rudis is a spear that does not name its house."`];
+    }
+    if (last === "Rhino") return [`"The horn was a charge that forgot to think. You left the line. The last house will not."`];
     if (n >= 2) return [`"A net is a spear that lies. A charge is a spear that forgets. You answered both. Good."`];
-    if (n >= 1) return [`"A champion crowded you. You made space anyway. That is the whole craft."`];
+    if (n >= 1) return [`"A champion crowded you${last ? ` — the ${last}` : ""}. You made space anyway. That is the whole craft."`];
     if (afterAnyWin()) {
       return [`"You closed and lived. Remember that when the next house comes."`];
     }

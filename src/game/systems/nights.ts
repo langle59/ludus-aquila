@@ -136,13 +136,27 @@ export function arenaWeapon(): WeaponId {
   return gameState.pendingForcedWeapon ?? gameState.save.equippedWeapon;
 }
 
+export function nightEditorLine(night: NightBout): string {
+  const nick: Record<string, string> = {
+    serpens: "Coil",
+    lupus: "Pack",
+    aper: "Bristle",
+    taurus: "Charge",
+    tigris: "Stripe",
+    leo: "Pride",
+    ursus: "Hide",
+    rhinoceros: "Horn",
+    elephas: "Ivory",
+  };
+  const name = nick[night.houseId] ?? night.houseName;
+  if (night.kind === "weapon") return `The editor wants the ${name} in steel.`;
+  return `The editor wants ${night.fighterName} under the lamps.`;
+}
+
 export function nightObjective(): string | null {
   const night = currentNight();
   if (!night) return null;
-  if (night.kind === "weapon") {
-    return `Weapon night: fight ${night.fighterName} with the ${night.weaponName}. South gate.`;
-  }
-  return `Exhibition tonight: ${night.fighterName} of ${night.houseName}. South gate.`;
+  return `${nightEditorLine(night)} South gate.`;
 }
 
 export function rufusAtTable(): boolean {

@@ -269,7 +269,7 @@ const PROFILES: Record<BeastKind, BeastProfile> = {
     speed: 58,
     lungeSpd: 290,
     lungeMs: 400,
-    telegraphMs: 680,
+    telegraphMs: 820,
     recoverMs: 440,
     backoffMs: 160,
     biteRange: 26,
@@ -284,10 +284,10 @@ const PROFILES: Record<BeastKind, BeastProfile> = {
     bodyH: 16,
     bodyOx: 2,
     bodyOy: 2,
-    hudY: 48,
-    markY: 40,
-    markR: 10,
-    visY: 18,
+    hudY: 54,
+    markY: 48,
+    markR: 11,
+    visY: 20,
     pressIn: true,
     trick: "charge",
   },
@@ -300,7 +300,7 @@ const PROFILES: Record<BeastKind, BeastProfile> = {
     speed: 46,
     lungeSpd: 190,
     lungeMs: 340,
-    telegraphMs: 760,
+    telegraphMs: 900,
     recoverMs: 480,
     backoffMs: 180,
     biteRange: 32,
@@ -315,10 +315,10 @@ const PROFILES: Record<BeastKind, BeastProfile> = {
     bodyH: 20,
     bodyOx: 2,
     bodyOy: 2,
-    hudY: 56,
-    markY: 48,
-    markR: 12,
-    visY: 22,
+    hudY: 64,
+    markY: 56,
+    markR: 13,
+    visY: 24,
     pressIn: true,
     trick: "slam",
   },
@@ -681,7 +681,8 @@ export class ArenaBeast extends Phaser.Physics.Arcade.Sprite {
     const p = this.profile;
     this.aiState = "telegraph";
     const short = p.trick === "feint" && !this.feint;
-    this.stateUntil = now + (short ? Math.min(280, p.telegraphMs * 0.5) : p.trick === "roar" ? p.telegraphMs + 180 : p.telegraphMs);
+    const heavyMark = p.trick === "charge" || p.trick === "slam";
+    this.stateUntil = now + (short ? Math.min(280, p.telegraphMs * 0.5) : p.trick === "roar" ? p.telegraphMs + 180 : heavyMark ? p.telegraphMs + 120 : p.telegraphMs);
     this.setVelocity(0, 0);
     this.telegraph?.destroy();
     const color = short
@@ -705,13 +706,13 @@ export class ArenaBeast extends Phaser.Physics.Arcade.Sprite {
                       : this.kind === "elephant"
                         ? COLORS.elephantGrey
                         : COLORS.gold;
-    this.telegraph = this.scene.add.circle(this.x, this.y - p.markY, p.markR * (p.trick === "roar" ? 1.6 : 1), color, 0.88).setDepth(4000);
+    this.telegraph = this.scene.add.circle(this.x, this.y - p.markY, p.markR * (p.trick === "roar" ? 1.6 : heavyMark ? 1.25 : 1), color, 0.88).setDepth(4000);
     this.scene.tweens.add({
       targets: this.telegraph,
       alpha: 0.2,
       yoyo: true,
-      duration: p.trick === "roar" ? 90 : 140,
-      repeat: p.trick === "roar" ? 6 : 3,
+      duration: p.trick === "roar" ? 90 : heavyMark ? 180 : 140,
+      repeat: p.trick === "roar" ? 6 : heavyMark ? 5 : 3,
     });
     if (p.trick === "roar" && target && Phaser.Math.Distance.Between(this.x, this.y, target.x, target.y) < 90) {
       target.freeze?.(220);
