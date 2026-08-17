@@ -7,6 +7,7 @@ import { nightObjective } from "./nights";
 import { allSchoolGlory, schoolGloryCount, SCHOOL_IDS } from "../data/school";
 import { mergedKeybinds, prettyKey } from "./input";
 import { bus } from "./bus";
+import { nextUnlockedRaidHouse, RAID_HOUSE_ORDER, raidHouseShortName } from "../data/raid";
 
 export const BOUT_ORDER = ["titus", "rufus", "brom", "aelia"] as const;
 export type BoutNpcId = (typeof BOUT_ORDER)[number];
@@ -56,7 +57,7 @@ export function allHouseBoutsWon(): boolean {
   return BOUT_ORDER.every((id) => flags[BOUT_FLAGS[id]]);
 }
 
-export type ActId = 1 | 2 | 3;
+export type ActId = 1 | 2 | 3 | 4;
 
 export const ACT_META: Record<
   ActId,
@@ -77,10 +78,16 @@ export const ACT_META: Record<
     title: "The School",
     blurb: "Lockers. Lessons. Their circuit. Four glories under your hand.",
   },
+  4: {
+    roman: "IV",
+    title: "Beyond the Gate",
+    blurb: "West to the Freed Camp. Farm. March on Serpens. Free the chained.",
+  },
 };
 
 export function currentAct(): ActId {
   const s = gameState.save;
+  if (s.storyFlags.act3Complete || allSchoolGlory()) return 4;
   if (s.freedomWon || s.lanistaUnlocked) return 3;
   if (s.tutorialComplete) return 2;
   return 1;
@@ -146,12 +153,40 @@ export function currentObjectiveText(): string {
   }
   if (id === "school") {
     if (gameState.save.storyFlags.act3Complete || allSchoolGlory()) {
-      return `${prefix}Teacher of the Sand. The four have glory. Speak with Marcellus.`;
+      if (gameState.save.camp?.raids?.serpens?.freed) {
+        return `${prefix}Serpens is free. The camp holds. Speak with Marcellus — or march again.`;
+      }
+      return `${prefix}Teacher of the Sand. West gate to the Freed Camp. March on Ludus Serpens.`;
     }
     const gloryN = schoolGloryCount();
     const night = nightObjective();
     if (night) return `${prefix}Glory ${gloryN}/${SCHOOL_IDS.length}. ${night}`;
     return `${prefix}Glory ${gloryN}/${SCHOOL_IDS.length} — Titus first, then Brom, Aelia, Rufus. Spar for Training; Teach for Lessons.`;
+  }
+  if (
+    id === "freed_camp" ||
+    id === "raid_serpens" ||
+    id === "raid_lupus" ||
+    id === "raid_aper" ||
+    id === "raid_taurus" ||
+    id === "raid_tigris" ||
+    id === "raid_leo" ||
+    id === "raid_ursus" ||
+    id === "raid_rhinoceros" ||
+    id === "raid_elephas"
+  ) {
+    const freed = gameState.save.camp?.freedPads ?? [];
+    const next = nextUnlockedRaidHouse(freed);
+    if (!next) {
+      return `${prefix}All nine houses freed. Farm, loadout, and rematches await.`;
+    }
+    if (freed.length === 0) {
+      return `${prefix}Freed Camp — pick two allies, eat from the farm, march on Serpens.`;
+    }
+    const short = raidHouseShortName(next);
+    const n = freed.length;
+    const total = RAID_HOUSE_ORDER.length;
+    return `${prefix}${n}/${total} houses freed. March on Ludus ${short} when ready.`;
   }
   const base = OBJECTIVE_TEXT[id] ?? OBJECTIVE_TEXT.free;
   return `${prefix}${base}`;

@@ -57,6 +57,62 @@ import { getNpc, HOUSE_GLADIATORS } from "../data/gladiators";
 import { generateHouseName } from "../data/names";
 import { ACTION_LABELS, controlsHelpText, eventToKeyName, mergedKeybinds, prettyKey, trySetBind, type CombatAction } from "../systems/input";
 import { enterMenu, returnFromArena } from "../systems/playFlow";
+import {
+  camp,
+  buyNextPlot,
+  buyLivestockPen,
+  buyPenAnimal,
+  plantPlot,
+  harvestPlot,
+  FARM_CROPS,
+  PLOT_BUY_COST,
+  PEN_BUY_COST,
+  setParty,
+  COMPANION_IDS,
+  cropPlotIds,
+  stablePlotIds,
+  penCapacity,
+  penOccupancy,
+  penAnimalPlots,
+  isCropUnlocked,
+  animalUnlockHint,
+  cropUnlockHint,
+  penUnlocked,
+} from "../data/camp";
+import { COOK_QUEST_DEFS, cookQuestProgress, visibleCookQuests, isRecipeQuestLocked, recipeLockHint } from "../data/cookQuests";
+import { marchableRaidHouses, nextUnlockedRaidHouse, raidHouseShortName } from "../data/raid";
+import type { CompanionId, CookRecipeId, FarmCropId, MealBuff, RaidHouseId, WeaponId } from "../types";
+import {
+  getCompanionDef,
+  companionNodeCost,
+  unlockCompanionNode,
+  setCompanionWeapon,
+  companionHasNode,
+} from "../data/companions";
+import {
+  getVolunteerDef,
+  setHouseVolunteer,
+  volunteerDisplayLine,
+  volunteerHouseId,
+  volunteersGroupedByHouse,
+} from "../data/volunteers";
+import {
+  assignCampBuffFromStock,
+  campRecipes,
+  canCraft,
+  cookedCount,
+  craftRecipe,
+  formatRecipeInputs,
+  getRecipe,
+  ingredientShortfallHint,
+  kitchenStockSummary,
+  marchRecipes,
+  pantryCount,
+  rawCropLabel,
+  sellCooked,
+  sellRaw,
+  RAW_SELL_PRICES,
+} from "../data/kitchen";
 
 type MenuPage = "root" | "stats" | "skills" | "equipment" | "objectives" | "controls" | "settings" | "keybinds" | "rename";
 
@@ -117,14 +173,32 @@ export class UIScene extends Phaser.Scene {
   private dialogueIndex = 0;
   private dialogueName = "";
   private dialogueDone?: () => void;
+  private raidTitleBox: Phaser.GameObjects.Container | null = null;
+  private raidTitleDone?: () => void;
+  private raidTitleTimer?: Phaser.Time.TimerEvent;
+  private campLoadoutId: CompanionId | "player" = "titus";
+  private cipherPicks: string[] = [];
+  private farmMode: "crops" | "stables" = "crops";
+  private partyVolTab: RaidHouseId | null = null;
+  private campMarchTab: "meals" | "targets" = "targets";
+  private campMarchHousePage = 0;
+  private campKitchenTab: "march" | "broth" | "sell" | "quests" = "march";
   private pausePage: MenuPage = "root";
   private sparBg!: Phaser.GameObjects.Arc;
   private sparLabel!: Phaser.GameObjects.Text;
   private sparHint!: Phaser.GameObjects.Text;
   private sparYield = false;
+  private lightBg!: Phaser.GameObjects.Arc;
+  private lightLabel!: Phaser.GameObjects.Text;
+  private lightHint!: Phaser.GameObjects.Text;
+  private heavyBg!: Phaser.GameObjects.Arc;
+  private heavyLabel!: Phaser.GameObjects.Text;
+  private heavyHint!: Phaser.GameObjects.Text;
   private netBg!: Phaser.GameObjects.Arc;
   private netLabel!: Phaser.GameObjects.Text;
   private netHint!: Phaser.GameObjects.Text;
+  /** LIGHT/HEAVY/NET only while combat is actually available. */
+  private combatButtonsWanted = false;
   private talkBg!: Phaser.GameObjects.Arc;
   private talkLabel!: Phaser.GameObjects.Text;
   private talkHint!: Phaser.GameObjects.Text;
@@ -251,6 +325,7 @@ export class UIScene extends Phaser.Scene {
     this.addSparButton();
     this.addTalkButton();
     this.addMusicMuteButton();
+    this.refreshCombatButtons();
 
     const coinX = GAME_WIDTH - 132;
     const coinBg = this.add.rectangle(coinX, 40, 236, 56, 0x2a1c16, 0.92).setStrokeStyle(2, COLORS.gold).setScrollFactor(0).setDepth(99).setInteractive({ useHandCursor: true });
@@ -312,6 +387,7 @@ export class UIScene extends Phaser.Scene {
     bus.on("toast", this.toast, this);
     bus.on("spar-available", this.setSparButton, this);
     bus.on("talk-available", this.setTalkButton, this);
+    bus.on("combat-hud", this.setCombatHud, this);
     bus.on("shop", this.openShop, this);
     bus.on("chamber", this.openChamber, this);
     bus.on("lanista-offer", this.openLanistaOffer, this);
@@ -331,6 +407,14 @@ export class UIScene extends Phaser.Scene {
     bus.on("drill-hide", this.hideDrillHud, this);
     bus.on("drill-score", this.onDrillScore, this);
     bus.on("drill-howto", this.showDrillHowto, this);
+    bus.on("camp-farm", this.openCampFarm, this);
+    bus.on("camp-party", this.openCampParty, this);
+    bus.on("camp-march", this.openCampMarch, this);
+    bus.on("camp-loadout", this.openCampLoadout, this);
+    bus.on("camp-kitchen", this.openCampKitchen, this);
+    bus.on("camp-refresh", () => undefined, this);
+    bus.on("raid-cipher", this.openRaidCipher, this);
+    bus.on("raid-title", this.openRaidTitle, this);
 
     this.input.keyboard?.on("keydown-ESC", () => {
       this.onEscapeKey();
@@ -361,6 +445,10 @@ export class UIScene extends Phaser.Scene {
       if (this.pausePage === "rename") return;
       if (this.resultPending) {
         this.finishResult();
+        return;
+      }
+      if (this.raidTitleBox) {
+        this.dismissRaidTitle();
         return;
       }
       if (this.dialogueBox) {
@@ -430,6 +518,10 @@ export class UIScene extends Phaser.Scene {
         this.finishResult();
         return;
       }
+      if (this.raidTitleBox) {
+        this.dismissRaidTitle();
+        return;
+      }
       if (this.dialogueBox) {
         this.advanceDialogue();
         return;
@@ -470,6 +562,7 @@ export class UIScene extends Phaser.Scene {
       bus.off("toast", this.toast, this);
       bus.off("spar-available", this.setSparButton, this);
       bus.off("talk-available", this.setTalkButton, this);
+      bus.off("combat-hud", this.setCombatHud, this);
       bus.off("shop", this.openShop, this);
       bus.off("chamber", this.openChamber, this);
       bus.off("lanista-offer", this.openLanistaOffer, this);
@@ -489,6 +582,13 @@ export class UIScene extends Phaser.Scene {
       bus.off("drill-hide", this.hideDrillHud, this);
       bus.off("drill-score", this.onDrillScore, this);
       bus.off("drill-howto", this.showDrillHowto, this);
+      bus.off("camp-farm", this.openCampFarm, this);
+      bus.off("camp-party", this.openCampParty, this);
+      bus.off("camp-march", this.openCampMarch, this);
+      bus.off("camp-loadout", this.openCampLoadout, this);
+      bus.off("camp-kitchen", this.openCampKitchen, this);
+      bus.off("raid-cipher", this.openRaidCipher, this);
+      bus.off("raid-title", this.openRaidTitle, this);
       this.hideFavor();
       this.hideDrillHud();
       this.hideDrillHowto();
@@ -517,7 +617,7 @@ export class UIScene extends Phaser.Scene {
       equipped ? `${getWeapon(equipped).name}  ·  ${vialKey} unguent  ${s.unguent ?? 0}/${UNGUENT_MAX}` : `Unarmed  ·  equip in the armory`,
     );
     if (gameState.pendingSchoolBout) this.weaponLabel.setText("You watch from the stands.");
-    this.setNetButton(equipped === "trident_net");
+    this.refreshCombatButtons();
     this.denariiLabel.setText(`${s.denarii} denarii`);
     this.titleLabel.setText(displayTitle());
     this.refreshObjectivePanel();
@@ -694,6 +794,10 @@ export class UIScene extends Phaser.Scene {
         this.finishResult();
         return;
       }
+      if (this.raidTitleBox) {
+        this.dismissRaidTitle();
+        return;
+      }
       if (this.dialogueBox) {
         this.advanceDialogue();
         return;
@@ -808,6 +912,52 @@ export class UIScene extends Phaser.Scene {
       fn();
     });
     c.add([bg, t]);
+  }
+
+  /** Keep camp overlays inside the 720px viewport. */
+  private overlayMaxHeight(preferred: number): number {
+    return Math.min(preferred, GAME_HEIGHT - 48);
+  }
+
+  private addTabBtn(
+    c: Phaser.GameObjects.Container,
+    x: number,
+    y: number,
+    label: string,
+    active: boolean,
+    fn: () => void,
+    w = 150,
+  ): void {
+    const bg = this.add
+      .rectangle(x, y, w, 34, active ? 0x3a281c : 0x1a1210)
+      .setStrokeStyle(1, active ? COLORS.gold : 0x6a5a3a)
+      .setInteractive({ useHandCursor: true });
+    const t = this.add
+      .text(x, y, label, {
+        fontFamily: "Cinzel, Georgia",
+        fontSize: "14px",
+        color: active ? "#e8c96a" : "#c4b8a4",
+      })
+      .setOrigin(0.5);
+    if (!active) {
+      bg.on("pointerover", () => bg.setFillStyle(0x2a2018));
+      bg.on("pointerout", () => bg.setFillStyle(0x1a1210));
+    }
+    bg.on("pointerdown", () => {
+      audio.sfx("ui");
+      fn();
+    });
+    c.add([bg, t]);
+  }
+
+  private marchMealSummary(): string {
+    const c = camp();
+    if (c.selectedMarchRecipe) return getRecipe(c.selectedMarchRecipe).name;
+    if (c.farm.selectedPantryCrop) return `${FARM_CROPS[c.farm.selectedPantryCrop].name} (raw)`;
+    if (c.farm.selectedMeal === "hp") return "Barley mash (raw)";
+    if (c.farm.selectedMeal === "stamina") return "Olive oil (raw)";
+    if (c.farm.selectedMeal === "damage") return "Goat meat (raw)";
+    return "None";
   }
 
   openPause(): void {
@@ -3279,6 +3429,63 @@ export class UIScene extends Phaser.Scene {
     this.renderDialogue();
   };
 
+  openRaidTitle = (payload: { title: string; subtitle?: string; holdMs?: number; onDone?: () => void }): void => {
+    this.dismissRaidTitle(true);
+    this.raidTitleDone = payload.onDone;
+    gameState.paused = true;
+    const c = this.add.container(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 20).setDepth(3200).setScrollFactor(0);
+    const veil = this.add.rectangle(0, 20, GAME_WIDTH, GAME_HEIGHT, 0x040810, 0.45).setScrollFactor(0);
+    const plate = this.add.rectangle(0, 0, 520, 110, 0x121820, 0.94).setStrokeStyle(2, 0x7ab8a4);
+    const title = this.add
+      .text(0, -18, payload.title, {
+        fontFamily: "Cinzel, Georgia",
+        fontSize: "28px",
+        color: "#e8c96a",
+        stroke: "#1a1210",
+        strokeThickness: 5,
+      })
+      .setOrigin(0.5);
+    const sub = this.add
+      .text(0, 22, payload.subtitle ?? "", {
+        fontFamily: "Georgia",
+        fontSize: "15px",
+        color: "#9ab8c8",
+      })
+      .setOrigin(0.5);
+    const hint = this.add
+      .text(0, 48, "Space / E", {
+        fontFamily: "Georgia",
+        fontSize: "12px",
+        color: "#6a7a88",
+      })
+      .setOrigin(0.5)
+      .setAlpha(payload.holdMs && payload.holdMs < 900 ? 0 : 0.85);
+    c.add([veil, plate, title, sub, hint]);
+    c.setAlpha(0);
+    this.raidTitleBox = c;
+    this.tweens.add({ targets: c, alpha: 1, duration: 220 });
+    const hold = payload.holdMs ?? 1200;
+    this.raidTitleTimer = this.time.delayedCall(hold, () => this.dismissRaidTitle());
+  };
+
+  private dismissRaidTitle = (silent = false): void => {
+    if (this.raidTitleTimer) {
+      this.raidTitleTimer.remove(false);
+      this.raidTitleTimer = undefined;
+    }
+    if (!this.raidTitleBox && !this.raidTitleDone) return;
+    this.raidTitleBox?.destroy();
+    this.raidTitleBox = null;
+    if (!silent) {
+      gameState.paused = false;
+      const done = this.raidTitleDone;
+      this.raidTitleDone = undefined;
+      done?.();
+    } else {
+      this.raidTitleDone = undefined;
+    }
+  };
+
   private renderDialogue(): void {
     this.dialogueBox?.destroy();
     const c = this.add.container(GAME_WIDTH / 2, GAME_HEIGHT - 110).setDepth(3000).setScrollFactor(0);
@@ -3623,7 +3830,7 @@ export class UIScene extends Phaser.Scene {
 
   private onMinimapScene = (scene: string): void => {
     this.minimapScene = scene;
-    if (scene !== "ludus") this.minimapWrap?.setVisible(false);
+    if (scene !== "ludus" && scene !== "freedcamp") this.minimapWrap?.setVisible(false);
   };
 
   private onMinimap = (payload: {
@@ -3635,7 +3842,11 @@ export class UIScene extends Phaser.Scene {
     area?: string;
     marks: { x: number; y: number; color: number; kind: string }[];
   }): void => {
-    if (this.minimapScene !== "ludus" || !gameState.settings.showMinimap || !payload.show) {
+    if (
+      (this.minimapScene !== "ludus" && this.minimapScene !== "freedcamp") ||
+      !gameState.settings.showMinimap ||
+      !payload.show
+    ) {
       this.minimapWrap?.setVisible(false);
       return;
     }
@@ -4040,13 +4251,13 @@ export class UIScene extends Phaser.Scene {
   private addAttackButton(): void {
     const x = GAME_WIDTH - 96;
     const y = GAME_HEIGHT - 96;
-    const bg = this.add
+    this.lightBg = this.add
       .circle(x, y, 58, COLORS.crimson, 0.95)
       .setStrokeStyle(4, COLORS.gold)
       .setScrollFactor(0)
       .setDepth(160)
       .setInteractive({ useHandCursor: true });
-    this.add
+    this.lightLabel = this.add
       .text(x, y - 4, "LIGHT", {
         fontFamily: "Georgia",
         fontSize: "20px",
@@ -4056,7 +4267,7 @@ export class UIScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setScrollFactor(0)
       .setDepth(161);
-    this.add
+    this.lightHint = this.add
       .text(x, y + 18, "or Space", {
         fontFamily: "Georgia",
         fontSize: "13px",
@@ -4066,10 +4277,14 @@ export class UIScene extends Phaser.Scene {
       .setScrollFactor(0)
       .setDepth(161);
 
-    bg.on("pointerover", () => bg.setFillStyle(0xc44a38));
-    bg.on("pointerout", () => bg.setFillStyle(COLORS.crimson));
-    bg.on("pointerdown", () => {
+    this.lightBg.on("pointerover", () => this.lightBg.setFillStyle(0xc44a38));
+    this.lightBg.on("pointerout", () => this.lightBg.setFillStyle(COLORS.crimson));
+    this.lightBg.on("pointerdown", () => {
       if (this.overlay || this.resultPending || this.judgmentOpen) return;
+      if (this.raidTitleBox) {
+        this.dismissRaidTitle();
+        return;
+      }
       if (this.dialogueBox) {
         this.advanceDialogue();
         return;
@@ -4082,13 +4297,13 @@ export class UIScene extends Phaser.Scene {
   private addHeavyButton(): void {
     const x = GAME_WIDTH - 96;
     const y = GAME_HEIGHT - 222;
-    const bg = this.add
+    this.heavyBg = this.add
       .circle(x, y, 44, 0x6a2a22, 0.95)
       .setStrokeStyle(3, COLORS.gold)
       .setScrollFactor(0)
       .setDepth(160)
       .setInteractive({ useHandCursor: true });
-    this.add
+    this.heavyLabel = this.add
       .text(x, y - 4, "HEAVY", {
         fontFamily: "Georgia",
         fontSize: "16px",
@@ -4098,7 +4313,7 @@ export class UIScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setScrollFactor(0)
       .setDepth(161);
-    this.add
+    this.heavyHint = this.add
       .text(x, y + 16, `or ${prettyKey(mergedKeybinds().heavy)}`, {
         fontFamily: "Georgia",
         fontSize: "12px",
@@ -4108,10 +4323,14 @@ export class UIScene extends Phaser.Scene {
       .setScrollFactor(0)
       .setDepth(161);
 
-    bg.on("pointerover", () => bg.setFillStyle(0x8a3a2c));
-    bg.on("pointerout", () => bg.setFillStyle(0x6a2a22));
-    bg.on("pointerdown", () => {
+    this.heavyBg.on("pointerover", () => this.heavyBg.setFillStyle(0x8a3a2c));
+    this.heavyBg.on("pointerout", () => this.heavyBg.setFillStyle(0x6a2a22));
+    this.heavyBg.on("pointerdown", () => {
       if (this.overlay || this.resultPending || this.judgmentOpen) return;
+      if (this.raidTitleBox) {
+        this.dismissRaidTitle();
+        return;
+      }
       if (this.dialogueBox) {
         this.advanceDialogue();
         return;
@@ -4157,6 +4376,10 @@ export class UIScene extends Phaser.Scene {
     this.netBg.on("pointerout", () => this.netBg.setFillStyle(0x2a5a62));
     this.netBg.on("pointerdown", () => {
       if (this.overlay || this.resultPending || this.judgmentOpen) return;
+      if (this.raidTitleBox) {
+        this.dismissRaidTitle();
+        return;
+      }
       if (this.dialogueBox) {
         this.advanceDialogue();
         return;
@@ -4165,6 +4388,35 @@ export class UIScene extends Phaser.Scene {
       if (gameState.save.equippedWeapon !== "trident_net") return;
       bus.emit("player-special");
     });
+  }
+
+  private setCombatHud = (payload: { show: boolean }): void => {
+    this.setCombatButtonsWanted(Boolean(payload?.show));
+  };
+
+  private setCombatButtonsWanted(show: boolean): void {
+    if (this.combatButtonsWanted === show) return;
+    this.combatButtonsWanted = show;
+    this.refreshCombatButtons();
+  }
+
+  private refreshCombatButtons(): void {
+    const show = this.combatButtonsWanted;
+    this.lightBg?.setVisible(show);
+    this.lightLabel?.setVisible(show);
+    this.lightHint?.setVisible(show);
+    this.heavyBg?.setVisible(show);
+    this.heavyLabel?.setVisible(show);
+    this.heavyHint?.setVisible(show);
+    if (this.lightBg) {
+      if (show) this.lightBg.setInteractive({ useHandCursor: true });
+      else this.lightBg.disableInteractive();
+    }
+    if (this.heavyBg) {
+      if (show) this.heavyBg.setInteractive({ useHandCursor: true });
+      else this.heavyBg.disableInteractive();
+    }
+    this.setNetButton(show && arenaWeapon() === "trident_net");
   }
 
   private setNetButton(show: boolean): void {
@@ -4307,6 +4559,1113 @@ export class UIScene extends Phaser.Scene {
     this.talkHint.setVisible(show);
     if (!show) return;
     this.talkLabel.setText(payload.label ?? "TALK");
+  };
+
+  private openCampFarm = (mode: unknown = "crops"): void => {
+    this.farmMode = mode === "stables" ? "stables" : "crops";
+    const c = camp();
+    const ids = this.farmMode === "stables" ? stablePlotIds() : cropPlotIds();
+    const plots = c.farm.plots.filter((p) => ids.includes(p.id));
+    const title = this.farmMode === "stables" ? "LIVESTOCK YARD" : "FARM PLOTS";
+    const boxH = this.overlayMaxHeight(this.farmMode === "stables" ? 580 : 560);
+    const half = boxH / 2;
+    const box = this.box(680, boxH, title);
+
+    if (this.farmMode === "stables" && !penUnlocked()) {
+      box.add(
+        this.add
+          .text(0, -40, "Build a fenced corral by the farm. Animals roam freely inside.", {
+            fontFamily: "Georgia",
+            fontSize: "14px",
+            color: "#b8a890",
+            wordWrap: { width: 520 },
+            align: "center",
+          })
+          .setOrigin(0.5),
+      );
+      this.addBtn(box, 0, 20, `Build pen (${PEN_BUY_COST}d)`, () => {
+        const r = buyLivestockPen();
+        if (r === "poor") this.toast("Not enough denarii.");
+        else if (r === "owned") this.toast("Pen already built.");
+        else {
+          gameState.persist();
+          bus.emit("denarii-changed");
+          bus.emit("camp-refresh");
+          this.toast("Livestock pen ready — visit the feed trough inside.");
+          this.openCampFarm(this.farmMode);
+        }
+      }, 200);
+      this.addBtn(box, 0, half - 36, "Close", () => this.closeOverlay(), 160);
+      return;
+    }
+
+    if (this.farmMode === "stables") {
+      const animals = (Object.keys(FARM_CROPS) as FarmCropId[]).filter((id) => FARM_CROPS[id].kind === "animal");
+      const occupied = penOccupancy();
+      const capacity = penCapacity();
+      const raising = penAnimalPlots().filter((p) => p.state === "growing");
+      const ready = penAnimalPlots().filter((p) => p.state === "ready");
+      const canExpand = stablePlotIds().some((id) => !c.farm.plots.find((p) => p.id === id)?.unlocked);
+
+      box.add(
+        this.add
+          .text(0, -half + 48, `Pen: ${occupied}/${capacity} animals · ready after one raid`, {
+            fontFamily: "Georgia",
+            fontSize: "13px",
+            color: "#b8a890",
+          })
+          .setOrigin(0.5),
+      );
+      box.add(
+        this.add
+          .text(0, -half + 72, "Buy at the trough — they wander the yard on their own.", {
+            fontFamily: "Georgia",
+            fontSize: "12px",
+            color: "#8a7a68",
+          })
+          .setOrigin(0.5),
+      );
+
+      let y = -half + 100;
+      box.add(
+        this.add.text(-280, y, "Buy animals", { fontFamily: "Cinzel, Georgia", fontSize: "14px", color: "#e8c96a" }).setOrigin(0, 0.5),
+      );
+      y += 28;
+      animals.forEach((cropId, i) => {
+        const def = FARM_CROPS[cropId];
+        const unlocked = isCropUnlocked(cropId);
+        const lockHint = animalUnlockHint(cropId) || cropUnlockHint(cropId);
+        const col = i % 2;
+        const row = Math.floor(i / 2);
+        const bx = -120 + col * 240;
+        const by = y + row * 38;
+        this.addBtn(box, bx, by, unlocked ? `${def.name} ${def.cost}d` : `${def.name} 🔒`, () => {
+          if (!unlocked) {
+            this.toast(lockHint || "Not unlocked yet.");
+            return;
+          }
+          const r = buyPenAnimal(cropId);
+          if (r === "poor") this.toast("Not enough denarii.");
+          else if (r === "full") this.toast("Pen full — expand or harvest first.");
+          else if (r === "need_pen") this.toast("Build the pen first.");
+          else if (r !== "ok") this.toast("Cannot buy.");
+          else {
+            gameState.persist();
+            bus.emit("denarii-changed");
+            bus.emit("camp-refresh");
+            this.toast(`${def.name} joins the yard — ready after one raid.`);
+            this.openCampFarm(this.farmMode);
+          }
+        }, 150);
+      });
+      y += Math.ceil(animals.length / 2) * 38 + 16;
+
+      if (ready.length > 0) {
+        box.add(
+          this.add.text(-280, y, "Ready to harvest", { fontFamily: "Cinzel, Georgia", fontSize: "14px", color: "#8ecf6a" }).setOrigin(0, 0.5),
+        );
+        y += 28;
+        ready.forEach((plot, i) => {
+          const name = FARM_CROPS[plot.cropId!].name;
+          this.addBtn(box, 0, y + i * 36, `Harvest ${name}`, () => {
+            harvestPlot(plot.id);
+            gameState.persist();
+            bus.emit("camp-refresh");
+            this.toast(`${name} added to pantry.`);
+            this.openCampFarm(this.farmMode);
+          }, 200);
+        });
+        y += ready.length * 36 + 12;
+      }
+
+      if (raising.length > 0) {
+        box.add(
+          this.add
+            .text(-280, y, `Raising: ${raising.map((p) => FARM_CROPS[p.cropId!].name).join(", ")}`, {
+              fontFamily: "Georgia",
+              fontSize: "13px",
+              color: "#e8c96a",
+            })
+            .setOrigin(0, 0.5),
+        );
+        y += 24;
+      }
+
+      if (canExpand) {
+        this.addBtn(box, 0, half - 72, `Expand pen (+1 slot, ${PLOT_BUY_COST}d)`, () => {
+          const r = buyNextPlot("stables");
+          if (r === "poor") this.toast("Not enough denarii.");
+          else if (r === "max") this.toast("Pen at max size.");
+          else {
+            gameState.persist();
+            bus.emit("denarii-changed");
+            bus.emit("camp-refresh");
+            this.toast("Pen expanded.");
+            this.openCampFarm(this.farmMode);
+          }
+        }, 260);
+      }
+
+      const pantryLine =
+        c.farm.pantry.length === 0
+          ? "Pantry empty"
+          : c.farm.pantry.map((p) => `${FARM_CROPS[p.cropId].name}×${p.count}`).join("  ·  ");
+      box.add(
+        this.add
+          .text(0, half - 40, pantryLine, { fontFamily: "Georgia", fontSize: "13px", color: "#8ecf6a", wordWrap: { width: 620 } })
+          .setOrigin(0.5),
+      );
+      this.addBtn(box, 0, half - 8, "Close", () => this.closeOverlay(), 160);
+      return;
+    }
+
+    const hint = "Plant crops → march once → harvest. Honey and grapes unlock with more freed houses.";
+    const crops = (Object.keys(FARM_CROPS) as FarmCropId[]).filter((id) => FARM_CROPS[id].kind === "crop");
+    box.add(
+      this.add
+        .text(0, -half + 48, hint, {
+          fontFamily: "Georgia",
+          fontSize: "13px",
+          color: "#b8a890",
+          wordWrap: { width: 520 },
+          align: "center",
+        })
+        .setOrigin(0.5),
+    );
+    const rowH = 100;
+    const startY = -half + 88;
+    plots.forEach((plot, i) => {
+      const y = startY + i * rowH;
+      if (y + rowH / 2 > half - 80) return;
+      const label = `Plot ${i + 1}`;
+      const status = !plot.unlocked
+        ? "Locked"
+        : plot.state === "empty"
+          ? "Empty"
+          : plot.state === "growing"
+            ? `Growing ${FARM_CROPS[plot.cropId!].name}`
+            : `Ready ${FARM_CROPS[plot.cropId!].name}`;
+      box.add(
+        this.add
+          .text(-220, y, `${label}  ·  ${status}`, {
+            fontFamily: "Georgia",
+            fontSize: "14px",
+            color: plot.unlocked ? "#e8dcc8" : "#6a5a4a",
+          })
+          .setOrigin(0, 0.5),
+      );
+      if (!plot.unlocked) {
+        this.addBtn(box, 160, y, `Buy ${PLOT_BUY_COST}d`, () => {
+          const r = buyNextPlot("crops");
+          if (r === "poor") this.toast("Not enough denarii.");
+          else if (r === "max") this.toast("All plots owned.");
+          else {
+            gameState.persist();
+            bus.emit("denarii-changed");
+            bus.emit("camp-refresh");
+            this.openCampFarm(this.farmMode);
+          }
+        }, 140);
+      } else if (plot.state === "empty") {
+        crops.forEach((cropId, ci) => {
+          const def = FARM_CROPS[cropId];
+          const unlocked = isCropUnlocked(cropId);
+          const lockHint = animalUnlockHint(cropId) || cropUnlockHint(cropId);
+          const cols = Math.min(crops.length, 4);
+          const colW = 150;
+          const row = Math.floor(ci / cols);
+          const col = ci % cols;
+          const bx = -80 + col * colW - ((cols - 1) * colW) / 2;
+          const by = y + 28 + row * 34;
+          this.addBtn(box, bx, by, unlocked ? `${def.name} ${def.cost}d` : `${def.name} 🔒`, () => {
+            if (!unlocked) {
+              this.toast(lockHint || "Not unlocked yet.");
+              return;
+            }
+            const r = plantPlot(plot.id, cropId);
+            if (r === "poor") this.toast("Not enough denarii.");
+            else if (r === "wrong") this.toast("Crops only on farm beds.");
+            else if (r !== "ok") this.toast("Cannot plant.");
+            else {
+              gameState.persist();
+              bus.emit("denarii-changed");
+              bus.emit("camp-refresh");
+              this.toast(`${def.name} started — ready after one raid.`);
+              this.openCampFarm(this.farmMode);
+            }
+          }, 138);
+        });
+      } else if (plot.state === "ready") {
+        this.addBtn(box, 160, y, "Harvest", () => {
+          harvestPlot(plot.id);
+          gameState.persist();
+          bus.emit("camp-refresh");
+          this.toast("Added to pantry.");
+          this.openCampFarm(this.farmMode);
+        }, 120);
+      } else {
+        box.add(
+          this.add.text(160, y, "After next raid", { fontFamily: "Georgia", fontSize: "13px", color: "#e8c96a" }).setOrigin(0.5),
+        );
+      }
+    });
+    const pantryLine =
+      c.farm.pantry.length === 0
+        ? "Pantry empty"
+        : c.farm.pantry.map((p) => `${FARM_CROPS[p.cropId].name}×${p.count}`).join("  ·  ");
+    box.add(
+      this.add
+        .text(0, half - 72, pantryLine, { fontFamily: "Georgia", fontSize: "13px", color: "#8ecf6a", wordWrap: { width: 620 } })
+        .setOrigin(0.5),
+    );
+    this.addBtn(box, 0, half - 36, "Close", () => this.closeOverlay(), 160);
+  };
+
+  private openCampParty = (): void => {
+    const c = camp();
+    const volGroups = volunteersGroupedByHouse();
+    const volCount = c.volunteersUnlocked.length;
+    const split = volCount > 0;
+    const boxW = split ? 920 : 680;
+    const boxH = 620;
+    const box = this.box(boxW, boxH, "PARTY");
+    const cx = split ? -250 : 0;
+    const closeY = boxH / 2 - 36;
+
+    box.add(
+      this.add
+        .text(cx, -270, "Pick two allies for the march.", {
+          fontFamily: "Georgia",
+          fontSize: "14px",
+          color: "#b8a890",
+        })
+        .setOrigin(split ? 0 : 0.5, 0.5),
+    );
+
+    const selected = [...c.party] as CompanionId[];
+    COMPANION_IDS.forEach((id, i) => {
+      const def = getCompanionDef(id);
+      const on = selected.includes(id);
+      const y = -235 + i * 40;
+      box.add(
+        this.add
+          .text(cx - (split ? 0 : 220), y, `${def.name}  ·  ${def.title}`, {
+            fontFamily: "Georgia",
+            fontSize: "15px",
+            color: on ? "#e8c96a" : "#e8dcc8",
+          })
+          .setOrigin(0, 0.5),
+      );
+      this.addBtn(box, cx + (split ? 200 : 180), y, on ? "Selected" : "Select", () => {
+        if (on) {
+          if (selected.length <= 1) {
+            this.toast("Need two allies.");
+            return;
+          }
+          const next = selected.filter((x) => x !== id);
+          while (next.length < 2) {
+            const fill = COMPANION_IDS.find((x) => !next.includes(x));
+            if (!fill) break;
+            next.push(fill);
+          }
+          setParty(next[0], next[1]);
+        } else {
+          if (selected.length >= 2) selected.shift();
+          selected.push(id);
+          setParty(selected[0], selected[1]);
+        }
+        gameState.persist();
+        bus.emit("camp-refresh");
+        this.openCampParty();
+      }, 130);
+    });
+
+    box.add(
+      this.add
+        .text(cx + (split ? 100 : 0), -30, `Marching: ${c.party.map((id) => getCompanionDef(id).name).join(" + ")}`, {
+          fontFamily: "Cinzel, Georgia",
+          fontSize: "15px",
+          color: "#8ecf6a",
+        })
+        .setOrigin(split ? 0 : 0.5, 0.5),
+    );
+
+    if (palUnlocked()) {
+      const animal = palAnimalName();
+      box.add(
+        this.add
+          .text(
+            cx + (split ? 100 : 0),
+            0,
+            palBrought()
+              ? `${palDisplayName()} (${animal}) marches.`
+              : `${palDisplayName()} (${animal}) at roost.`,
+            {
+              fontFamily: "Georgia",
+              fontSize: "13px",
+              color: "#c4b49a",
+            },
+          )
+          .setOrigin(split ? 0 : 0.5, 0.5),
+      );
+      this.addBtn(
+        box,
+        cx + (split ? 100 : 0),
+        36,
+        palBrought() ? "Leave pal at roost" : "Bring pal",
+        () => {
+          togglePalBrought();
+          bus.emit("camp-refresh");
+          this.openCampParty();
+        },
+        split ? 180 : 240,
+      );
+    } else {
+      box.add(
+        this.add
+          .text(cx + (split ? 100 : 0), 8, "No house pal yet.", {
+            fontFamily: "Georgia",
+            fontSize: "12px",
+            color: "#8a7a68",
+          })
+          .setOrigin(split ? 0 : 0.5, 0.5),
+      );
+    }
+
+    if (split) {
+      const rx = 250;
+      box.add(this.add.rectangle(rx - 10, 0, 2, boxH - 80, 0x5a4a38, 0.55).setOrigin(0.5, 0.5));
+      box.add(
+        this.add
+          .text(rx, -270, "House ally (optional)", {
+            fontFamily: "Cinzel, Georgia",
+            fontSize: "15px",
+            color: "#b8a890",
+          })
+          .setOrigin(0.5, 0.5),
+      );
+      box.add(
+        this.add
+          .text(rx, -240, `Selected: ${volunteerDisplayLine(c.houseVolunteer)}`, {
+            fontFamily: "Georgia",
+            fontSize: "13px",
+            color: "#8ecf6a",
+          })
+          .setOrigin(0.5, 0.5),
+      );
+      this.addBtn(box, rx, -205, c.houseVolunteer ? "Clear ally" : "None", () => {
+        setHouseVolunteer(null);
+        gameState.persist();
+        bus.emit("camp-refresh");
+        this.openCampParty();
+      }, 140);
+
+      let tabHouse = this.partyVolTab;
+      if (c.houseVolunteer) {
+        const fromSel = volunteerHouseId(c.houseVolunteer);
+        if (fromSel) tabHouse = fromSel;
+      }
+      if (!tabHouse || !volGroups.some((g) => g.houseId === tabHouse)) {
+        tabHouse = volGroups[0]?.houseId ?? null;
+      }
+      this.partyVolTab = tabHouse;
+
+      box.add(
+        this.add
+          .text(rx, -170, "Choose by house:", {
+            fontFamily: "Georgia",
+            fontSize: "12px",
+            color: "#8a7a68",
+          })
+          .setOrigin(0.5, 0.5),
+      );
+      volGroups.forEach((group, i) => {
+        const col = i % 3;
+        const row = Math.floor(i / 3);
+        const short = raidHouseShortName(group.houseId);
+        const active = tabHouse === group.houseId;
+        this.addBtn(box, rx - 80 + col * 80, -140 + row * 36, active ? `● ${short}` : short, () => {
+          this.partyVolTab = group.houseId;
+          this.openCampParty();
+        }, 72);
+      });
+
+      const activeGroup = volGroups.find((g) => g.houseId === tabHouse);
+      if (activeGroup) {
+        box.add(
+          this.add
+            .text(rx, -20, raidHouseShortName(activeGroup.houseId), {
+              fontFamily: "Cinzel, Georgia",
+              fontSize: "14px",
+              color: "#e8dcc8",
+            })
+            .setOrigin(0.5, 0.5),
+        );
+        activeGroup.ids.forEach((vid, i) => {
+          const def = getVolunteerDef(vid);
+          if (!def) return;
+          const on = c.houseVolunteer === vid;
+          this.addBtn(box, rx, 18 + i * 44, on ? `● ${def.name}` : def.name, () => {
+            setHouseVolunteer(on ? null : vid);
+            gameState.persist();
+            bus.emit("camp-refresh");
+            this.openCampParty();
+          }, 200);
+        });
+      }
+    }
+
+    this.addBtn(box, 0, closeY, "Close", () => this.closeOverlay(), 160);
+  };
+
+  private openCampLoadout = (): void => {
+    const tabs: (CompanionId | "player")[] = ["player", ...COMPANION_IDS];
+    const isPlayer = this.campLoadoutId === "player";
+    const box = this.box(720, isPlayer ? 520 : 640, isPlayer ? "ARMORY" : "LOADOUT");
+    tabs.forEach((cid, i) => {
+      const label = cid === "player" ? "You" : getCompanionDef(cid).name.split(" ")[0];
+      const active = this.campLoadoutId === cid;
+      this.addBtn(box, -300 + i * 100, -270, active ? `● ${label}` : label, () => {
+        this.campLoadoutId = cid;
+        this.openCampLoadout();
+      }, 88);
+    });
+
+    if (isPlayer) {
+      const s = gameState.save;
+      const cur = s.equippedWeapon ? getWeapon(s.equippedWeapon) : null;
+      box.add(
+        this.add
+          .text(0, -220, cur ? `${cur.name}` : "Empty hands", {
+            fontFamily: "Cinzel, Georgia",
+            fontSize: "20px",
+            color: "#e8c96a",
+          })
+          .setOrigin(0.5),
+      );
+      if (cur) {
+        box.add(
+          this.add
+            .text(0, -188, `Light  ${cur.light.name}  ·  Heavy  ${cur.heavy.name}`, {
+              fontFamily: "Georgia",
+              fontSize: "14px",
+              color: "#e8dcc8",
+            })
+            .setOrigin(0.5),
+        );
+      }
+      WEAPON_ORDER.forEach((id, i) => {
+        const w = getWeapon(id);
+        const unlocked = s.unlockedWeapons.includes(id);
+        const equipped = s.equippedWeapon === id;
+        const col = i % 3;
+        const row = Math.floor(i / 3);
+        const x = -200 + col * 200;
+        const y = -130 + row * 52;
+        if (!unlocked || !w.playable) return;
+        this.addBtn(box, x, y, equipped ? `● ${w.shortName}` : w.shortName, () => {
+          s.equippedWeapon = id;
+          gameState.persist();
+          bus.emit("weapon-changed", id);
+          this.openCampLoadout();
+        }, 160);
+      });
+    } else {
+      const id = this.campLoadoutId as CompanionId;
+      const def = getCompanionDef(id);
+      const load = camp().companions[id];
+      box.add(
+        this.add
+          .text(0, -220, `${def.name} — ${def.title}`, { fontFamily: "Cinzel, Georgia", fontSize: "20px", color: "#e8c96a" })
+          .setOrigin(0.5),
+      );
+      box.add(
+        this.add
+          .text(0, -188, `Weapon: ${getWeapon(load.weapon).name}`, { fontFamily: "Georgia", fontSize: "14px", color: "#e8dcc8" })
+          .setOrigin(0.5),
+      );
+      const unlocked = gameState.save.unlockedWeapons;
+      unlocked.forEach((w, i) => {
+        const col = i % 3;
+        const row = Math.floor(i / 3);
+        this.addBtn(box, -200 + col * 200, -140 + row * 48, getWeapon(w).shortName, () => {
+          setCompanionWeapon(id, w as WeaponId);
+          gameState.persist();
+          bus.emit("camp-refresh");
+          this.openCampLoadout();
+        }, 160);
+      });
+      box.add(this.add.text(0, 40, "Tech tree (3 nodes)", { fontFamily: "Georgia", fontSize: "14px", color: "#b8a890" }).setOrigin(0.5));
+      def.tree.forEach((node, i) => {
+        const owned = companionHasNode(id, node.id);
+        const cost = companionNodeCost(id, node.id);
+        const y = 80 + i * 52;
+        box.add(
+          this.add
+            .text(-260, y, `${node.name} — ${node.desc}`, {
+              fontFamily: "Georgia",
+              fontSize: "13px",
+              color: owned ? "#8ecf6a" : "#e8dcc8",
+            })
+            .setOrigin(0, 0.5),
+        );
+        if (!owned) {
+          this.addBtn(box, 220, y, `${cost}d`, () => {
+            const r = unlockCompanionNode(id, node.id);
+            if (r === "poor") this.toast("Not enough denarii.");
+            else if (r === "order") this.toast("Unlock the prior node first.");
+            else if (r === "ok") {
+              gameState.persist();
+              bus.emit("denarii-changed");
+              this.openCampLoadout();
+            }
+          }, 100);
+        } else {
+          box.add(this.add.text(220, y, "Owned", { fontFamily: "Georgia", fontSize: "13px", color: "#8ecf6a" }).setOrigin(0.5));
+        }
+      });
+    }
+    this.addBtn(box, 0, isPlayer ? 220 : 280, "Close", () => this.closeOverlay(), 160);
+  };
+
+  private openCampMarch = (): void => {
+    const c = camp();
+    const houses = marchableRaidHouses(c.freedPads);
+    const next = nextUnlockedRaidHouse(c.freedPads);
+    const titleHouse = next ?? houses[houses.length - 1] ?? "serpens";
+    const blurb =
+      houses.length > 1
+        ? "Freed houses can be rematched. The next house waits on the east road."
+        : titleHouse === "lupus"
+          ? "Strike while the pack sleeps. Wake one — wake all."
+          : titleHouse === "aper"
+            ? "Strike the sty by night. Mind the mud. Heavies will charge."
+            : "Strike while the coil sleeps. Torches only.";
+    const boxH = this.overlayMaxHeight(600);
+    const half = boxH / 2;
+    const box = this.box(680, boxH, `NIGHT RAID — ${raidHouseShortName(titleHouse).toUpperCase()}`);
+
+    const headerY = -half + 52;
+    box.add(
+      this.add
+        .text(0, headerY, `Allies: ${c.party.map((id) => getCompanionDef(id).name).join(" + ")}`, {
+          fontFamily: "Georgia",
+          fontSize: "15px",
+          color: "#e8dcc8",
+        })
+        .setOrigin(0.5),
+    );
+    box.add(
+      this.add
+        .text(0, headerY + 22, blurb, {
+          fontFamily: "Georgia",
+          fontSize: "13px",
+          color: "#7ab8a4",
+          wordWrap: { width: 560 },
+          align: "center",
+        })
+        .setOrigin(0.5),
+    );
+    box.add(
+      this.add
+        .text(0, headerY + 48, `Provisions: ${this.marchMealSummary()}`, {
+          fontFamily: "Georgia",
+          fontSize: "12px",
+          color: "#e8c96a",
+        })
+        .setOrigin(0.5),
+    );
+
+    const tabY = -half + 92;
+    this.addTabBtn(
+      box,
+      -92,
+      tabY,
+      "Provisions",
+      this.campMarchTab === "meals",
+      () => {
+        this.campMarchTab = "meals";
+        this.openCampMarch();
+      },
+      168,
+    );
+    this.addTabBtn(
+      box,
+      92,
+      tabY,
+      "Raid targets",
+      this.campMarchTab === "targets",
+      () => {
+        this.campMarchTab = "targets";
+        this.openCampMarch();
+      },
+      168,
+    );
+
+    const contentTop = -half + 124;
+    const footerY = half - 32;
+    const rowH = 36;
+    const maxRows = Math.max(1, Math.floor((footerY - 14 - contentTop) / rowH));
+
+    if (this.campMarchTab === "meals") {
+      let y = contentTop;
+      if (c.cookUnlocked) {
+        const stockTotal = c.cookedStock.reduce((n, r) => n + r.count, 0);
+        box.add(
+          this.add
+            .text(0, y, stockTotal > 0 ? "Cooked (preferred)" : "Cook at the farm kitchen first.", {
+              fontFamily: "Georgia",
+              fontSize: "12px",
+              color: "#b8a890",
+            })
+            .setOrigin(0.5),
+        );
+        y += 22;
+        for (const recipe of marchRecipes()) {
+          if (y + rowH / 2 > footerY - 14) break;
+          const count = cookedCount(recipe.id);
+          const selected = c.selectedMarchRecipe === recipe.id;
+          this.addBtn(
+            box,
+            0,
+            y,
+            `${selected ? "● " : ""}${recipe.name} (${count}) — ${recipe.desc}`,
+            () => {
+              if (count <= 0) {
+                this.toast("None cooked. Visit the kitchen.");
+                return;
+              }
+              c.selectedMarchRecipe = selected ? null : recipe.id;
+              c.farm.selectedMeal = null;
+              c.farm.selectedPantryCrop = null;
+              gameState.persist();
+              this.openCampMarch();
+            },
+            440,
+          );
+          y += rowH;
+        }
+        y += 8;
+        box.add(
+          this.add
+            .text(0, y, "Raw pantry (by crop)", { fontFamily: "Georgia", fontSize: "12px", color: "#8a7a68" })
+            .setOrigin(0.5),
+        );
+        y += 20;
+      } else {
+        box.add(
+          this.add
+            .text(0, y, "Optional meal from the pantry", {
+              fontFamily: "Georgia",
+              fontSize: "12px",
+              color: "#b8a890",
+            })
+            .setOrigin(0.5),
+        );
+        y += 22;
+      }
+      const pantryRows = c.farm.pantry.filter((p) => p.count > 0);
+      if (pantryRows.length === 0 && y + rowH / 2 <= footerY - 14) {
+        box.add(
+          this.add.text(0, y, "Pantry empty — harvest after a raid.", {
+            fontFamily: "Georgia",
+            fontSize: "13px",
+            color: "#8a7a68",
+          }).setOrigin(0.5),
+        );
+      }
+      for (const row of pantryRows) {
+        if (y + rowH / 2 > footerY - 14) break;
+        const def = FARM_CROPS[row.cropId];
+        const selected = c.farm.selectedPantryCrop === row.cropId;
+        const stats = def.marchStats ?? { hp: def.meal === "hp" ? 20 : 0, stamina: def.meal === "stamina" ? 18 : 0, attack: def.meal === "damage" ? 3 : 0 };
+        const buff = [
+          stats.hp ? `+${stats.hp} HP` : "",
+          stats.stamina ? `+${stats.stamina} Stam` : "",
+          stats.attack ? `+${stats.attack} Atk` : "",
+        ]
+          .filter(Boolean)
+          .join(", ");
+        this.addBtn(box, 0, y, `${selected ? "● " : ""}${def.name} (${row.count}) — ${buff}`, () => {
+          c.farm.selectedPantryCrop = selected ? null : row.cropId;
+          c.farm.selectedMeal = null;
+          c.selectedMarchRecipe = null;
+          gameState.persist();
+          this.openCampMarch();
+        }, 440);
+        y += rowH;
+      }
+    } else {
+      const needsPager = houses.length > maxRows;
+      const pageSize = needsPager ? maxRows - 1 : maxRows;
+      const totalPages = Math.max(1, Math.ceil(houses.length / pageSize));
+      if (this.campMarchHousePage >= totalPages) this.campMarchHousePage = 0;
+      const pageHouses = houses.slice(this.campMarchHousePage * pageSize, this.campMarchHousePage * pageSize + pageSize);
+      let y = contentTop;
+      for (const id of pageHouses) {
+        const short = raidHouseShortName(id);
+        const rematch = c.freedPads.includes(id);
+        const isNext = id === next;
+        this.addBtn(
+          box,
+          0,
+          y,
+          `${isNext ? "▸ " : ""}${rematch ? `Rematch ${short}` : `Raid ${short} by night`}`,
+          () => {
+            this.closeOverlay();
+            bus.emit("enter-raid", id);
+          },
+          320,
+        );
+        y += rowH;
+      }
+      if (needsPager) {
+        this.addBtn(
+          box,
+          -90,
+          y,
+          "◀ Prev",
+          () => {
+            this.campMarchHousePage = (this.campMarchHousePage - 1 + totalPages) % totalPages;
+            this.openCampMarch();
+          },
+          120,
+        );
+        box.add(
+          this.add
+            .text(0, y, `${this.campMarchHousePage + 1} / ${totalPages}`, {
+              fontFamily: "Georgia",
+              fontSize: "13px",
+              color: "#c4b8a4",
+            })
+            .setOrigin(0.5),
+        );
+        this.addBtn(
+          box,
+          90,
+          y,
+          "Next ▶",
+          () => {
+            this.campMarchHousePage = (this.campMarchHousePage + 1) % totalPages;
+            this.openCampMarch();
+          },
+          120,
+        );
+      }
+    }
+
+    this.addBtn(box, 0, footerY, "Stay", () => this.closeOverlay(), 160);
+  };
+
+  private openCampKitchen = (): void => {
+    const c = camp();
+    if (!c.cookUnlocked) {
+      this.toast("The cook arrives after three houses are free.");
+      return;
+    }
+    const march = marchRecipes();
+    const broth = campRecipes();
+    const boxH = this.overlayMaxHeight(580);
+    const half = boxH / 2;
+    const box = this.box(680, boxH, "KITCHEN");
+
+    const pantryLine = kitchenStockSummary();
+    const stockLine =
+      c.cookedStock.length === 0
+        ? "Stock empty"
+        : c.cookedStock.map((p) => `${getRecipe(p.recipeId).name}×${p.count}`).join("  ·  ");
+    box.add(
+      this.add
+        .text(0, -half + 52, `Pantry: ${pantryLine}`, {
+          fontFamily: "Georgia",
+          fontSize: "12px",
+          color: "#8ecf6a",
+          wordWrap: { width: 620 },
+          align: "center",
+        })
+        .setOrigin(0.5),
+    );
+    box.add(
+      this.add
+        .text(0, -half + 72, `Stock: ${stockLine}`, {
+          fontFamily: "Georgia",
+          fontSize: "12px",
+          color: "#7ab8a4",
+          wordWrap: { width: 620 },
+          align: "center",
+        })
+        .setOrigin(0.5),
+    );
+    if (c.activeCampBuff) {
+      box.add(
+        this.add
+          .text(0, -half + 92, `Fire buff ready: ${c.activeCampBuff === "camp_broth" ? "Camp broth" : "Hearty stew"}`, {
+            fontFamily: "Georgia",
+            fontSize: "12px",
+            color: "#e8c96a",
+          })
+          .setOrigin(0.5),
+      );
+    }
+
+    const tabY = -half + (c.activeCampBuff ? 118 : 100);
+    this.addTabBtn(
+      box,
+      -195,
+      tabY,
+      "March meals",
+      this.campKitchenTab === "march",
+      () => {
+        this.campKitchenTab = "march";
+        this.openCampKitchen();
+      },
+      108,
+    );
+    this.addTabBtn(box, -65, tabY, "Fire broth", this.campKitchenTab === "broth", () => {
+      this.campKitchenTab = "broth";
+      this.openCampKitchen();
+    }, 108);
+    this.addTabBtn(box, 65, tabY, "Sell", this.campKitchenTab === "sell", () => {
+      this.campKitchenTab = "sell";
+      this.openCampKitchen();
+    }, 108);
+    this.addTabBtn(box, 195, tabY, "Quests", this.campKitchenTab === "quests", () => {
+      this.campKitchenTab = "quests";
+      this.openCampKitchen();
+    }, 108);
+
+    const contentTop = tabY + 34;
+    const footerY = half - 32;
+    const rowH = 44;
+
+    if (this.campKitchenTab === "quests") {
+      let y = contentTop;
+      const quests = visibleCookQuests();
+      if (quests.length === 0) {
+        box.add(
+          this.add
+            .text(0, y + 20, "No active cook quests — free more houses or check back later.", {
+              fontFamily: "Georgia",
+              fontSize: "14px",
+              color: "#8a7a68",
+              wordWrap: { width: 560 },
+              align: "center",
+            })
+            .setOrigin(0.5),
+        );
+      }
+      for (const q of quests) {
+        const def = COOK_QUEST_DEFS[q.id];
+        box.add(
+          this.add
+            .text(-280, y - 8, def.label, { fontFamily: "Georgia", fontSize: "14px", color: "#e8dcc8" })
+            .setOrigin(0, 0.5),
+        );
+        box.add(
+          this.add
+            .text(-280, y + 12, `${q.progress}/${def.goal}  ·  ${def.rewardLabel}`, {
+              fontFamily: "Georgia",
+              fontSize: "11px",
+              color: "#8a7a68",
+            })
+            .setOrigin(0, 0.5),
+        );
+        y += rowH + 16;
+      }
+      const done = (["olive_harvests", "mutton_stews"] as const).filter((id) => cookQuestProgress(id).done);
+      if (done.length > 0) {
+        box.add(
+          this.add
+            .text(0, y + 8, `Completed: ${done.map((id) => COOK_QUEST_DEFS[id].rewardLabel).join(" · ")}`, {
+              fontFamily: "Georgia",
+              fontSize: "12px",
+              color: "#8ecf6a",
+              wordWrap: { width: 560 },
+              align: "center",
+            })
+            .setOrigin(0.5),
+        );
+      }
+    } else if (this.campKitchenTab === "march") {
+      let y = contentTop;
+      for (const recipe of march) {
+        if (y + rowH / 2 > footerY - 14) break;
+        const locked = isRecipeQuestLocked(recipe.id);
+        const inputs = formatRecipeInputs(recipe.id);
+        box.add(
+          this.add
+            .text(-280, y - 8, locked ? `${recipe.name} 🔒` : recipe.name, {
+              fontFamily: "Georgia",
+              fontSize: "14px",
+              color: !locked && canCraft(recipe.id) ? "#e8dcc8" : "#8a7a68",
+            })
+            .setOrigin(0, 0.5),
+        );
+        box.add(
+          this.add
+            .text(-280, y + 10, locked ? recipeLockHint(recipe.id) : `${inputs} — ${recipe.desc}`, {
+              fontFamily: "Georgia",
+              fontSize: "11px",
+              color: "#8a7a68",
+            })
+            .setOrigin(0, 0.5),
+        );
+        this.addBtn(box, 240, y, "Cook", () => {
+          const r = craftRecipe(recipe.id);
+          if (r === "quest") this.toast(recipeLockHint(recipe.id));
+          else if (r === "missing") this.toast(ingredientShortfallHint(recipe.id));
+          else if (r === "locked") this.toast("Kitchen locked.");
+          else {
+            gameState.persist();
+            bus.emit("camp-refresh");
+            this.toast(`${recipe.name} ready.`);
+            this.openCampKitchen();
+          }
+        }, 90);
+        y += rowH;
+      }
+    } else if (this.campKitchenTab === "broth") {
+      let y = contentTop;
+      for (const recipe of broth) {
+        if (y + rowH / 2 > footerY - 14) break;
+        const inputs = formatRecipeInputs(recipe.id);
+        const count = cookedCount(recipe.id);
+        box.add(
+          this.add
+            .text(-280, y - 8, `${recipe.name} (${count} ready)`, {
+              fontFamily: "Georgia",
+              fontSize: "14px",
+              color: "#e8dcc8",
+            })
+            .setOrigin(0, 0.5),
+        );
+        box.add(
+          this.add
+            .text(-280, y + 10, `${inputs} — ${recipe.desc}`, {
+              fontFamily: "Georgia",
+              fontSize: "11px",
+              color: "#8a7a68",
+            })
+            .setOrigin(0, 0.5),
+        );
+        this.addBtn(box, 180, y - 6, "Cook", () => {
+          const r = craftRecipe(recipe.id);
+          if (r === "missing") this.toast(ingredientShortfallHint(recipe.id));
+          else if (r === "locked") this.toast("Kitchen locked.");
+          else {
+            gameState.persist();
+            bus.emit("camp-refresh");
+            this.toast(`${recipe.name} ready.`);
+            this.openCampKitchen();
+          }
+        }, 90);
+        this.addBtn(box, 280, y - 6, "Set for fire", () => {
+          const r = assignCampBuffFromStock(recipe.id);
+          if (r === "empty") this.toast("Cook one first.");
+          else if (r === "wrong") this.toast("Not a fire recipe.");
+          else {
+            gameState.persist();
+            this.toast("Broth ready at the fire.");
+            this.openCampKitchen();
+          }
+        }, 120);
+        y += rowH + 12;
+      }
+    } else {
+      let y = contentTop;
+      let any = false;
+      (Object.keys(FARM_CROPS) as FarmCropId[]).forEach((cropId) => {
+        const count = pantryCount(cropId);
+        if (count <= 0) return;
+        if (y + rowH / 2 > footerY - 14) return;
+        any = true;
+        this.addBtn(box, 0, y, `Sell ${rawCropLabel(cropId)} ×${count} (${RAW_SELL_PRICES[cropId]}d each)`, () => {
+          const r = sellRaw(cropId);
+          if (r === "empty") this.toast("Nothing to sell.");
+          else {
+            gameState.persist();
+            bus.emit("denarii-changed");
+            this.openCampKitchen();
+          }
+        }, 380);
+        y += rowH;
+      });
+      c.cookedStock.forEach((row) => {
+        if (y + rowH / 2 > footerY - 14) return;
+        any = true;
+        const def = getRecipe(row.recipeId);
+        this.addBtn(box, 0, y, `Sell ${def.name} ×${row.count} (${def.sellPrice}d each)`, () => {
+          const r = sellCooked(row.recipeId);
+          if (r === "empty") this.toast("None left.");
+          else {
+            gameState.persist();
+            bus.emit("denarii-changed");
+            this.openCampKitchen();
+          }
+        }, 380);
+        y += rowH;
+      });
+      if (!any) {
+        box.add(
+          this.add
+            .text(0, contentTop + 20, "Nothing to sell — harvest or cook first.", {
+              fontFamily: "Georgia",
+              fontSize: "14px",
+              color: "#8a7a68",
+            })
+            .setOrigin(0.5),
+        );
+      }
+    }
+
+    this.addBtn(box, 0, footerY, "Close", () => this.closeOverlay(), 160);
+  };
+
+  private openRaidCipher = (payload: unknown): void => {
+    const data = payload as { prompt: string; options: string[]; answer: string[] };
+    if (!data?.options) return;
+    this.cipherPicks = [];
+    const render = (): void => {
+      const box = this.box(620, 480, "CIPHER");
+      box.add(
+        this.add
+          .text(0, -180, data.prompt, {
+            fontFamily: "Georgia",
+            fontSize: "15px",
+            color: "#e8dcc8",
+            wordWrap: { width: 520 },
+            align: "center",
+          })
+          .setOrigin(0.5),
+      );
+      box.add(
+        this.add
+          .text(0, -120, `Order: ${this.cipherPicks.join(" → ") || "—"}`, {
+            fontFamily: "Cinzel, Georgia",
+            fontSize: "16px",
+            color: "#7ab8a4",
+          })
+          .setOrigin(0.5),
+      );
+      data.options.forEach((opt, i) => {
+        this.addBtn(box, -160 + i * 160, -40, opt, () => {
+          if (this.cipherPicks.length >= data.answer.length) this.cipherPicks = [];
+          this.cipherPicks.push(opt);
+          render();
+        }, 140);
+      });
+      this.addBtn(box, -100, 80, "Clear", () => {
+        this.cipherPicks = [];
+        render();
+      }, 140);
+      this.addBtn(box, 100, 80, "Submit", () => {
+        this.closeOverlay();
+        const raid = this.scene.get("RaidScene") as { applyCipher?: (order: string[]) => void };
+        raid?.applyCipher?.(this.cipherPicks);
+      }, 140);
+      this.addBtn(box, 0, 150, "Leave", () => this.closeOverlay(), 140);
+    };
+    render();
   };
 
   private toMenu(): void {

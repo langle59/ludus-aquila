@@ -454,12 +454,13 @@ export function grantSchoolGloryClimax(): void {
   if (!s.title || s.title === "lanista" || s.title === "aquila" || s.title === "none") {
     s.title = "sand-teacher";
   }
-  s.currentObjective = "school";
+  s.currentObjective = "freed_camp";
   addXp(80);
   addDenarii(40);
   gameState.persist();
   bus.emit("cosmetics-changed");
-  bus.emit("toast", "Teacher of the Sand. The four have glory under your hand.");
+  bus.emit("toast", "Teacher of the Sand. The west gate opens to the Freed Camp.");
+  queueActIntro();
 }
 
 export function applySparReward(npcId: string, playerWon: boolean): { xp: number; denarii: number } {

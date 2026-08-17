@@ -48,7 +48,13 @@ function canvasTex(scene: Phaser.Scene, key: string, w: number, h: number, draw:
   tex.refresh();
 }
 
-function stampKeyedSprite(scene: Phaser.Scene, srcKey: string, destKey: string, targetW: number): boolean {
+function stampKeyedSprite(
+  scene: Phaser.Scene,
+  srcKey: string,
+  destKey: string,
+  targetW: number,
+  opts?: { dropNearBlack?: boolean },
+): boolean {
   if (!scene.textures.exists(srcKey)) return false;
   const img = scene.textures.get(srcKey).getSourceImage() as HTMLImageElement | HTMLCanvasElement;
   const w = img.width;
@@ -63,12 +69,14 @@ function stampKeyedSprite(scene: Phaser.Scene, srcKey: string, destKey: string, 
   const src = tctx.getImageData(0, 0, w, h).data;
   const pix = w * h;
   const drop = new Uint8Array(pix);
+  const dropNearBlack = opts?.dropNearBlack === true;
   const magenta = (i: number): boolean => {
     const r = src[i];
     const g = src[i + 1];
     const b = src[i + 2];
     const a = src[i + 3];
     if (a < 20) return true;
+    if (dropNearBlack && r < 36 && g < 36 && b < 36) return true;
     if (r > 150 && b > 150 && g < 150 && r + b > g * 2.2) return true;
     return g > 90 && g > r + 18 && g > b + 18;
   };
@@ -1416,6 +1424,12 @@ function makeWeaponTextures(scene: Phaser.Scene): void {
     ctx.lineTo(36, 12);
     ctx.fill();
   });
+  canvasTex(scene, "fx-raid-arrow", 28, 8, (ctx) => {
+    px(ctx, 0, 3, 18, 2, 0xc4a878);
+    px(ctx, 16, 1, 8, 6, 0xa84838);
+    px(ctx, 22, 0, 6, 8, 0xd4a84b);
+    px(ctx, 0, 1, 4, 6, 0x6a5040);
+  });
 }
 
 function makeDecor(scene: Phaser.Scene): void {
@@ -1428,6 +1442,40 @@ function makeDecor(scene: Phaser.Scene): void {
     px(ctx, 4, 6, 28, 3, 0xe8e0d4, 0.5);
     px(ctx, 6, 0, 24, 6, COLORS.gold, 0.85);
     px(ctx, 8, 1, 20, 2, shade(COLORS.gold, 0.3), 0.5);
+  });
+  canvasTex(scene, "prop-statue-base", 28, 18, (ctx) => {
+    px(ctx, 2, 8, 24, 10, 0x5a5448);
+    px(ctx, 4, 4, 20, 8, 0x6a6458);
+    px(ctx, 6, 2, 16, 4, 0x7a7468);
+    px(ctx, 8, 10, 12, 2, 0xd4a84b, 0.45);
+  });
+  canvasTex(scene, "tile-step", 30, 30, (ctx) => {
+    px(ctx, 1, 1, 28, 28, 0x5a5448);
+    px(ctx, 3, 3, 24, 24, 0x6a6458);
+    px(ctx, 5, 5, 20, 20, 0x4a463c);
+    px(ctx, 8, 8, 14, 2, 0x8a8478, 0.4);
+  });
+  canvasTex(scene, "tile-step-safe", 30, 30, (ctx) => {
+    px(ctx, 1, 1, 28, 28, 0x5a5448);
+    px(ctx, 3, 3, 24, 24, 0x6a6458);
+    px(ctx, 5, 5, 20, 20, 0x4a463c);
+    circ(ctx, 15, 15, 4, 0xd4a84b, 0.7);
+  });
+  canvasTex(scene, "tile-step-goal", 30, 30, (ctx) => {
+    px(ctx, 1, 1, 28, 28, 0x3a5040);
+    px(ctx, 3, 3, 24, 24, 0x4a6850);
+    px(ctx, 5, 5, 20, 20, 0x2a4030);
+    circ(ctx, 15, 15, 6, 0x8ecf6a, 0.85);
+  });
+  canvasTex(scene, "prop-pressure-plate", 28, 16, (ctx) => {
+    oval(ctx, 14, 8, 13, 7, 0x5a5040);
+    oval(ctx, 14, 8, 10, 5, 0x7a6a50);
+    oval(ctx, 14, 7, 6, 3, 0xc4a878, 0.5);
+  });
+  canvasTex(scene, "prop-pressure-down", 28, 14, (ctx) => {
+    oval(ctx, 14, 8, 13, 6, 0x3a3428);
+    oval(ctx, 14, 8, 10, 4, 0x5a4a38);
+    oval(ctx, 14, 8, 5, 2, 0x8ecf6a, 0.7);
   });
   canvasTex(scene, "prop-gate-post", 36, 80, (ctx) => {
     px(ctx, 4, 72, 28, 8, 0x4a4038);
@@ -1481,6 +1529,366 @@ function makeDecor(scene: Phaser.Scene): void {
       px(ctx, 36 + i * 12, 50, 3, 3, 0x1a1410, 0.9);
     }
     px(ctx, 34, 36, 108, 3, 0x3a322c, 0.85);
+  });
+  // Tall vertical gate flush with a side wall (Act 4 west exit)
+  canvasTex(scene, "prop-west-gate", 56, 128, (ctx) => {
+    // Outer stone frame
+    px(ctx, 0, 0, 56, 128, 0x5a544c);
+    px(ctx, 4, 4, 48, 120, 0x8a8278);
+    // Inner opening (dark passage)
+    px(ctx, 14, 18, 28, 92, 0x1a1410);
+    px(ctx, 16, 20, 24, 88, 0x2a2218, 0.85);
+    // Soft teal wash — Freed Camp beyond
+    px(ctx, 18, 28, 20, 72, 0x2f6b4a, 0.22);
+    // Top lintel
+    px(ctx, 2, 0, 52, 18, 0xb8b0a4);
+    px(ctx, 6, 4, 44, 6, 0xe0d8cc, 0.45);
+    px(ctx, 10, 8, 36, 4, COLORS.gold, 0.85);
+    px(ctx, 18, 2, 20, 3, 0x7ab8a4, 0.7);
+    // Bottom sill
+    px(ctx, 2, 110, 52, 18, 0x4a4038);
+    px(ctx, 6, 114, 44, 6, 0x6a6458, 0.6);
+    px(ctx, 10, 118, 36, 4, COLORS.gold, 0.55);
+    // Side pillars
+    px(ctx, 4, 18, 10, 92, 0xc4bcb0, 0.35);
+    px(ctx, 42, 18, 10, 92, 0x5a544c, 0.5);
+    px(ctx, 6, 40, 6, 3, COLORS.gold, 0.75);
+    px(ctx, 44, 40, 6, 3, COLORS.gold, 0.75);
+    px(ctx, 6, 72, 6, 3, COLORS.gold, 0.75);
+    px(ctx, 44, 72, 6, 3, COLORS.gold, 0.75);
+    // Vertical iron bars / suggestion of depth
+    for (let i = 0; i < 4; i++) {
+      px(ctx, 20 + i * 6, 24, 2, 80, 0x3a322c, 0.55);
+    }
+    // Small eagle / house mark plate
+    px(ctx, 20, 48, 16, 20, 0x3a2818, 0.9);
+    px(ctx, 22, 50, 12, 4, COLORS.gold, 0.8);
+    px(ctx, 24, 56, 8, 8, 0x7ab8a4, 0.85);
+    px(ctx, 22, 66, 12, 2, COLORS.gold, 0.6);
+  });
+  // Freed Camp woodland props — ridge tent from PNG (black bg + green emblem keyed out)
+  if (!stampKeyedSprite(scene, "tent-src", "prop-camp-tent", 128, { dropNearBlack: true })) {
+    canvasTex(scene, "prop-camp-tent", 128, 112, (ctx) => {
+      const ink = 0x3a2818;
+      const cream = 0xf0e8d8;
+      const creamD = 0xd8d0c0;
+      const grey = 0x9a9aa0;
+      const greyD = 0x6a6a70;
+      // Base
+      px(ctx, 16, 80, 96, 24, ink);
+      px(ctx, 20, 84, 88, 16, 0x5a4030);
+      // Front face (cream)
+      fillPoly(ctx, [[64, 12], [20, 80], [108, 80]], cream);
+      fillPoly(ctx, [[64, 20], [28, 76], [100, 76]], creamD, 0.35);
+      // Right side (grey)
+      fillPoly(ctx, [[64, 12], [108, 80], [116, 72], [72, 16]], grey);
+      fillPoly(ctx, [[68, 28], [104, 72], [112, 68]], greyD, 0.4);
+      // Door slit
+      px(ctx, 60, 44, 8, 36, ink);
+      px(ctx, 56, 72, 16, 8, ink, 0.7);
+      // Seam lines on side
+      px(ctx, 80, 36, 20, 4, ink, 0.35);
+      px(ctx, 84, 52, 20, 4, ink, 0.3);
+      // Outline strokes
+      ctx.strokeStyle = css(ink);
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(64, 12);
+      ctx.lineTo(20, 80);
+      ctx.lineTo(108, 80);
+      ctx.closePath();
+      ctx.stroke();
+    });
+  }
+  scene.textures.get("prop-camp-tent")?.setFilter(Phaser.Textures.FilterMode.NEAREST);
+  canvasTex(scene, "prop-camp-flag-pole", 8, 72, (ctx) => {
+    px(ctx, 2, 0, 4, 72, 0x3a2818);
+    px(ctx, 3, 0, 2, 72, 0x6a4a28);
+    px(ctx, 4, 0, 1, 72, 0x8a6a40, 0.55);
+    circ(ctx, 4, 3, 2, 0x8a8278);
+  });
+  canvasTex(scene, "prop-camp-flag-cloth", 48, 32, (ctx) => {
+    // Pennant — white so house tint reads cleanly
+    fillPoly(ctx, [[0, 2], [46, 15], [0, 28]], 0xffffff);
+    fillPoly(ctx, [[0, 2], [30, 12], [0, 16]], 0xffffff, 0.35);
+    fillPoly(ctx, [[2, 18], [34, 16], [2, 26]], 0xffffff, 0.22);
+    // Trailing notch
+    fillPoly(ctx, [[34, 10], [46, 15], [34, 20]], 0xffffff, 0.5);
+    // Pole sleeve
+    px(ctx, 0, 1, 3, 28, 0xffffff, 0.7);
+  });
+  // Legacy key kept for any leftover refs
+  canvasTex(scene, "prop-camp-house-flag", 36, 64, (ctx) => {
+    px(ctx, 4, 0, 4, 64, 0x4a3a28);
+    px(ctx, 5, 0, 2, 64, 0xffffff, 0.35);
+    fillPoly(ctx, [[8, 2], [34, 16], [8, 32]], 0xffffff);
+  });
+  canvasTex(scene, "prop-raid-chains", 22, 16, (ctx) => {
+    circ(ctx, 6, 8, 5, 0x8a8278);
+    circ(ctx, 6, 8, 3, 0x2a1c10);
+    circ(ctx, 15, 8, 5, 0x6a6458);
+    circ(ctx, 15, 8, 3, 0x2a1c10);
+    px(ctx, 9, 7, 6, 2, 0x8a8278);
+  });
+  canvasTex(scene, "prop-stable", 64, 48, (ctx) => {
+    px(ctx, 2, 20, 60, 26, 0x5a4030);
+    px(ctx, 4, 22, 56, 20, 0x7a5a38, 0.5);
+    px(ctx, 0, 8, 64, 14, 0x6a4a28);
+    px(ctx, 4, 10, 56, 8, 0x8a6a40, 0.55);
+    px(ctx, 8, 24, 4, 20, 0x3a2818);
+    px(ctx, 30, 24, 4, 20, 0x3a2818);
+    px(ctx, 52, 24, 4, 20, 0x3a2818);
+    px(ctx, 12, 28, 14, 14, 0x2a1c10, 0.7);
+    px(ctx, 36, 28, 14, 14, 0x2a1c10, 0.7);
+    px(ctx, 20, 4, 24, 6, 0x4a3020);
+    px(ctx, 6, 40, 16, 6, 0xc4a66e, 0.4);
+  });
+  canvasTex(scene, "prop-farm-bed", 44, 28, (ctx) => {
+    px(ctx, 0, 0, 44, 28, 0x5a4030);
+    px(ctx, 2, 2, 40, 24, 0x7a5a32);
+    for (let i = 0; i < 5; i++) {
+      px(ctx, 4 + i * 8, 4, 2, 20, 0x4a3018, 0.55);
+    }
+    px(ctx, 6, 8, 32, 3, 0x6a8a40, 0.35);
+    px(ctx, 8, 16, 28, 3, 0x6a8a40, 0.28);
+  });
+  const cropStage = (draw: (ctx: CanvasRenderingContext2D) => void, key: string, w = 36, h = 32) => {
+    canvasTex(scene, key, w, h, draw);
+  };
+  cropStage((ctx) => {
+    px(ctx, 16, 26, 4, 6, 0x5a4030);
+  }, "crop-barley-sprout");
+  cropStage((ctx) => {
+    px(ctx, 16, 26, 4, 6, 0x5a4030);
+    px(ctx, 14, 18, 2, 10, 0x7a9a48);
+    px(ctx, 20, 16, 2, 12, 0x8aad58);
+  }, "crop-barley-mid");
+  cropStage((ctx) => {
+    px(ctx, 16, 26, 4, 6, 0x5a4030);
+    for (let i = 0; i < 5; i++) {
+      const x = 8 + i * 5;
+      px(ctx, x, 22 - (i % 2) * 2, 2, 10, 0xc4a040);
+      px(ctx, x, 10, 3, 12, 0xd4b050);
+    }
+  }, "crop-barley-ready", 40, 36);
+  cropStage((ctx) => {
+    px(ctx, 16, 26, 6, 6, 0x4a3828);
+    px(ctx, 15, 20, 2, 8, 0x5a7040);
+  }, "crop-olive-sprout");
+  cropStage((ctx) => {
+    px(ctx, 16, 26, 6, 6, 0x4a3828);
+    px(ctx, 12, 12, 12, 14, 0x4a6838);
+    px(ctx, 14, 8, 8, 8, 0x5a7848);
+  }, "crop-olive-mid");
+  cropStage((ctx) => {
+    px(ctx, 16, 26, 6, 6, 0x4a3828);
+    px(ctx, 10, 10, 16, 16, 0x4a6838);
+    px(ctx, 12, 6, 12, 10, 0x5a8848);
+    circ(ctx, 14, 14, 2, 0x6a6a30);
+    circ(ctx, 20, 16, 2, 0x6a6a30);
+    circ(ctx, 17, 20, 2, 0x6a6a30);
+  }, "crop-olive-ready", 40, 36);
+  canvasTex(scene, "animal-goat-kid", 28, 24, (ctx) => {
+    px(ctx, 8, 14, 14, 8, 0x9a8068);
+    px(ctx, 18, 10, 8, 8, 0x8a7058);
+    px(ctx, 20, 12, 2, 2, 0x1a1210);
+    px(ctx, 6, 20, 3, 4, 0x6a5040);
+    px(ctx, 14, 20, 3, 4, 0x6a5040);
+  });
+  canvasTex(scene, "animal-goat-adult", 36, 28, (ctx) => {
+    px(ctx, 8, 16, 20, 10, 0x9a8068);
+    px(ctx, 22, 10, 10, 10, 0x8a7058);
+    px(ctx, 24, 12, 2, 2, 0x1a1210);
+    px(ctx, 28, 8, 4, 6, 0x6a5040);
+    px(ctx, 10, 24, 4, 4, 0x6a5040);
+    px(ctx, 18, 24, 4, 4, 0x6a5040);
+    px(ctx, 6, 14, 2, 8, 0x7a6858);
+  });
+  canvasTex(scene, "animal-chicken-kid", 24, 20, (ctx) => {
+    px(ctx, 8, 12, 10, 8, 0xd4a840);
+    px(ctx, 12, 8, 6, 6, 0xe8c850);
+    px(ctx, 14, 9, 2, 2, 0x1a1210);
+    px(ctx, 16, 7, 3, 3, 0xc45a1a);
+    px(ctx, 6, 18, 2, 3, 0xc4a030);
+    px(ctx, 12, 18, 2, 3, 0xc4a030);
+  });
+  canvasTex(scene, "animal-chicken-adult", 28, 22, (ctx) => {
+    px(ctx, 6, 12, 14, 10, 0xd4a840);
+    px(ctx, 12, 6, 8, 8, 0xe8c850);
+    px(ctx, 14, 8, 2, 2, 0x1a1210);
+    px(ctx, 18, 4, 4, 5, 0xc45a1a);
+    px(ctx, 4, 6, 6, 4, 0xb04030, 0.7);
+    px(ctx, 8, 20, 3, 3, 0xc4a030);
+    px(ctx, 14, 20, 3, 3, 0xc4a030);
+  });
+  canvasTex(scene, "animal-sheep-kid", 28, 22, (ctx) => {
+    px(ctx, 6, 10, 16, 12, 0xe8e0d0);
+    px(ctx, 10, 8, 8, 8, 0xd8d0c0);
+    px(ctx, 12, 10, 2, 2, 0x1a1210);
+    px(ctx, 8, 20, 3, 3, 0x6a5040);
+    px(ctx, 14, 20, 3, 3, 0x6a5040);
+  });
+  canvasTex(scene, "animal-sheep-adult", 36, 26, (ctx) => {
+    px(ctx, 4, 10, 24, 14, 0xe8e0d0);
+    px(ctx, 10, 6, 12, 10, 0xd8d0c0);
+    px(ctx, 14, 8, 2, 2, 0x1a1210);
+    px(ctx, 6, 22, 4, 4, 0x4a4038);
+    px(ctx, 16, 22, 4, 4, 0x4a4038);
+    px(ctx, 22, 12, 2, 6, 0x7a6858);
+  });
+  canvasTex(scene, "animal-pig-kid", 28, 22, (ctx) => {
+    px(ctx, 6, 12, 16, 10, 0xe8a0a8);
+    px(ctx, 14, 10, 8, 8, 0xd89098);
+    px(ctx, 16, 12, 2, 2, 0x1a1210);
+    px(ctx, 18, 14, 4, 3, 0xc07080);
+    px(ctx, 8, 20, 3, 3, 0xc07080);
+    px(ctx, 14, 20, 3, 3, 0xc07080);
+  });
+  canvasTex(scene, "animal-pig-adult", 38, 28, (ctx) => {
+    px(ctx, 4, 14, 26, 12, 0xe8a0a8);
+    px(ctx, 18, 10, 12, 12, 0xd89098);
+    px(ctx, 20, 12, 2, 2, 0x1a1210);
+    px(ctx, 22, 14, 5, 4, 0xc07080);
+    px(ctx, 8, 24, 4, 4, 0xa06070);
+    px(ctx, 16, 24, 4, 4, 0xa06070);
+    px(ctx, 28, 8, 4, 4, 0xd89098);
+  });
+  cropStage((ctx) => {
+    px(ctx, 16, 26, 6, 6, 0x4a3828);
+    px(ctx, 14, 18, 4, 10, 0x5a7040);
+  }, "crop-honey-sprout");
+  cropStage((ctx) => {
+    px(ctx, 16, 26, 6, 6, 0x4a3828);
+    px(ctx, 10, 12, 16, 14, 0x6a8a48);
+    px(ctx, 14, 8, 8, 8, 0xe8c96a, 0.5);
+  }, "crop-honey-mid");
+  cropStage((ctx) => {
+    px(ctx, 16, 26, 6, 6, 0x4a3828);
+    px(ctx, 8, 10, 20, 16, 0x6a8a48);
+    circ(ctx, 12, 14, 3, 0xe8c96a);
+    circ(ctx, 20, 16, 3, 0xf0d878);
+    circ(ctx, 16, 20, 3, 0xe8c96a);
+  }, "crop-honey-ready", 40, 36);
+  cropStage((ctx) => {
+    px(ctx, 16, 26, 6, 6, 0x4a3828);
+    px(ctx, 14, 18, 4, 10, 0x5a7040);
+  }, "crop-grape-sprout");
+  cropStage((ctx) => {
+    px(ctx, 16, 26, 6, 6, 0x4a3828);
+    px(ctx, 12, 10, 12, 16, 0x4a6838);
+    circ(ctx, 14, 14, 2, 0x6a3080, 0.6);
+    circ(ctx, 20, 16, 2, 0x7a4090, 0.6);
+  }, "crop-grape-mid");
+  cropStage((ctx) => {
+    px(ctx, 16, 26, 6, 6, 0x4a3828);
+    px(ctx, 10, 8, 16, 18, 0x4a6838);
+    for (let i = 0; i < 6; i++) {
+      const x = 12 + (i % 3) * 5;
+      const y = 12 + Math.floor(i / 3) * 6;
+      circ(ctx, x, y, 2.5, i % 2 ? 0x7a4090 : 0x6a3080);
+    }
+  }, "crop-grape-ready", 40, 36);
+  canvasTex(scene, "prop-pen-gate", 40, 32, (ctx) => {
+    px(ctx, 4, 8, 4, 22, 0x5a3c22);
+    px(ctx, 32, 8, 4, 22, 0x5a3c22);
+    px(ctx, 6, 12, 28, 3, 0x6b4a28);
+    px(ctx, 8, 20, 24, 3, 0x6b4a28);
+    px(ctx, 14, 14, 12, 10, 0x3a2414, 0.35);
+  });
+  canvasTex(scene, "prop-feed-trough", 48, 28, (ctx) => {
+    px(ctx, 4, 16, 40, 10, 0x5a4030);
+    px(ctx, 6, 18, 36, 6, 0x4a3020);
+    px(ctx, 8, 14, 32, 4, 0xc4a878, 0.55);
+    px(ctx, 10, 12, 28, 3, 0xd4b888, 0.45);
+    px(ctx, 2, 20, 6, 6, 0x6a5040);
+    px(ctx, 40, 20, 6, 6, 0x6a5040);
+    px(ctx, 20, 6, 8, 6, 0x8a6a40);
+    px(ctx, 22, 4, 4, 3, COLORS.gold, 0.5);
+  });
+  canvasTex(scene, "prop-livestock-stall", 64, 56, (ctx) => {
+    px(ctx, 4, 28, 56, 24, 0x4a3020);
+    px(ctx, 6, 30, 52, 18, 0x6a4a28, 0.55);
+    px(ctx, 0, 12, 64, 16, 0x6a4a28);
+    px(ctx, 2, 14, 60, 10, 0x8a6a40, 0.5);
+    px(ctx, 8, 4, 48, 12, 0x5a3c22);
+    px(ctx, 10, 6, 44, 6, 0xc45a1a, 0.7);
+    px(ctx, 18, 8, 28, 4, 0xe8c96a, 0.55);
+    px(ctx, 10, 32, 12, 14, 0xc4a878, 0.45);
+    px(ctx, 26, 34, 14, 12, 0xd4b888, 0.4);
+    px(ctx, 44, 32, 10, 14, 0x8a6a40, 0.5);
+    circ(ctx, 32, 22, 4, COLORS.gold, 0.7);
+  });
+  canvasTex(scene, "prop-camp-rug", 56, 32, (ctx) => {
+    oval(ctx, 28, 16, 26, 14, 0x4a3020, 0.7);
+    oval(ctx, 28, 16, 22, 11, 0x6a3a28, 0.55);
+    oval(ctx, 28, 16, 10, 5, COLORS.gold, 0.25);
+  });
+  canvasTex(scene, "prop-camp-wardrobe", 52, 60, (ctx) => {
+    px(ctx, 6, 16, 40, 40, 0x3a2414);
+    px(ctx, 8, 18, 36, 36, 0x6a4a28);
+    px(ctx, 10, 20, 32, 6, 0x8a6a40, 0.55);
+    px(ctx, 12, 30, 28, 3, 0x4a3020);
+    px(ctx, 14, 36, 24, 16, 0x2a1c10, 0.55);
+    px(ctx, 16, 38, 8, 12, 0x8a3a2a, 0.7);
+    px(ctx, 28, 38, 8, 12, 0x3a4a6a, 0.7);
+    px(ctx, 20, 4, 12, 14, 0xc4a878);
+    px(ctx, 22, 6, 8, 4, COLORS.gold, 0.65);
+    px(ctx, 4, 48, 8, 8, 0x5a4030);
+    px(ctx, 40, 48, 8, 8, 0x5a4030);
+  });
+  canvasTex(scene, "fx-steam", 12, 16, (ctx) => {
+    circ(ctx, 6, 12, 4, 0xffffff, 0.25);
+    circ(ctx, 6, 8, 3, 0xffffff, 0.18);
+    circ(ctx, 6, 4, 2, 0xffffff, 0.12);
+  });
+  canvasTex(scene, "prop-cooking-pot", 40, 44, (ctx) => {
+    px(ctx, 8, 34, 24, 6, 0x3a2818);
+    px(ctx, 12, 28, 16, 8, 0x4a4038);
+    px(ctx, 10, 20, 20, 10, 0x2a2420);
+    px(ctx, 12, 18, 16, 4, 0x5a5048);
+    px(ctx, 14, 14, 12, 6, 0x6a6058);
+    px(ctx, 16, 8, 8, 8, 0xc45a1a, 0.7);
+    px(ctx, 18, 4, 4, 6, 0xe8c96a, 0.5);
+  });
+  canvasTex(scene, "prop-camp-armory", 72, 64, (ctx) => {
+    px(ctx, 4, 28, 64, 32, 0x3a2414);
+    px(ctx, 6, 30, 60, 26, 0x5a3c22);
+    px(ctx, 0, 14, 72, 16, 0x6a4a28);
+    px(ctx, 4, 16, 64, 10, 0x8a6a40, 0.5);
+    px(ctx, 8, 6, 56, 12, 0x4a3020);
+    px(ctx, 12, 32, 8, 24, 0x8a8278);
+    px(ctx, 24, 30, 8, 26, 0xc4bcb0);
+    px(ctx, 36, 34, 7, 22, 0x6a6458);
+    px(ctx, 48, 36, 14, 18, 0x5a4030);
+    px(ctx, 14, 22, 10, 4, COLORS.gold, 0.65);
+    px(ctx, 28, 22, 10, 4, COLORS.gold, 0.5);
+    px(ctx, 44, 22, 8, 4, 0xe8c96a, 0.45);
+  });
+  canvasTex(scene, "prop-camp-party", 64, 44, (ctx) => {
+    oval(ctx, 32, 24, 28, 16, 0x3a2818, 0.7);
+    oval(ctx, 32, 24, 22, 12, 0x5a4030, 0.55);
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      const x = 32 + Math.cos(a) * 22;
+      const y = 24 + Math.sin(a) * 12;
+      px(ctx, x - 3, y - 6, 6, 12, 0x6a4a28);
+      px(ctx, x - 2, y - 8, 4, 3, COLORS.gold, 0.55);
+    }
+    px(ctx, 24, 20, 16, 8, 0x8a6a40, 0.7);
+    px(ctx, 26, 18, 12, 5, 0xc4a878, 0.5);
+  });
+  canvasTex(scene, "prop-tree", 40, 64, (ctx) => {
+    px(ctx, 16, 36, 8, 26, 0x4a3020);
+    px(ctx, 18, 38, 4, 22, 0x6a4a28, 0.45);
+    circ(ctx, 20, 22, 16, 0x2f5a38);
+    circ(ctx, 12, 26, 10, 0x3a6a42, 0.85);
+    circ(ctx, 28, 24, 11, 0x245032, 0.9);
+    circ(ctx, 20, 14, 9, 0x4a7a48, 0.75);
+  });
+  canvasTex(scene, "prop-bush", 28, 20, (ctx) => {
+    circ(ctx, 14, 12, 10, 0x3a6a42);
+    circ(ctx, 8, 14, 7, 0x2f5a38, 0.9);
+    circ(ctx, 20, 13, 7, 0x4a7a48, 0.85);
   });
   canvasTex(scene, "prop-torch", 16, 32, (ctx) => {
     px(ctx, 6, 12, 4, 18, 0x5a3a18);

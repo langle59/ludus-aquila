@@ -41,7 +41,95 @@ export type ObjectiveId =
   | "tournament_3"
   | "free"
   | "take_school"
-  | "school";
+  | "school"
+  | "freed_camp"
+  | "raid_serpens"
+  | "raid_lupus"
+  | "raid_aper"
+  | "raid_taurus"
+  | "raid_tigris"
+  | "raid_leo"
+  | "raid_ursus"
+  | "raid_rhinoceros"
+  | "raid_elephas";
+
+export type CompanionId = "titus" | "aelia" | "brom" | "rufus" | "cassian";
+/** Refugee id — matches entries in refugees.ts (e.g. refugee-serpens-0). */
+export type VolunteerId = string;
+export type RaidHouseId =
+  | "serpens"
+  | "lupus"
+  | "aper"
+  | "taurus"
+  | "tigris"
+  | "leo"
+  | "ursus"
+  | "rhinoceros"
+  | "elephas";
+export type FarmCropId = "barley" | "olives" | "goat" | "chicken" | "sheep" | "pig" | "honey" | "grape";
+export type CookRecipeId =
+  | "barley_mash"
+  | "olive_oil"
+  | "goat_roast"
+  | "trail_stew"
+  | "warriors_feast"
+  | "camp_broth"
+  | "hearty_stew"
+  | "chicken_broth"
+  | "mutton_stew"
+  | "pork_roast"
+  | "honey_mead"
+  | "camp_wine"
+  | "olive_press";
+export type CookQuestId = "olive_harvests" | "mutton_stews";
+export interface CookQuestProgress {
+  id: CookQuestId;
+  progress: number;
+  done: boolean;
+}
+export type CampBuffId = "camp_broth" | "hearty_stew";
+export type FarmPlotState = "empty" | "growing" | "ready";
+export type MealBuff = "hp" | "stamina" | "damage" | null;
+
+export interface FarmPlot {
+  id: string;
+  unlocked: boolean;
+  cropId: FarmCropId | null;
+  state: FarmPlotState;
+}
+
+export interface RaidRoomProgress {
+  cleared: boolean;
+  puzzleSolved?: boolean;
+}
+
+export interface RaidHouseProgress {
+  rooms: Record<string, RaidRoomProgress>;
+  freed: boolean;
+  bossBeaten: boolean;
+}
+
+export interface CampSave {
+  party: CompanionId[];
+  companions: Record<CompanionId, { weapon: WeaponId; nodes: string[] }>;
+  farm: {
+    plots: FarmPlot[];
+    pantry: { cropId: FarmCropId; count: number }[];
+    selectedMeal: MealBuff;
+    penUnlocked: boolean;
+    selectedPantryCrop: FarmCropId | null;
+  };
+  cookQuests: CookQuestProgress[];
+  freedPads: string[];
+  raids: Record<string, RaidHouseProgress>;
+  volunteersUnlocked: VolunteerId[];
+  houseVolunteer: VolunteerId | null;
+  cookUnlocked: boolean;
+  cookedStock: { recipeId: CookRecipeId; count: number }[];
+  selectedMarchRecipe: CookRecipeId | null;
+  activeCampBuff: CampBuffId | null;
+  tempMaxHpBonus: number;
+}
 
 export type SkillId =
   | "iron_edge"
@@ -250,7 +338,7 @@ export interface SaveData {
   sparWins: Record<string, number>;
   dialogueFlags: Record<string, boolean>;
   storyFlags: Record<string, boolean>;
-  position: { x: number; y: number; scene: "ludus" | "arena" };
+  position: { x: number; y: number; scene: "ludus" | "arena" | "freedcamp" | "raid" };
   unlockedSkills: SkillId[];
   dummyHits: number;
   ownedCosmetics: string[];
@@ -274,6 +362,8 @@ export interface SaveData {
   weaponWins: Partial<Record<WeaponId, number>>;
   unlockedMastery: string[];
   activePrayer: string | null;
+  /** Act 4 freed camp, farm, companions, raid progress. */
+  camp: CampSave;
 }
 
 export interface SettingsData {

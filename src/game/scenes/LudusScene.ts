@@ -4,7 +4,7 @@ import { gameState } from "../state/GameState";
 import { bus } from "../systems/bus";
 import { audio } from "../systems/audio";
 import { paintMap, animateFountain, animateTrough, animateBrazier } from "../systems/worldRender";
-import { buildLudus, inChamberTiles, inDrillYardTiles, inFeastTiles, inShrineTiles, ludusAreaName } from "../maps/maps";
+import { buildLudus, inChamberTiles, inDrillYardTiles, inFeastTiles, inShrineTiles, inTrainingYardTiles, ludusAreaName } from "../maps/maps";
 import { Fighter, attachHpBar } from "../entities/Fighter";
 import { NpcActor, TrainingDummy, WorldProp } from "../entities/World";
 import { playerLook } from "../data/shop";
@@ -15,6 +15,8 @@ import { getNpc, HOUSE_GLADIATORS, LANISTA } from "../data/gladiators";
 import { markTutorial, skipTutorial, currentBoutNpc, allHouseBoutsWon, BOUT_FLAGS, queueActIntro, currentAct, actIntroFlag } from "../systems/objectives";
 import type { ObjectiveId } from "../types";
 import { applySparReward, applyDummyXp, pledgedHouse, playerCombatStats, rivalHouses, drinkFeast } from "../systems/progression";
+import { enterFreedCamp } from "../systems/playFlow";
+import { act4Unlocked } from "../data/camp";
 import {
   applyCoachingLesson,
   getSchoolRecord,
@@ -45,7 +47,7 @@ import {
   type LessonRuntime,
 } from "../systems/lessons";
 import { SHRINE_NICHES, patronUnlocked } from "../data/patrons";
-import { palCombatStats, palDisplayName, palTexture, palUnlocked } from "../data/pal";
+import { palBrought, palCombatStats, palDisplayName, palTexture, palUnlocked } from "../data/pal";
 import { getHouse } from "../data/houses";
 import {
   chamberBedTex,
@@ -99,7 +101,9 @@ export class LudusScene extends Phaser.Scene {
   private palShadow?: Phaser.GameObjects.Image;
   private roostGfx: Phaser.GameObjects.GameObject[] = [];
   private palHome = { x: 0, y: 0 };
+  private palGround = { x: 0, y: 0 };
   private roostIdleArmed = false;
+  private feastLeaveArmed = false;
   private nearestHint?: Phaser.GameObjects.Text;
   private sparring: { enemy: Fighter; ai: CombatAI; npcId: string; coaching: boolean } | null = null;
   private lessonState: LessonRuntime | null = null;
@@ -146,6 +150,7 @@ export class LudusScene extends Phaser.Scene {
     this.blockingHeld = false;
     this.dummyCapTold = false;
     this.roostIdleArmed = false;
+    this.feastLeaveArmed = false;
     this.built = buildLudus();
     this.chamberOpened = Boolean(gameState.save.lanistaUnlocked);
     this.drilling = null;
@@ -187,10 +192,18 @@ export class LudusScene extends Phaser.Scene {
 
     this.spawnNpcs();
     this.spawnProps();
+    this.seatHouse();
     this.refreshRoost();
     this.refreshHall();
     this.refreshShrine();
     this.refreshChamber();
+    if (gameState.pendingFeast) {
+      this.feastLeaveArmed = false;
+      this.time.delayedCall(900, () => {
+        this.feastLeaveArmed = true;
+      });
+      bus.emit("toast", "The house waits at the feast.");
+    }
     if (gameState.save.freedomWon) ensureNight();
     if (isTeachingLesson()) this.placeForTeachingLesson();
 
@@ -239,6 +252,12 @@ export class LudusScene extends Phaser.Scene {
       this.refreshRoost();
       this.refreshShrine();
       this.refreshChamber();
+      if (gameState.pendingFeast) {
+        this.feastLeaveArmed = false;
+        this.time.delayedCall(900, () => {
+          this.feastLeaveArmed = true;
+        });
+      }
       if (gameState.save.freedomWon) ensureNight();
       this.lessonsDoneThisVisit = new Set();
       gameState.schoolFreeRestAvailable = true;
@@ -288,6 +307,7 @@ export class LudusScene extends Phaser.Scene {
       bus.off("teach-start", this.onTeachStart, this);
       bus.emit("spar-available", { show: false });
       bus.emit("talk-available", { show: false });
+      bus.emit("combat-hud", { show: false });
       bus.emit("minimap-scene", "none");
       audio.setHall(false);
     });
@@ -298,6 +318,19 @@ export class LudusScene extends Phaser.Scene {
     this.game.canvas.setAttribute("tabindex", "0");
     this.game.canvas.focus();
     bus.emit("minimap-scene", "ludus");
+  }
+
+  private emitCombatHud(): void {
+    if (!this.player || !this.sys.isActive()) return;
+    if (gameState.paused || gameState.inMenu || gameState.inDialogue) {
+      bus.emit("combat-hud", { show: false });
+      return;
+    }
+    const tx = Math.floor(this.player.x / TILE_SIZE);
+    const ty = Math.floor(this.player.y / TILE_SIZE);
+    const show =
+      Boolean(this.sparring || this.drilling || this.drillDemo) || inTrainingYardTiles(tx, ty);
+    bus.emit("combat-hud", { show });
   }
 
   private doAttack = (kind: unknown = "light"): void => {
@@ -371,6 +404,53 @@ export class LudusScene extends Phaser.Scene {
         }
         this.add.image(p.x, footY - 62, "prop-gate-arch").setOrigin(0.5, 1).setDepth(footY + 80);
         this.interactables.push({ kind: "gate", x: p.x, y: p.y });
+      } else if (p.kind === "west_gate") {
+        // Vertical doorway flush with the west wall — posts north/south, tall arch between
+        const open = act4Unlocked();
+        const postN = this.physics.add.staticImage(p.x - 6, p.y - 52, "prop-gate-post");
+        postN.setOrigin(0.5, 1).setDepth(p.y - 40).setAngle(-2);
+        const bodyN = postN.body as Phaser.Physics.Arcade.StaticBody;
+        bodyN.setSize(18, 14);
+        bodyN.setOffset(9, 66);
+        postN.refreshBody();
+        this.physics.add.collider(this.player, postN);
+
+        const postS = this.physics.add.staticImage(p.x - 6, p.y + 68, "prop-gate-post");
+        postS.setOrigin(0.5, 1).setDepth(p.y + 40).setAngle(2);
+        const bodyS = postS.body as Phaser.Physics.Arcade.StaticBody;
+        bodyS.setSize(18, 14);
+        bodyS.setOffset(9, 66);
+        postS.refreshBody();
+        this.physics.add.collider(this.player, postS);
+
+        const gate = this.add
+          .image(p.x - 4, p.y + 8, "prop-west-gate")
+          .setOrigin(0.5, 0.5)
+          .setDepth(p.y + 60);
+        if (!open) gate.setTint(0x6a5a4a);
+
+        this.add
+          .text(p.x + 28, p.y - 8, open ? "BEYOND" : "BARRED", {
+            fontFamily: "Cinzel, Georgia",
+            fontSize: "12px",
+            color: open ? "#7ab8a4" : "#6a5a4a",
+            stroke: "#1a1210",
+            strokeThickness: 4,
+          })
+          .setOrigin(0, 0.5)
+          .setDepth(p.y + 62);
+        this.add
+          .text(p.x + 28, p.y + 10, "THE GATE", {
+            fontFamily: "Cinzel, Georgia",
+            fontSize: "10px",
+            color: open ? "#e8dcc8" : "#5a4a3a",
+            stroke: "#1a1210",
+            strokeThickness: 3,
+          })
+          .setOrigin(0, 0.5)
+          .setDepth(p.y + 62);
+
+        this.interactables.push({ kind: "west_gate", x: p.x + 12, y: p.y });
       } else if (p.kind === "fountain") {
         const f = new WorldProp(this, p.x, p.y, "fountain", "prop-fountain", true);
         this.physics.add.collider(this.player, f);
@@ -1065,7 +1145,10 @@ export class LudusScene extends Phaser.Scene {
   }
 
   private clearRoostGfx(): void {
-    for (const g of this.roostGfx) g.destroy();
+    for (const g of this.roostGfx) {
+      this.tweens.killTweensOf(g);
+      g.destroy();
+    }
     this.roostGfx = [];
     this.palSprite = undefined;
     this.palNameTag = undefined;
@@ -1082,6 +1165,7 @@ export class LudusScene extends Phaser.Scene {
 
     const home = palUnlocked();
     const stats = home ? palCombatStats() : null;
+    const following = home && palBrought();
 
     const nestGlow = this.add.image(pos.x, pos.y - 4, "fx-glow").setDepth(3).setAlpha(0.22).setScale(0.7).setBlendMode(Phaser.BlendModes.ADD);
     this.roostGfx.push(nestGlow);
@@ -1095,33 +1179,39 @@ export class LudusScene extends Phaser.Scene {
     });
 
     if (home && stats) {
-      const shadow = this.add.image(pos.x, pos.y + 10, "char-shadow").setDepth(1).setScale(0.85);
+      const start = following && this.player
+        ? { x: this.player.x - 28, y: this.player.y + 8 }
+        : { x: pos.x, y: pos.y };
+      this.palGround = { x: start.x, y: start.y };
+      const shadow = this.add.image(start.x, start.y + 10, "char-shadow").setDepth(1).setScale(0.85);
       this.palShadow = shadow;
       this.roostGfx.push(shadow);
-      const img = this.add.image(pos.x, pos.y - 14, palTexture()).setDepth(pos.y).setScale(stats.visScale);
+      const img = this.add.image(start.x, start.y - 14, palTexture()).setDepth(start.y).setScale(stats.visScale);
       if (stats.tint) img.setTint(stats.tint);
       this.palSprite = img;
       this.roostGfx.push(img);
-      this.tweens.add({
-        targets: img,
-        y: pos.y - 20,
-        duration: 980,
-        yoyo: true,
-        repeat: -1,
-        ease: "Sine.easeInOut",
-      });
       const tag = this.add
-        .text(pos.x, pos.y - 42, palDisplayName(), {
+        .text(start.x, start.y - 42, following ? `${palDisplayName()} · with you` : palDisplayName(), {
           fontFamily: "Cinzel, Georgia",
           fontSize: "11px",
-          color: "#e8c96a",
+          color: following ? "#8ecf6a" : "#e8c96a",
           stroke: "#1a1210",
           strokeThickness: 4,
         })
         .setOrigin(0.5)
-        .setDepth(pos.y + 2);
+        .setDepth(start.y + 2);
       this.palNameTag = tag;
       this.roostGfx.push(tag);
+      if (!following) {
+        this.tweens.add({
+          targets: img,
+          y: pos.y - 20,
+          duration: 980,
+          yoyo: true,
+          repeat: -1,
+          ease: "Sine.easeInOut",
+        });
+      }
     } else {
       const tag = this.add
         .text(pos.x, pos.y - 28, "Empty perch", {
@@ -1147,7 +1237,28 @@ export class LudusScene extends Phaser.Scene {
     }
   }
 
+  private updatePalFollower(now: number): void {
+    if (!this.palSprite?.active || !palUnlocked() || !palBrought() || !this.player) return;
+    const fx = this.player.facing.x;
+    const fy = this.player.facing.y;
+    const len = Math.hypot(fx, fy) || 1;
+    const tx = this.player.x - (fx / len) * 34;
+    const ty = this.player.y - (fy / len) * 28 + 6;
+    const dist = Phaser.Math.Distance.Between(this.palGround.x, this.palGround.y, tx, ty);
+    const step = dist > 90 ? 0.18 : dist > 40 ? 0.12 : 0.07;
+    if (dist > 18) {
+      this.palGround.x = Phaser.Math.Linear(this.palGround.x, tx, step);
+      this.palGround.y = Phaser.Math.Linear(this.palGround.y, ty, step);
+      this.palSprite.setFlipX(tx < this.palGround.x);
+    }
+    const bob = Math.sin(now / 260) * 3;
+    this.palSprite.setPosition(this.palGround.x, this.palGround.y - 14 + bob).setDepth(this.palGround.y);
+    this.palShadow?.setPosition(this.palGround.x, this.palGround.y + 10);
+    this.palNameTag?.setPosition(this.palGround.x, this.palGround.y - 42).setDepth(this.palGround.y + 2);
+  }
+
   private roostIdle(): void {
+    if (palBrought()) return;
     const pos = this.palHome;
     if (this.palSprite?.active) {
       const near = this.player && Phaser.Math.Distance.Between(this.player.x, this.player.y, pos.x, pos.y) < 96;
@@ -1263,6 +1374,21 @@ export class LudusScene extends Phaser.Scene {
         return;
       }
       bus.emit("gate");
+      return;
+    }
+    if (n.kind === "west_gate") {
+      if (!act4Unlocked()) {
+        bus.emit("dialogue", {
+          name: "West Gate",
+          lines: ["The west gate is barred. Finish the school's glory first."],
+        });
+        return;
+      }
+      gameState.save.position = { x: this.player.x, y: this.player.y, scene: "ludus" };
+      gameState.save.health = this.player.health;
+      gameState.save.stamina = this.player.stamina;
+      gameState.persist();
+      enterFreedCamp(this);
       return;
     }
     if (n.kind === "npc" && n.id) {
@@ -1550,6 +1676,7 @@ export class LudusScene extends Phaser.Scene {
     gameState.save.position = { x: this.player.x, y: this.player.y, scene: "ludus" };
     gameState.persist();
     bus.emit("minimap-scene", "none");
+    bus.emit("combat-hud", { show: false });
     audio.setHall(false);
     // Stop (don't sleep) — wake-from-sleep was freezing returns after arena
     this.scene.launch("ArenaScene");
@@ -1558,6 +1685,7 @@ export class LudusScene extends Phaser.Scene {
 
   update(_t: number, delta: number): void {
     if (!this.player) return;
+    this.emitCombatHud();
     const tx = Math.floor(this.player.x / TILE_SIZE);
     const ty = Math.floor(this.player.y / TILE_SIZE);
     audio.setHall(
@@ -1568,8 +1696,9 @@ export class LudusScene extends Phaser.Scene {
         inChamberTiles(tx, ty) ||
         inDrillYardTiles(tx, ty),
     );
-    if (gameState.pendingFeast && !inFeastTiles(tx, ty)) {
+    if (gameState.pendingFeast && this.feastLeaveArmed && !inFeastTiles(tx, ty)) {
       gameState.endFeast();
+      this.feastLeaveArmed = false;
       this.seatHouse();
       if (gameState.save.freedomWon && !gameState.save.dialogueFlags.freedomSpeech) {
         this.maybeFreedomSpeech();
@@ -1714,7 +1843,8 @@ export class LudusScene extends Phaser.Scene {
     this.npcs.forEach((npc) => {
       if (npc.visual.visible) npc.visual.setFlipX(this.player.x < npc.x);
     });
-    if (this.palSprite?.active) {
+    this.updatePalFollower(this.time.now);
+    if (this.palSprite?.active && !palBrought()) {
       const near = Phaser.Math.Distance.Between(this.player.x, this.player.y, this.palHome.x, this.palHome.y) < 96;
       if (near) this.palSprite.setFlipX(this.player.x < this.palSprite.x);
     }
@@ -1748,7 +1878,9 @@ export class LudusScene extends Phaser.Scene {
           ? "ARMORY"
           : n.kind === "gate"
             ? "ARENA"
-            : n.kind === "shop"
+            : n.kind === "west_gate"
+              ? "CAMP"
+              : n.kind === "shop"
               ? "QUARTERS"
               : n.kind === "chamber"
                 ? "CHAMBER"
@@ -1788,7 +1920,11 @@ export class LudusScene extends Phaser.Scene {
             ? "E  Armory"
             : n.kind === "gate"
               ? "E  Arena"
-              : n.kind === "shop"
+              : n.kind === "west_gate"
+                ? act4Unlocked()
+                  ? "E  Freed Camp"
+                  : "E  Barred"
+                : n.kind === "shop"
                 ? "E  Quarters"
                 : n.kind === "chamber"
                   ? "E  Chamber"
@@ -1848,6 +1984,7 @@ export class LudusScene extends Phaser.Scene {
       if (it.kind === "drill" || it.kind === "locker") marks.push({ x: it.x, y: it.y, color: 0x7ab8e8, kind: "locker" });
       if (it.kind === "pal") marks.push({ x: it.x, y: it.y, color: 0xe8c96a, kind: "pal" });
       if (it.kind === "gate") marks.push({ x: it.x, y: it.y, color: 0xc45a1a, kind: "gate" });
+      if (it.kind === "west_gate") marks.push({ x: it.x, y: it.y, color: 0x7ab8a4, kind: "west_gate" });
       if (it.kind === "trophy") marks.push({ x: it.x, y: it.y, color: 0xc4a060, kind: "trophy" });
       if (it.kind === "dice") marks.push({ x: it.x, y: it.y, color: 0xd4a84b, kind: "dice" });
       if (it.kind === "wine" || it.kind === "beer") marks.push({ x: it.x, y: it.y, color: 0xa33b2b, kind: "feast" });

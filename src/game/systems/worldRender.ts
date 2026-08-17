@@ -31,7 +31,7 @@ function variantTex(scene: Phaser.Scene, tex: string, x: number, y: number): str
 export function paintMap(
   scene: Phaser.Scene,
   built: BuiltMap,
-  mood: "ludus" | "arena" = "ludus",
+  mood: "ludus" | "arena" | "freedcamp" | "raid" = "ludus",
 ): Phaser.Physics.Arcade.StaticGroup {
   const solids = scene.physics.add.staticGroup();
   const wallSet = new Set<string>();
@@ -195,7 +195,7 @@ function arenaWallTorches(cols: number, rows: number): { x: number; y: number }[
   return placed;
 }
 
-function paintDecor(scene: Phaser.Scene, built: BuiltMap, mood: "ludus" | "arena"): void {
+function paintDecor(scene: Phaser.Scene, built: BuiltMap, mood: "ludus" | "arena" | "freedcamp" | "raid"): void {
   for (const t of built.tiles) {
     if (t.tex === "tile-column") {
       scene.add
@@ -267,44 +267,64 @@ export function animateBrazier(scene: Phaser.Scene, x: number, y: number): void 
   }
 }
 
-export function placeLamp(scene: Phaser.Scene, x: number, y: number): void {
+export function placeLamp(scene: Phaser.Scene, x: number, y: number, night = false): void {
   scene.add.image(x, y, "prop-lamp").setDepth(y + 6);
-  const glow = scene.add.image(x, y - 8, "fx-glow").setDepth(y + 5).setAlpha(0.4).setScale(0.7).setBlendMode(Phaser.BlendModes.ADD);
+  const baseA = night ? 0.55 : 0.4;
+  const scale = night ? 1.05 : 0.7;
+  const glow = scene.add
+    .image(x, y - 8, "fx-glow")
+    .setDepth(y + 5)
+    .setAlpha(baseA)
+    .setScale(scale)
+    .setTint(night ? 0xffb060 : 0xffffff)
+    .setBlendMode(Phaser.BlendModes.ADD);
   scene.tweens.add({
     targets: glow,
-    alpha: { from: 0.22, to: 0.5 },
-    scale: { from: 0.55, to: 0.8 },
+    alpha: { from: night ? 0.35 : 0.22, to: night ? 0.7 : 0.5 },
+    scale: { from: night ? 0.85 : 0.55, to: night ? 1.2 : 0.8 },
     duration: 640 + Math.random() * 180,
     yoyo: true,
     repeat: -1,
   });
 }
 
-export function paintAtmosphere(scene: Phaser.Scene, built: BuiltMap, mood: "ludus" | "arena"): void {
+export function paintAtmosphere(scene: Phaser.Scene, built: BuiltMap, mood: "ludus" | "arena" | "freedcamp" | "raid"): void {
   const w = built.cols * TILE_SIZE;
   const h = built.rows * TILE_SIZE;
+  const night = mood === "raid";
 
-  const wash = scene.add.rectangle(w / 2, h / 2, w, h, mood === "arena" ? 0xc45a1a : 0xd4a84b, mood === "arena" ? 0.08 : 0.06);
+  const washColor = night ? 0x243858 : mood === "arena" ? 0xc45a1a : mood === "freedcamp" ? 0x3a6a48 : 0xd4a84b;
+  const washAlpha = night ? 0.14 : mood === "arena" ? 0.08 : mood === "freedcamp" ? 0.1 : 0.06;
+  const wash = scene.add.rectangle(w / 2, h / 2, w, h, washColor, washAlpha);
   wash.setDepth(4);
+  // Soft ADD tint — MULTIPLY made dark tunics vanish on sand
   wash.setBlendMode(Phaser.BlendModes.ADD);
 
-  const vg = scene.add.graphics().setScrollFactor(0).setDepth(2500);
-  vg.fillStyle(0x1a1008, 0.55);
-  vg.fillRect(0, 0, GAME_WIDTH, 28);
-  vg.fillRect(0, GAME_HEIGHT - 22, GAME_WIDTH, 22);
-  vg.fillRect(0, 0, 18, GAME_HEIGHT);
-  vg.fillRect(GAME_WIDTH - 18, 0, 18, GAME_HEIGHT);
-  vg.fillStyle(0x1a1008, 0.22);
-  vg.fillRect(0, 0, GAME_WIDTH, 56);
-  vg.fillRect(0, GAME_HEIGHT - 48, GAME_WIDTH, 48);
+  if (night) {
+    const cool = scene.add.rectangle(w / 2, h / 2, w, h, 0x0a1830, 0.16).setDepth(4.5);
+    void cool;
+  }
 
-  const motes = 28;
+  const vg = scene.add.graphics().setScrollFactor(0).setDepth(2500);
+  const edge = night ? 0x040810 : mood === "freedcamp" ? 0x0a1810 : 0x1a1008;
+  vg.fillStyle(edge, night ? 0.7 : mood === "freedcamp" ? 0.62 : 0.55);
+  vg.fillRect(0, 0, GAME_WIDTH, night ? 36 : 28);
+  vg.fillRect(0, GAME_HEIGHT - (night ? 30 : 22), GAME_WIDTH, night ? 30 : 22);
+  vg.fillRect(0, 0, night ? 24 : 18, GAME_HEIGHT);
+  vg.fillRect(GAME_WIDTH - (night ? 24 : 18), 0, night ? 24 : 18, GAME_HEIGHT);
+  vg.fillStyle(edge, night ? 0.3 : 0.22);
+  vg.fillRect(0, 0, GAME_WIDTH, night ? 64 : 56);
+  vg.fillRect(0, GAME_HEIGHT - (night ? 56 : 48), GAME_WIDTH, night ? 56 : 48);
+
+  const motes = night ? 12 : 28;
   for (let i = 0; i < motes; i++) {
     const m = scene.add
       .image(Math.random() * w, Math.random() * h, "fx-mote")
       .setDepth(6)
-      .setAlpha(0.15 + Math.random() * 0.25)
+      .setAlpha(night ? 0.06 + Math.random() * 0.1 : 0.15 + Math.random() * 0.25)
       .setScale(0.6 + Math.random() * 0.8);
+    if (mood === "freedcamp") m.setTint(0xa8d090);
+    if (night) m.setTint(0x6a8ab0);
     scene.tweens.add({
       targets: m,
       y: m.y - (40 + Math.random() * 80),
@@ -314,13 +334,16 @@ export function paintAtmosphere(scene: Phaser.Scene, built: BuiltMap, mood: "lud
       repeat: -1,
       onRepeat: () => {
         m.setPosition(Math.random() * w, Math.random() * h);
-        m.setAlpha(0.2 + Math.random() * 0.25);
+        m.setAlpha(night ? 0.06 + Math.random() * 0.1 : 0.2 + Math.random() * 0.25);
       },
     });
   }
 
-  scene.cameras.main.fadeIn(700, 18, 10, 6);
-  scene.cameras.main.setBackgroundColor(mood === "arena" ? 0x3a2414 : 0x4a3824);
+  if (night) scene.cameras.main.fadeIn(900, 4, 8, 16);
+  else scene.cameras.main.fadeIn(700, 18, 10, 6);
+  scene.cameras.main.setBackgroundColor(
+    night ? 0x0a1018 : mood === "arena" ? 0x3a2414 : mood === "freedcamp" ? 0x1a2a1c : 0x4a3824,
+  );
 }
 
 export function labelMap(scene: Phaser.Scene, labels: { x: number; y: number; text: string }[]): void {

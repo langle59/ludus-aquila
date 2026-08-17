@@ -23,8 +23,9 @@ export class BootScene extends Phaser.Scene {
     this.load.image("elephant-src", "beasts/elephant.png");
     this.load.image("axe-src", "weapons/axe.png");
     this.load.image("hammer-src", "weapons/hammer.png");
+    this.load.image("tent-src", "tents/tent.png");
     this.load.on("loaderror", () => {
-      /* missing beast PNGs fall back to canvas art */
+      /* missing beast/tent PNGs fall back to canvas art */
     });
   }
 

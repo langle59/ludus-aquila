@@ -5,6 +5,8 @@ import { MenuScene } from "./game/scenes/MenuScene";
 import { CharacterCreateScene } from "./game/scenes/CharacterCreateScene";
 import { LudusScene } from "./game/scenes/LudusScene";
 import { ArenaScene } from "./game/scenes/ArenaScene";
+import { FreedCampScene } from "./game/scenes/FreedCampScene";
+import { RaidScene } from "./game/scenes/RaidScene";
 import { UIScene } from "./game/scenes/UIScene";
 
 const config: Phaser.Types.Core.GameConfig = {
@@ -29,7 +31,7 @@ const config: Phaser.Types.Core.GameConfig = {
   input: {
     keyboard: true,
   },
-  scene: [BootScene, MenuScene, CharacterCreateScene, LudusScene, ArenaScene, UIScene],
+  scene: [BootScene, MenuScene, CharacterCreateScene, LudusScene, ArenaScene, FreedCampScene, RaidScene, UIScene],
 };
 
 function boot(): void {

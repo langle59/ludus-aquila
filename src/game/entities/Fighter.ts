@@ -74,10 +74,13 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
   nameTag?: Phaser.GameObjects.Text;
   hpBarBg?: Phaser.GameObjects.Rectangle;
   hpBarFg?: Phaser.GameObjects.Rectangle;
+  private downMark?: Phaser.GameObjects.Text;
   flashUntil = 0;
   perfectFlashUntil = 0;
   lastDamage = 0;
   nextHitBonus = 1;
+  /** 0–1; armored raid foes shrug knockback. */
+  knockResist = 0;
   comboCount = 0;
   comboUntil = 0;
   frozenUntil = 0;
@@ -558,7 +561,8 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
       this.stamina = Math.max(0, this.stamina - 8);
       this.invulnUntil = now + 120;
       const angle = Math.atan2(from.y, from.x);
-      this.setVelocity(Math.cos(angle) * knock * 0.25, Math.sin(angle) * knock * 0.25);
+      const k = knock * (1 - this.knockResist);
+      this.setVelocity(Math.cos(angle) * k * 0.25, Math.sin(angle) * k * 0.25);
       audio.sfx("block");
       if (this.stamina <= 0) this.stagger(400);
       return "block";
@@ -572,7 +576,8 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
     this.flashUntil = now + 120;
     this.invulnUntil = now + (this.team === "player" ? 420 : 180);
     const angle = Math.atan2(from.y, from.x);
-    this.setVelocity(Math.cos(angle) * knock, Math.sin(angle) * knock);
+    const k = knock * (1 - this.knockResist);
+    this.setVelocity(Math.cos(angle) * k, Math.sin(angle) * k);
     audio.sfx("hurt");
     if (special && this.weaponId) this.stagger(500);
     if (this.health <= 0) {
@@ -590,13 +595,64 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
 
   die(): void {
     this.combat = "down";
+    this.health = 0;
     this.blocking = false;
     this.hitboxActive = false;
     this.setVelocity(0, 0);
+    const body = this.body as Phaser.Physics.Arcade.Body | undefined;
+    if (body) body.enable = false;
+    this.hideCombatHud();
     if (this.tableau === "none") {
       this.bodyVisual.setAngle(90);
-      this.bodyVisual.setAlpha(0.7);
+      this.bodyVisual.setAlpha(0.5);
+      this.bodyVisual.setTint(0x6a4a42);
     }
+    this.spawnDownedFx();
+  }
+
+  private hideCombatHud(): void {
+    this.hpBarBg?.setVisible(false);
+    this.hpBarFg?.setVisible(false);
+    this.nameTag?.setVisible(false);
+  }
+
+  private spawnDownedFx(): void {
+    this.downMark?.destroy();
+    this.puffDust(5);
+    if (this.team === "player") return;
+    this.downMark = this.scene.add
+      .text(this.x, this.y - 22, "✕", {
+        fontFamily: "Cinzel, Georgia",
+        fontSize: "18px",
+        color: "#c04030",
+        stroke: "#1a1210",
+        strokeThickness: 5,
+      })
+      .setOrigin(0.5)
+      .setDepth(this.y + 24);
+    const pop = this.scene.add
+      .text(this.x, this.y - 38, "DOWN", {
+        fontFamily: "Cinzel, Georgia",
+        fontSize: "13px",
+        color: "#e07060",
+        stroke: "#1a1210",
+        strokeThickness: 4,
+      })
+      .setOrigin(0.5)
+      .setDepth(4000);
+    this.scene.tweens.add({
+      targets: pop,
+      y: pop.y - 24,
+      alpha: 0,
+      duration: 720,
+      ease: "Quad.easeOut",
+      onComplete: () => pop.destroy(),
+    });
+  }
+
+  private clearDownedMark(): void {
+    this.downMark?.destroy();
+    this.downMark = undefined;
   }
 
   poseKneel(): void {
@@ -606,6 +662,8 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
     this.hitboxActive = false;
     this.setVelocity(0, 0);
     this.bodyVisual.setAlpha(1);
+    this.clearDownedMark();
+    this.hideCombatHud();
   }
 
   poseSteel(): void {
@@ -616,6 +674,8 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
     this.setVelocity(0, 0);
     this.bodyVisual.setAngle(95);
     this.bodyVisual.setAlpha(0.62);
+    this.clearDownedMark();
+    this.hideCombatHud();
   }
 
   /** Winner grants life: blade lowered, body eased back. */
@@ -664,7 +724,14 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
     this.stamina = this.stats.maxStamina;
     this.bodyVisual.setAngle(0);
     this.bodyVisual.setAlpha(1);
+    this.bodyVisual.clearTint();
+    this.clearDownedMark();
     this.setVelocity(0, 0);
+    const body = this.body as Phaser.Physics.Arcade.Body | undefined;
+    if (body) {
+      body.enable = true;
+      body.reset(this.x, this.y);
+    }
   }
 
   attackCenter(): Phaser.Math.Vector2 {
@@ -786,12 +853,14 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
     if (now < this.perfectFlashUntil) this.bodyVisual.setTint(0xffe08a);
     else if (now < this.unguentFlashUntil) this.bodyVisual.setTint(0xa8d878);
     else if (now < this.flashUntil) this.bodyVisual.setTint(0xffffff);
+    else if (this.combat === "down" && this.tableau === "none") this.bodyVisual.setTint(0x6a4a42);
     else this.bodyVisual.clearTint();
     if (this.combat === "block") this.bodyVisual.setTint(0x88aacc);
     if (this.combat === "parry") this.bodyVisual.setTint(0xffe08a);
     if (this.combat === "dodge") this.bodyVisual.setAlpha(0.55);
     else if (this.tableau === "kneel" || this.tableau === "flourish" || this.tableau === "mercy") this.bodyVisual.setAlpha(1);
-    else if (this.tableau === "steel" || this.combat === "down") this.bodyVisual.setAlpha(0.62);
+    else if (this.tableau === "steel") this.bodyVisual.setAlpha(0.62);
+    else if (this.combat === "down") this.bodyVisual.setAlpha(0.5);
     else if (this.alive) this.bodyVisual.setAlpha(1);
 
     if (this.combat === "walk" && now - this.lastDust > 160) {
@@ -805,11 +874,21 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
       const show = this.team !== "player" && this.alive;
       this.hpBarBg.setVisible(show);
       this.hpBarFg.setVisible(show);
-      this.hpBarBg.setPosition(this.x, this.y - 32);
-      this.hpBarFg.setPosition(this.x - 20 + (40 * (this.health / this.stats.maxHealth)) / 2, this.y - 32);
-      this.hpBarFg.width = Math.max(1, 40 * (this.health / this.stats.maxHealth));
+      if (show) {
+        const ratio = Phaser.Math.Clamp(this.health / Math.max(1, this.stats.maxHealth), 0, 1);
+        this.hpBarBg.setPosition(this.x, this.y - 32);
+        this.hpBarFg.setPosition(this.x - 20 + (40 * ratio) / 2, this.y - 32);
+        this.hpBarFg.width = 40 * ratio;
+      }
     }
-    if (this.nameTag) this.nameTag.setPosition(this.x, this.y - 42);
+    if (this.nameTag) {
+      this.nameTag.setVisible(this.alive);
+      if (this.alive) this.nameTag.setPosition(this.x, this.y - 42);
+    }
+    if (this.downMark) {
+      if (this.alive || this.tableau !== "none") this.clearDownedMark();
+      else this.downMark.setPosition(this.x, this.y - 22).setDepth(this.y + 24);
+    }
 
     if (!this.isFrozen() && this.combat === "special" && this.weaponId === "dual_blades" && this.specialHitsLeft > 0) {
       this.flurryTimer += this.scene.game.loop.delta;
@@ -875,7 +954,7 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
       ang2 = facingAng - 95;
       shieldX = hx - this.facing.x * 6 - right.x * 8;
       shieldY = hy + 10;
-    } else if (this.tableau === "steel") {
+    } else if (this.tableau === "steel" || this.combat === "down") {
       reach = 2;
       ang = facingAng + 125;
       ang2 = facingAng - 125;
@@ -996,19 +1075,28 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
     this.nameTag?.destroy();
     this.hpBarBg?.destroy();
     this.hpBarFg?.destroy();
+    this.downMark?.destroy();
     super.destroy(fromScene);
   }
 }
 
-export function attachHpBar(scene: Phaser.Scene, f: Fighter, name?: string): void {
-  f.hpBarBg = scene.add.rectangle(f.x, f.y - 32, 40, 6, 0x1a1210).setStrokeStyle(1, 0xd4a84b, 0.7).setDepth(2000);
-  f.hpBarFg = scene.add.rectangle(f.x, f.y - 32, 40, 6, 0xb33a2b).setDepth(2001);
+export type HpBarStyle = {
+  nameColor?: string;
+  fill?: number;
+  stroke?: number;
+};
+
+export function attachHpBar(scene: Phaser.Scene, f: Fighter, name?: string, style?: HpBarStyle): void {
+  const fill = style?.fill ?? 0xb33a2b;
+  const stroke = style?.stroke ?? 0xd4a84b;
+  f.hpBarBg = scene.add.rectangle(f.x, f.y - 32, 40, 6, 0x1a1210).setStrokeStyle(1, stroke, 0.85).setDepth(2000);
+  f.hpBarFg = scene.add.rectangle(f.x, f.y - 32, 40, 6, fill).setDepth(2001);
   if (name) {
     f.nameTag = scene.add
       .text(f.x, f.y - 42, name, {
         fontFamily: "Cinzel, Georgia",
         fontSize: "11px",
-        color: "#f0e6d2",
+        color: style?.nameColor ?? "#f0e6d2",
         stroke: "#1a1210",
         strokeThickness: 4,
       })

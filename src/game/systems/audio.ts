@@ -22,7 +22,7 @@ class AudioSystem {
   private ctx: AudioContext | null = null;
   private musicTimer: number | null = null;
   private musicOn = false;
-  private musicMood: "yard" | "arena" = "yard";
+  private musicMood: "yard" | "arena" | "night" = "yard";
   private stepCooldown = 0;
   private hallOn = false;
   private hallSource: AudioBufferSourceNode | null = null;
@@ -345,7 +345,7 @@ class AudioSystem {
     }, 300);
   }
 
-  setMusicMood(mood: "yard" | "arena"): void {
+  setMusicMood(mood: "yard" | "arena" | "night"): void {
     this.musicMood = mood;
   }
 
@@ -356,25 +356,27 @@ class AudioSystem {
     this.musicOn = true;
     const yardNotes = [175, 196, 220, 196, 165, 175, 196, 220];
     const arenaNotes = [196, 262, 330, 392, 330, 262, 196, 294];
+    const nightNotes = [110, 130, 146, 130, 98, 110, 123, 146];
     let i = 0;
     const tick = () => {
       if (!this.musicOn || !this.ctx) return;
       const vol = gameState.settings.musicVolume;
       const arena = this.musicMood === "arena";
+      const night = this.musicMood === "night";
       if (vol > 0.01 && !gameState.settings.musicMuted) {
         const o = this.ctx.createOscillator();
         const g = this.ctx.createGain();
-        o.type = arena ? "square" : "triangle";
-        const notes = arena ? arenaNotes : yardNotes;
+        o.type = arena ? "square" : night ? "sine" : "triangle";
+        const notes = arena ? arenaNotes : night ? nightNotes : yardNotes;
         o.frequency.value = notes[i % notes.length];
-        g.gain.value = (arena ? 0.038 : 0.022) * vol;
+        g.gain.value = (arena ? 0.038 : night ? 0.016 : 0.022) * vol;
         o.connect(g);
         g.connect(this.ctx.destination);
         o.start();
-        o.stop(this.ctx.currentTime + (arena ? 0.26 : 0.5));
+        o.stop(this.ctx.currentTime + (arena ? 0.26 : night ? 0.7 : 0.5));
       }
       i += 1;
-      this.musicTimer = window.setTimeout(tick, arena ? 300 : 560);
+      this.musicTimer = window.setTimeout(tick, arena ? 300 : night ? 720 : 560);
     };
     tick();
   }

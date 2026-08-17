@@ -52,7 +52,11 @@ export class WorldProp extends Phaser.Physics.Arcade.Image {
       this.setSize(18, 14);
       this.setOffset(9, 58);
     }
-    if (kind === "rack") this.setSize(30, 16);
+    if (kind === "armory") {
+      this.setOrigin(0.5, 1);
+      this.setSize(40, 18);
+      this.setOffset(16, 46);
+    }
     if (kind === "crate") this.setSize(22, 16);
     if (kind === "fountain") this.setSize(28, 20);
     if (kind === "lararium") this.setSize(24, 16);
@@ -95,14 +99,14 @@ export class NpcActor extends Phaser.Physics.Arcade.Sprite {
   private shadow: Phaser.GameObjects.Image;
   private bobFrom = 0;
 
-  constructor(scene: Phaser.Scene, x: number, y: number, npcId: string, name: string, tunic: number, accent: number, scale: number) {
+  constructor(scene: Phaser.Scene, x: number, y: number, npcId: string, name: string, tunic: number, accent: number, scale: number, texKey?: string) {
     super(scene, x, y, "char-shadow");
     scene.add.existing(this);
     scene.physics.add.existing(this, true);
     this.npcId = npcId;
     this.setVisible(false);
     this.setSize(18, 16);
-    const key = `npc-${npcId}`;
+    const key = texKey ?? `npc-${npcId}`;
     makeBodyTexture(scene, key, tunic, accent, scale, bodyStyleFor(npcId));
     this.shadow = scene.add.image(x, y + 10, "char-shadow").setDepth(1);
     this.visual = scene.add.image(x, y - 10, key).setDepth(y);
@@ -155,6 +159,17 @@ export class NpcActor extends Phaser.Physics.Arcade.Sprite {
       repeat: -1,
       ease: "Sine.easeInOut",
     });
+  }
+
+  kneel(): void {
+    this.scene.tweens.killTweensOf(this.visual);
+    this.visual.setAngle(22);
+    this.visual.y = this.bobFrom - 2;
+  }
+
+  stand(): void {
+    this.visual.setAngle(0);
+    this.startBob();
   }
 
   setPrompt(show: boolean, text = "E  Talk"): void {

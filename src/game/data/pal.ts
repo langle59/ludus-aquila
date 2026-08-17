@@ -181,6 +181,7 @@ export function togglePalBrought(): boolean {
   if (!palUnlocked(s)) return false;
   s.palBrought = s.palBrought === false;
   gameState.persist();
+  bus.emit("roost-changed");
   return palBrought(s);
 }
 

@@ -102,7 +102,8 @@ export const DIALOGUE: Record<string, LineFn> = {
       return [
         `"Teacher of the Sand. The four have names the stands know."`,
         `"You showed them in the yard. You watched them climb. That is the book, finished."`,
-        `"Other houses still keep men in chains. That work is not this gate. Not yet. But this yard is yours."`,
+        `"Other houses still keep men in chains. The west gate opens to the Freed Camp — Cassian waits there."`,
+        `"Take two with you. Farm what you can. Break Ludus Serpens first."`,
       ];
     }
     if (s.lanistaUnlocked) {
@@ -507,6 +508,16 @@ export const OBJECTIVE_TEXT: Record<ObjectiveId, string> = {
   free: "The rudis is yours. Train. The editor still pays at the south gate.",
   take_school: "The rudis is yours. Speak with Marcellus about the school.",
   school: "The school is yours. Check lockers east of the yard. Teach, then book their circuit.",
+  freed_camp: "West gate to the Freed Camp. Farm, loadout, then march.",
+  raid_serpens: "March on Ludus Serpens. Free the chained.",
+  raid_lupus: "March on Ludus Lupus. Silence the pack.",
+  raid_aper: "March on Ludus Aper. Break the bristle.",
+  raid_taurus: "March on Ludus Taurus. Break the horns.",
+  raid_tigris: "March on Ludus Tigris. Light the shadows.",
+  raid_leo: "March on Ludus Leo. Silence the pride.",
+  raid_ursus: "March on Ludus Ursus. Break the crush.",
+  raid_rhinoceros: "March on Ludus Rhinoceros. Crack the hide.",
+  raid_elephas: "March on Ludus Elephas. End the stampede.",
 };
 
 export const AREA_HINTS: Record<string, string> = {
@@ -515,6 +526,7 @@ export const AREA_HINTS: Record<string, string> = {
   shop: "Quarters — press E for cloth, dye, and unguent.",
   pal: "The roost. Straw, water, and a perch. Press E.",
   gate: "Arena gate — press E to choose a match.",
+  west_gate: "West gate — Freed Camp. Press E.",
   fountain: "A stone basin. The water is warm.",
   trophy: "A mount on the wall. Press E to inspect it.",
   dice: "The oval table. Rufus keeps a seat. Press E.",

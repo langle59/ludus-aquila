@@ -273,6 +273,7 @@ export class ArenaScene extends Phaser.Scene {
     audio.setMusicMood("arena");
     audio.setCrowd(true);
     audio.roar("hit");
+    bus.emit("combat-hud", { show: !this.watching });
     bus.on("player-attack", this.doAttack, this);
     bus.on("player-special", this.doSpecial, this);
     bus.on("skills-changed", this.onSkillsChanged, this);
@@ -317,6 +318,7 @@ export class ArenaScene extends Phaser.Scene {
       bus.off("unstuck", this.onUnstuck, this);
       audio.setCrowd(false);
       audio.setMusicMood("yard");
+      bus.emit("combat-hud", { show: false });
     });
   }
 

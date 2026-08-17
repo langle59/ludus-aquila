@@ -1,6 +1,8 @@
 import { TILE_SIZE } from "../config";
 import { houseArenaLabel, houseBannerTex, houseCrowdTint } from "../data/houses";
 import { gameState } from "../state/GameState";
+import { camp } from "../data/camp";
+import { nextUnlockedRaidHouse, raidHouseShortName } from "../data/raid";
 
 export interface MapDef {
   id: string;
@@ -23,6 +25,7 @@ export const LUDUS_META: MapDef = {
     { x: 54, y: 25.35, text: "FEAST" },
     { x: 31.5, y: 14.2, text: "TRAINING YARD" },
     { x: 23.5, y: 32.6, text: "ARENA GATE" },
+    { x: 2.2, y: 30.2, text: "WEST GATE" },
   ],
 };
 
@@ -267,6 +270,21 @@ export function buildLudus(): BuiltMap {
   spawns.player = { x: 32 * TILE_SIZE, y: 19 * TILE_SIZE };
   spawns.gate = { x: 24 * TILE_SIZE, y: 34 * TILE_SIZE + 16 };
   props.push({ kind: "gate", x: 24 * TILE_SIZE, y: 34 * TILE_SIZE + 16 });
+
+  // Act 4 west gate — vertical opening flush with the left wall
+  addRect(tiles, solids, "tile-stone", 1, 30, 5, 34);
+  popSolids(solids, 1, 30, 5, 34);
+  // Carve doorway in outer west wall (3 tiles tall)
+  addRect(tiles, solids, "tile-gate", 0, 31, 0, 33);
+  popSolids(solids, 0, 31, 0, 33);
+  // Threshold + short approach
+  addRect(tiles, solids, "tile-sand", 1, 31, 3, 33);
+  popSolids(solids, 1, 31, 3, 33);
+  // Flanking wall banners on the west rim
+  addRect(tiles, solids, yardBanner, 0, 30, 0, 30, true);
+  addRect(tiles, solids, yardBanner, 0, 34, 0, 34, true);
+  spawns.westGate = cell(2, 32);
+  props.push({ kind: "west_gate", ...cell(1, 32) });
 
   return { cols, rows, solids, spawns, props, tiles };
 }
@@ -720,4 +738,256 @@ function overlayRing(
 
 export function worldPx(cols: number, rows: number): { w: number; h: number } {
   return { w: cols * TILE_SIZE, h: rows * TILE_SIZE };
+}
+
+export const FREED_CAMP_META: MapDef = {
+  id: "freedcamp",
+  cols: 36,
+  rows: 28,
+  labels: [],
+};
+
+/** Minimap-only zone names for the forest camp. */
+export function freedCampAreaName(tx: number, ty: number): string {
+  if (tx <= 4 && ty >= 10 && ty <= 16) return "Ludus Path";
+  if (tx >= 28 && ty >= 18) {
+    const next = nextUnlockedRaidHouse(camp().freedPads);
+    return next ? `${raidHouseShortName(next)} Road` : "East trail";
+  }
+  if (tx <= 3 && ty >= 20 && ty <= 26) return "Livestock";
+  if (tx >= 3 && tx <= 14 && ty >= 22 && ty <= 26) return "Pen";
+  if (tx >= 3 && tx <= 14 && ty >= 17 && ty <= 21) return "Farm";
+  if (tx >= 17 && tx <= 33 && ty >= 1 && ty <= 15) return "Tents";
+  if (tx >= 4 && tx <= 14 && ty >= 6 && ty <= 14) return "Commons";
+  return "Clearing";
+}
+
+/** Hub after Act 3 — hidden forest clearing, tents, farm, stables. */
+export function buildFreedCamp(): BuiltMap {
+  const cols = FREED_CAMP_META.cols;
+  const rows = FREED_CAMP_META.rows;
+  const tiles: BuiltMap["tiles"] = [];
+  const solids: BuiltMap["solids"] = [];
+  const spawns: BuiltMap["spawns"] = {};
+  const props: BuiltMap["props"] = [];
+
+  // Soft green forest floor
+  addRect(tiles, solids, "tile-sand-earth", 0, 0, cols - 1, rows - 1);
+  // Clearing grass pockets
+  addRect(tiles, solids, "tile-yard", 4, 5, 15, 15);
+  addRect(tiles, solids, "tile-dirt", 3, 16, 15, 25);
+
+  // Dense tree rim instead of bare stone walls
+  for (let tx = 0; tx < cols; tx++) {
+    props.push({ kind: "tree", ...cell(tx, 0) });
+    props.push({ kind: "tree", ...cell(tx, rows - 1) });
+    solids.push(cell(tx, 0));
+    solids.push(cell(tx, rows - 1));
+  }
+  for (let ty = 1; ty < rows - 1; ty++) {
+    // Leave west exit gap for Ludus path
+    if (ty < 11 || ty > 14) {
+      props.push({ kind: "tree", ...cell(0, ty) });
+      solids.push(cell(0, ty));
+    }
+    // Leave east exit gap for Serpens trail
+    if (ty < 20 || ty > 23) {
+      props.push({ kind: "tree", ...cell(cols - 1, ty) });
+      solids.push(cell(cols - 1, ty));
+    }
+  }
+  // Extra canopy clumps
+  for (const [tx, ty] of [
+    [2, 2],
+    [3, 3],
+    [14, 2],
+    [15, 3],
+    [33, 3],
+    [15, 26],
+    [20, 26],
+    [33, 16],
+  ] as [number, number][]) {
+    props.push({ kind: "tree", ...cell(tx, ty) });
+    solids.push(cell(tx, ty));
+  }
+  for (const [tx, ty] of [
+    [5, 4],
+    [12, 4],
+    [16, 16],
+    [26, 17],
+    [8, 26],
+  ] as [number, number][]) {
+    props.push({ kind: "bush", ...cell(tx, ty) });
+  }
+
+  // Commons — packed yard with three stations around the fire
+  addRect(tiles, solids, "tile-dirt", 4, 6, 14, 13);
+  addRect(tiles, solids, "tile-yard", 8, 9, 10, 11);
+  props.push({ kind: "camp_fire", ...cell(9, 10) });
+  props.push({ kind: "cassian", ...cell(11, 12) });
+  spawns.cassian = cell(11, 12);
+  spawns.player = cell(9, 11);
+  spawns.fire = cell(9, 10);
+
+  // Armory lean-to — NW pad
+  addRect(tiles, solids, "tile-dirt", 4, 6, 7, 9);
+  props.push({ kind: "camp_rug", ...cell(6, 8), id: "armory" });
+  props.push({ kind: "armory", ...cell(6, 7) });
+  props.push({ kind: "crate", ...cell(5, 8) });
+  spawns.armory = cell(6, 7);
+
+  // Party ring — NE pad
+  addRect(tiles, solids, "tile-dirt", 11, 6, 14, 9);
+  props.push({ kind: "camp_rug", ...cell(12, 8), id: "party" });
+  props.push({ kind: "party", ...cell(12, 7) });
+  props.push({ kind: "bench", ...cell(11, 8) });
+  props.push({ kind: "bench", ...cell(13, 8) });
+  spawns.party = cell(12, 8);
+
+  // Wardrobe / customize — SW pad
+  addRect(tiles, solids, "tile-dirt", 4, 11, 7, 13);
+  props.push({ kind: "camp_rug", ...cell(6, 12), id: "wardrobe" });
+  props.push({ kind: "camp_wardrobe", ...cell(6, 11) });
+  spawns.wardrobe = cell(6, 11);
+
+  // Nine tent clearings (3×3) — east
+  const padOrigins = [
+    [18, 2],
+    [23, 2],
+    [28, 2],
+    [18, 7],
+    [23, 7],
+    [28, 7],
+    [18, 12],
+    [23, 12],
+    [28, 12],
+  ];
+  const houseIds = [
+    "serpens",
+    "lupus",
+    "aper",
+    "taurus",
+    "tigris",
+    "leo",
+    "ursus",
+    "rhinoceros",
+    "elephas",
+  ];
+  padOrigins.forEach(([ox, oy], i) => {
+    addRect(tiles, solids, "tile-sand-earth", ox, oy, ox + 3, oy + 3);
+    const cx = ox + 1;
+    const cy = oy + 1;
+    props.push({ kind: "house_pad", ...cell(cx, cy), id: houseIds[i] });
+    spawns[`pad_${houseIds[i]}`] = cell(cx, cy);
+  });
+
+  // Crop plots — SW beds (four plots)
+  addRect(tiles, solids, "tile-dirt", 4, 16, 15, 21);
+  props.push({ kind: "cooking_pot", ...cell(13, 17) });
+  spawns.kitchen = cell(13, 17);
+  for (let i = 0; i < 4; i++) {
+    props.push({ kind: "farm_plot", ...cell(5 + i * 3, 19), id: `p${i}` });
+  }
+  spawns.farm = cell(8, 19);
+
+  // Livestock pen — fenced corral south of crop beds
+  addRect(tiles, solids, "tile-dirt", 4, 21, 14, 25);
+  for (let tx = 4; tx <= 14; tx++) {
+    tiles.push({ tex: "tile-fence", x: tx * TILE_SIZE, y: 21 * TILE_SIZE });
+    tiles.push({ tex: "tile-fence", x: tx * TILE_SIZE, y: 25 * TILE_SIZE });
+    solids.push(cell(tx, 21));
+    if (tx < 8 || tx > 10) solids.push(cell(tx, 25));
+  }
+  for (let ty = 22; ty <= 24; ty++) {
+    tiles.push({ tex: "tile-fence", x: 4 * TILE_SIZE, y: ty * TILE_SIZE });
+    tiles.push({ tex: "tile-fence", x: 14 * TILE_SIZE, y: ty * TILE_SIZE });
+    solids.push(cell(4, ty));
+    solids.push(cell(14, ty));
+  }
+  popSolids(solids, 8, 25, 10, 25);
+  props.push({ kind: "pen_gate", ...cell(9, 25) });
+  spawns.penGate = cell(9, 25);
+  spawns.penMin = cell(5, 22);
+  spawns.penMax = cell(13, 24);
+  props.push({ kind: "hay", ...cell(6, 22) });
+  props.push({ kind: "hay", ...cell(12, 22) });
+  props.push({ kind: "hay", ...cell(6, 24) });
+  props.push({ kind: "hay", ...cell(12, 24) });
+  spawns.stables = cell(2, 23);
+
+  // Livestock stall — west of the pen fence (easy to find from the farm)
+  addRect(tiles, solids, "tile-dirt", 1, 16, 3, 25);
+  popSolids(solids, 1, 20, 3, 25);
+  props.push({ kind: "livestock_stall", ...cell(2, 22) });
+  props.push({ kind: "pen_trader", ...cell(2, 23) });
+  props.push({ kind: "hay", ...cell(1, 23) });
+  spawns.penTrader = cell(2, 23);
+
+  // Dirt path west → Ludus (clearly marked trail)
+  addRect(tiles, solids, "tile-dirt", 1, 11, 5, 14);
+  popSolids(solids, 1, 11, 5, 14);
+  // Open west rim for exit
+  popSolids(solids, 0, 11, 0, 14);
+  addRect(tiles, solids, "tile-gate", 0, 11, 0, 14);
+  popSolids(solids, 0, 11, 0, 14);
+  props.push({ kind: "ludus_gate", ...cell(1, 12) });
+  props.push({ kind: "ludus_plaque", ...cell(3, 12) });
+  spawns.ludusGate = cell(1, 12);
+
+  // Quiet trail SE → Serpens march
+  addRect(tiles, solids, "tile-dirt", 24, 18, 34, 24);
+  popSolids(solids, 33, 20, 34, 23);
+  addRect(tiles, solids, "tile-gate", 34, 20, 34, 23);
+  popSolids(solids, 34, 20, 34, 23);
+  props.push({ kind: "raid_road", ...cell(32, 21) });
+  spawns.raidRoad = cell(32, 21);
+
+  return { cols, rows, solids, spawns, props, tiles, torchTint: 0x4a6a40 };
+}
+
+/** Build a single raid room; optional dressing props and house torch tint. */
+export function buildRaidRoom(
+  cols: number,
+  rows: number,
+  floorTex = "tile-sand",
+  opts?: {
+    torchTint?: number;
+    extraProps?: { kind: string; x: number; y: number }[];
+    skipDefaultLamps?: boolean;
+  },
+): BuiltMap {
+  const tiles: BuiltMap["tiles"] = [];
+  const solids: BuiltMap["solids"] = [];
+  const spawns: BuiltMap["spawns"] = {};
+  const props: BuiltMap["props"] = [];
+
+  addRect(tiles, solids, floorTex, 0, 0, cols - 1, rows - 1);
+  for (let tx = 0; tx < cols; tx++) {
+    addRect(tiles, solids, "tile-wall", tx, 0, tx, 0, true);
+    addRect(tiles, solids, "tile-wall", tx, rows - 1, tx, rows - 1, true);
+  }
+  for (let ty = 0; ty < rows; ty++) {
+    addRect(tiles, solids, "tile-wall", 0, ty, 0, ty, true);
+    addRect(tiles, solids, "tile-wall", cols - 1, ty, cols - 1, ty, true);
+  }
+  addRect(tiles, solids, floorTex, 1, 1, cols - 2, rows - 2);
+  popSolids(solids, 1, 1, cols - 2, rows - 2);
+
+  if (!opts?.skipDefaultLamps) {
+    props.push({ kind: "lamp", ...cell(2, 2) });
+    props.push({ kind: "lamp", ...cell(cols - 3, 2) });
+    props.push({ kind: "lamp", ...cell(2, rows - 3) });
+    props.push({ kind: "lamp", ...cell(cols - 3, rows - 3) });
+    props.push({ kind: "lamp", ...cell(Math.floor(cols / 2), 2) });
+    props.push({ kind: "lamp", ...cell(Math.floor(cols / 2), rows - 3) });
+    props.push({ kind: "lamp", ...cell(2, Math.floor(rows / 2)) });
+    props.push({ kind: "lamp", ...cell(cols - 3, Math.floor(rows / 2)) });
+  }
+
+  if (opts?.extraProps) {
+    for (const p of opts.extraProps) props.push({ kind: p.kind, x: p.x, y: p.y });
+  }
+
+  spawns.player = cell(3, Math.floor(rows / 2));
+  return { cols, rows, solids, spawns, props, tiles, torchTint: opts?.torchTint ?? 0x2f6b4a };
 }

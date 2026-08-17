@@ -396,13 +396,17 @@ export class ArenaBeast extends Phaser.Physics.Arcade.Sprite {
     y: number,
     kind: BeastKind,
     team: BeastTeam = "enemy",
-    extras?: Partial<Pick<BeastProfile, "maxHp" | "bite" | "knock" | "speed" | "lungeSpd" | "visScale" | "label">> & { tint?: number },
+    extras?: Partial<Pick<BeastProfile, "maxHp" | "bite" | "knock" | "speed" | "lungeSpd" | "visScale" | "label">> & {
+      tint?: number;
+      nameColor?: string;
+      barStroke?: number;
+    },
   ) {
     super(scene, x, y, "char-shadow");
     scene.add.existing(this);
     scene.physics.add.existing(this);
     this.setVisible(false);
-    const { tint, ...rest } = extras ?? {};
+    const { tint, nameColor, barStroke, ...rest } = extras ?? {};
     const p = { ...PROFILES[kind], ...rest };
     this.profile = p;
     this.kind = kind;
@@ -418,13 +422,13 @@ export class ArenaBeast extends Phaser.Physics.Arcade.Sprite {
     this.vis = scene.add.image(x, y, p.tex).setDepth(y).setScale(p.visScale);
     if (this.allyTint) this.vis.setTint(this.allyTint);
     const bar = team === "player" ? 0x6aa84f : 0xb33a2b;
-    this.hpBarBg = scene.add.rectangle(x, y - p.hudY, 36, 5, 0x1a1210).setStrokeStyle(1, 0xd4a84b, 0.7).setDepth(2000);
+    this.hpBarBg = scene.add.rectangle(x, y - p.hudY, 36, 5, 0x1a1210).setStrokeStyle(1, barStroke ?? 0xd4a84b, 0.85).setDepth(2000);
     this.hpBarFg = scene.add.rectangle(x, y - p.hudY, 36, 5, bar).setDepth(2001);
     this.nameTag = scene.add
       .text(x, y - p.hudY - 10, p.label, {
         fontFamily: "Cinzel, Georgia",
         fontSize: "11px",
-        color: team === "player" ? "#e8c96a" : "#f0e6d2",
+        color: nameColor ?? (team === "player" ? "#8ecf6a" : "#e07060"),
         stroke: "#1a1210",
         strokeThickness: 4,
       })
@@ -634,11 +638,12 @@ export class ArenaBeast extends Phaser.Physics.Arcade.Sprite {
     this.vis.setDepth(this.y);
     this.setDepth(this.y);
     if (now < this.flashUntil) this.vis.setTint(0xffffff);
+    else if (!this.alive) this.vis.setTint(0x6a4a42);
     else if (this.allyTint) this.vis.setTint(this.allyTint);
     else this.vis.clearTint();
     if (!this.alive) {
       this.vis.setAngle(this.kind === "serpent" ? 18 : 90);
-      this.vis.setAlpha(0.7);
+      this.vis.setAlpha(0.5);
     } else if (this.kind === "eagle") {
       const dive = this.aiState === "lunge" ? 22 : this.aiState === "telegraph" ? -10 : Math.sin(now / 160) * 8;
       this.vis.setAngle(this.facing.x < 0 ? dive : -dive);
@@ -749,6 +754,12 @@ export class ArenaBeast extends Phaser.Physics.Arcade.Sprite {
     this.setVelocity(0, 0);
     this.telegraph?.destroy();
     this.telegraph = undefined;
+    this.hpBarBg?.setVisible(false);
+    this.hpBarFg?.setVisible(false);
+    this.nameTag?.setVisible(false);
+    this.vis.setAngle(this.kind === "serpent" ? 18 : 90);
+    this.vis.setAlpha(0.5);
+    this.vis.setTint(0x6a4a42);
     const body = this.body as Phaser.Physics.Arcade.Body | undefined;
     if (body) body.enable = false;
   }

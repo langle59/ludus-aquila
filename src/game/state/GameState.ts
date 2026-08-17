@@ -3,6 +3,8 @@ import { DEFAULT_KEYBINDS } from "../types";
 import { ACTIVE_SLOT_KEY, SAVE_KEY, SAVE_SLOT_COUNT, SETTINGS_KEY, TILE_SIZE, saveSlotKey } from "../config";
 import { getHouse } from "../data/houses";
 import { emptyChamber, emptySchool, ensureSchoolCosmetics, mergeChamber, mergeSchool } from "../data/school";
+import { emptyCamp, mergeCamp } from "../data/camp";
+import type { CompanionId } from "../types";
 
 export type SaveSlotId = 1 | 2 | 3;
 
@@ -106,6 +108,7 @@ export function createNewSave(playerName: string, tunic: TunicColor, playerHouse
     weaponWins: {},
     unlockedMastery: [],
     activePrayer: null,
+    camp: emptyCamp(),
   };
 }
 
@@ -135,6 +138,16 @@ class GameState {
   pendingFeast = false;
   feastWineDrunk = false;
   feastBeerDrunk = false;
+  /** Act 4 raid session. */
+  pendingRaidHouse: string | null = null;
+  pendingRaidRoom: string | null = null;
+  raidDownedAllies: CompanionId[] = [];
+  raidDownedVolunteer = false;
+  raidActiveMeal: "hp" | "stamina" | "damage" | null = null;
+  raidMarchStats: { hp: number; stamina: number; attack: number } | null = null;
+  raidTempHpBonus = 0;
+  /** True once any raid room is cleared this outing (farm ticks on return). */
+  raidClearedRoomThisOuting = false;
   lastResult: {
     kind: "win" | "lose" | "spar";
     title: string;
@@ -235,9 +248,19 @@ class GameState {
   }
 
   private progressLabel(s: Partial<SaveData>): string {
+    const obj = String(s.currentObjective ?? "");
+    const act4 =
+      Boolean(s.storyFlags?.act3Complete) ||
+      obj === "freed_camp" ||
+      obj.startsWith("raid_");
+    if (act4) {
+      const freed = s.camp?.freedPads?.length ?? 0;
+      if (freed >= 9) return "Act IV — All nine freed";
+      if (freed >= 1) return `Act IV — ${freed}/9 houses freed`;
+      return "Act IV — Beyond the Gate";
+    }
     if (s.lanistaUnlocked) return "Act III — Lanista of Aquila";
     if (s.freedomWon) return "Act III — The School";
-    const obj = String(s.currentObjective ?? "");
     if (obj.startsWith("tournament") || obj === "free" || obj === "take_school") return "Act II — The Rudis";
     const n = s.defeatedHouses?.length ?? 0;
     if (n === 1) return "Act II — 1 house fallen";
@@ -261,6 +284,14 @@ class GameState {
     this.pendingFeast = false;
     this.feastWineDrunk = false;
     this.feastBeerDrunk = false;
+    this.pendingRaidHouse = null;
+    this.pendingRaidRoom = null;
+    this.raidDownedAllies = [];
+    this.raidDownedVolunteer = false;
+    this.raidActiveMeal = null;
+    this.raidMarchStats = null;
+    this.raidTempHpBonus = 0;
+    this.raidClearedRoomThisOuting = false;
     this.lastResult = null;
   }
 
@@ -268,8 +299,9 @@ class GameState {
     this.pendingFeast = true;
     this.feastWineDrunk = false;
     this.feastBeerDrunk = false;
-    const x = 38 * TILE_SIZE + TILE_SIZE / 2;
-    const y = 26 * TILE_SIZE + TILE_SIZE / 2;
+    // Must land inside inFeastTiles (48–60, 26–33) or LudusScene ends the feast on the first frame.
+    const x = 54 * TILE_SIZE + TILE_SIZE / 2;
+    const y = 29 * TILE_SIZE + TILE_SIZE / 2;
     this.save.position = { x, y, scene: "ludus" };
     const max = this.save.stats.maxHealth - (this.save.injured ? 8 : 0);
     this.save.health = Math.max(16, Math.round(max * 0.48));
@@ -351,6 +383,7 @@ class GameState {
     this.save.nightOpponent = parsed.nightOpponent ?? null;
     this.save.nightWins = parsed.nightWins ?? 0;
     this.save.activePrayer = parsed.activePrayer ?? null;
+    this.save.camp = mergeCamp(parsed.camp);
     this.save.version = 2;
     const legacyObj = parsed.currentObjective as string;
     const known: SaveData["currentObjective"][] = [
@@ -377,6 +410,16 @@ class GameState {
       "free",
       "take_school",
       "school",
+      "freed_camp",
+      "raid_serpens",
+      "raid_lupus",
+      "raid_aper",
+      "raid_taurus",
+      "raid_tigris",
+      "raid_leo",
+      "raid_ursus",
+      "raid_rhinoceros",
+      "raid_elephas",
     ];
     if (!known.includes(legacyObj as SaveData["currentObjective"])) {
       if (legacyObj === "after_wolf" && this.save.freedomWon) this.save.currentObjective = "free";
@@ -412,6 +455,9 @@ class GameState {
       this.save.currentObjective = "school";
     } else if (this.save.freedomWon && !this.save.lanistaUnlocked && this.save.currentObjective === "free") {
       this.save.currentObjective = "take_school";
+    }
+    if (this.save.storyFlags.act3Complete && (this.save.currentObjective === "school" || this.save.currentObjective === "free")) {
+      if (!this.save.camp?.raids?.serpens?.freed) this.save.currentObjective = "freed_camp";
     }
     this.save.health = this.save.stats.maxHealth;
     this.save.stamina = this.save.stats.maxStamina;
