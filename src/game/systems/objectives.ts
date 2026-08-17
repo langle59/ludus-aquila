@@ -97,11 +97,12 @@ export function actIntroFlag(act: ActId = currentAct()): string {
   return `actIntro${act}`;
 }
 
-/** Show the act title card once when that act first begins. */
+/** Show the act title card once when that act first begins — only in the ludus, not the pit. */
 export function queueActIntro(): void {
   const act = currentAct();
   const flag = actIntroFlag(act);
   if (gameState.save.storyFlags[flag]) return;
+  if (!gameState.inLudus) return;
   gameState.save.storyFlags[flag] = true;
   gameState.persist();
   bus.emit("act-card", act);

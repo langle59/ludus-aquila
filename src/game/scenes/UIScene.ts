@@ -4161,7 +4161,7 @@ export class UIScene extends Phaser.Scene {
 
   showActCard = (act: ActId): void => {
     if (this.actCardOpen) return;
-    if (this.overlay || this.resultPending || gameState.inDialogue || this.judgmentOpen || this.dialogueBox) {
+    if (!gameState.inLudus || this.overlay || this.resultPending || gameState.inDialogue || this.judgmentOpen || this.dialogueBox) {
       this.pendingActCard = act;
       return;
     }
@@ -4170,7 +4170,7 @@ export class UIScene extends Phaser.Scene {
 
   private flushActCard(): void {
     if (this.pendingActCard == null) return;
-    if (this.overlay || this.resultPending || gameState.inDialogue || this.judgmentOpen || this.dialogueBox || this.actCardOpen) {
+    if (!gameState.inLudus || this.overlay || this.resultPending || gameState.inDialogue || this.judgmentOpen || this.dialogueBox || this.actCardOpen) {
       return;
     }
     const act = this.pendingActCard;

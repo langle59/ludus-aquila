@@ -129,6 +129,8 @@ class GameState {
   paused = false;
   inDialogue = false;
   inMenu = false;
+  /** True while LudusScene is the live hub. Act title cards wait for this. */
+  inLudus = false;
   pendingArenaOpponent: string | null = null;
   pendingSchoolBout: { npcId: string; opponentId: string } | null = null;
   /** One free school injury rest per ludus visit. */
@@ -277,6 +279,7 @@ class GameState {
     this.paused = false;
     this.inDialogue = false;
     this.inMenu = false;
+    this.inLudus = false;
     this.pendingArenaOpponent = null;
     this.pendingSchoolBout = null;
     this.pendingNight = false;

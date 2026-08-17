@@ -164,6 +164,7 @@ export class LudusScene extends Phaser.Scene {
   }
 
   create(): void {
+    gameState.inLudus = true;
     this.solids = paintMap(this, this.built, "ludus");
     this.cameras.main.setBounds(0, -HUD_CAM_PAD, this.built.cols * TILE_SIZE, this.built.rows * TILE_SIZE + HUD_CAM_PAD);
     this.cameras.main.setZoom(1);
@@ -221,6 +222,7 @@ export class LudusScene extends Phaser.Scene {
     this.time.delayedCall(450, () => this.tryActIntro());
 
     this.events.on("wake", () => {
+      gameState.inLudus = true;
       gameState.paused = false;
       gameState.inMenu = false;
       gameState.inDialogue = false;
@@ -289,6 +291,7 @@ export class LudusScene extends Phaser.Scene {
     bus.on("teach-start", this.onTeachStart, this);
 
     this.events.on("shutdown", () => {
+      gameState.inLudus = false;
       bus.off("weapon-changed", this.onWeapon, this);
       bus.off("enter-arena", this.goArena, this);
       bus.off("result-closed", this.afterResult, this);
@@ -1022,6 +1025,7 @@ export class LudusScene extends Phaser.Scene {
   }
 
   private tryActIntro(): void {
+    if (gameState.pendingFeast) return;
     const act = currentAct();
     const already = Boolean(gameState.save.storyFlags[actIntroFlag(act)]);
     queueActIntro();
@@ -1700,9 +1704,7 @@ export class LudusScene extends Phaser.Scene {
       gameState.endFeast();
       this.feastLeaveArmed = false;
       this.seatHouse();
-      if (gameState.save.freedomWon && !gameState.save.dialogueFlags.freedomSpeech) {
-        this.maybeFreedomSpeech();
-      }
+      this.time.delayedCall(200, () => this.tryActIntro());
     }
     if (this.uiLocked()) {
       this.player.setVelocity(0, 0);
