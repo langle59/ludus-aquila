@@ -1,6 +1,7 @@
 import type { HouseDef, TunicColor } from "../types";
 import { COLORS } from "../config";
 import { TOURNAMENT_HOUSE } from "./tournament";
+import { getSchoolCircuitFighter } from "./schoolCircuit";
 
 export const HOUSE_CREATE_TUNICS: Record<string, TunicColor[]> = {
   serpens: ["serpent", "sea", "ivory"],
@@ -811,6 +812,11 @@ export function getRival(id: string) {
   for (const house of [...HOUSES, TOURNAMENT_HOUSE]) {
     const fighter = house.fighters.find((f) => f.id === id);
     if (fighter) return { house, fighter };
+  }
+  const school = getSchoolCircuitFighter(id);
+  if (school) {
+    const house = getHouse(school.houseId);
+    if (house) return { house, fighter: school.fighter };
   }
   return undefined;
 }

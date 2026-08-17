@@ -132,7 +132,7 @@ export function clearNightEntry(): void {
   gameState.pendingForcedWeapon = null;
 }
 
-export function arenaWeapon(): WeaponId {
+export function arenaWeapon(): WeaponId | null {
   return gameState.pendingForcedWeapon ?? gameState.save.equippedWeapon;
 }
 
@@ -160,5 +160,6 @@ export function nightObjective(): string | null {
 }
 
 export function rufusAtTable(): boolean {
-  return Boolean(gameState.save.freedomWon);
+  // Gambling hall only between rudis and school — Act 3 brings him back to the yard.
+  return Boolean(gameState.save.freedomWon && !gameState.save.lanistaUnlocked);
 }

@@ -9,7 +9,7 @@ import { gameState } from "../state/GameState";
 import { bus } from "../systems/bus";
 
 export type CombatState = "idle" | "walk" | "attack" | "special" | "block" | "dodge" | "parry" | "hurt" | "down" | "stagger";
-export type TableauPose = "none" | "kneel" | "flourish" | "steel";
+export type TableauPose = "none" | "kneel" | "flourish" | "steel" | "mercy";
 
 export interface FighterConfig {
   key: string;
@@ -17,7 +17,7 @@ export interface FighterConfig {
   accent: number;
   scale?: number;
   stats: FighterStats;
-  weapon: WeaponId;
+  weapon: WeaponId | null;
   speed?: number;
   team: "player" | "enemy" | "ally";
   style?: BodyStyle;
@@ -51,11 +51,13 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
   stats: FighterStats;
   health: number;
   stamina: number;
-  weaponId: WeaponId;
+  weaponId: WeaponId | null;
   team: "player" | "enemy" | "ally";
   facing = new Phaser.Math.Vector2(0, 1);
   combat: CombatState = "idle";
   blocking = false;
+  /** Coaching lessons: allow block even on low-block weapons (dual blades, hammers, etc.). */
+  forceBlockOk = false;
   invulnUntil = 0;
   nextAttackAt = 0;
   nextSpecialAt = 0;
@@ -122,7 +124,7 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
 
     this.shadow = scene.add.image(x, y + 10, "char-shadow").setDepth(1);
     this.bodyVisual = scene.add.image(x, y, this.visKey).setDepth(y);
-    this.blade = scene.add.image(x, y, bladeTexture(cfg.weapon)).setDepth(y + 2).setOrigin(0.12, 0.5);
+    this.blade = scene.add.image(x, y, bladeTexture(cfg.weapon ?? "gladius")).setDepth(y + 2).setOrigin(0.12, 0.5);
     this.blade2 = scene.add.image(x, y, "wep-blade").setDepth(y + 2).setOrigin(0.12, 0.5);
     this.shield = scene.add.image(x, y, "wep-shield").setDepth(y + 1).setOrigin(0.5, 0.5);
     this.applyWeaponVisuals();
@@ -134,21 +136,34 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
   }
 
   get weapon(): WeaponDef {
-    return getWeapon(this.weaponId, this.team === "player");
+    return getWeapon(this.weaponId ?? "gladius", this.team === "player");
   }
 
   get alive(): boolean {
     return this.combat !== "down" && this.health > 0;
   }
 
-  setWeapon(id: WeaponId): void {
+  setWeapon(id: WeaponId | null): void {
     this.weaponId = id;
+    if (!id) {
+      this.blade.setVisible(false);
+      this.blade2.setVisible(false);
+      this.shield.setVisible(false);
+      return;
+    }
+    this.blade.setVisible(true);
     this.blade.setTexture(bladeTexture(id));
     this.applyWeaponVisuals();
   }
 
   private applyWeaponVisuals(): void {
     const id = this.weaponId;
+    if (!id) {
+      this.blade.setVisible(false);
+      this.blade2.setVisible(false);
+      this.shield.setVisible(false);
+      return;
+    }
     this.blade2.setVisible(id === "dual_blades");
     this.shield.setVisible(id === "gladius" || id === "spear");
     this.blade.setScale(id === "securis" ? 1.12 : id === "malleus" ? 1.08 : id === "spear" || id === "trident_net" ? 1 : 0.95);
@@ -175,6 +190,10 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
     this.setVelocity(0, 0);
   }
 
+  private stillHere(): boolean {
+    return Boolean(this.active && this.scene && this.body);
+  }
+
   freeze(ms: number): void {
     const body = this.body as Phaser.Physics.Arcade.Body;
     const vx = body?.velocity.x ?? 0;
@@ -182,7 +201,7 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
     this.frozenUntil = this.scene.time.now + ms;
     this.setVelocity(0, 0);
     this.scene.time.delayedCall(ms, () => {
-      if (!this.alive) return;
+      if (!this.stillHere() || !this.alive) return;
       if (this.combat === "hurt" || this.combat === "attack" || this.combat === "special") {
         this.setVelocity(vx, vy);
       }
@@ -239,6 +258,7 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
   }
 
   tryAttack(kind: "light" | "heavy" = "light"): boolean {
+    if (!this.weaponId) return false;
     if (!this.canAct()) return false;
     if (this.scene.time.now < this.nextAttackAt) return false;
     const w = this.weapon;
@@ -263,23 +283,29 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
     if (kind === "heavy") audio.sfx("swing");
     if (move.lunge) {
       this.setVelocity(this.facing.x * move.lunge, this.facing.y * move.lunge);
-      this.scene.time.delayedCall(90, () => this.setVelocity(0, 0));
+      this.scene.time.delayedCall(90, () => {
+        if (!this.stillHere()) return;
+        this.setVelocity(0, 0);
+      });
     }
     this.scene.time.delayedCall(windup, () => {
-      if (!this.alive) return;
+      if (!this.stillHere() || !this.alive) return;
       this.hitboxActive = true;
       this.spawnAttackFx();
       this.scene.time.delayedCall(hitMs, () => {
+        if (!this.stillHere()) return;
         this.hitboxActive = false;
       });
     });
     this.scene.time.delayedCall(this.animDuration, () => {
+      if (!this.stillHere()) return;
       if (this.combat === "attack") this.combat = "idle";
     });
     return true;
   }
 
   trySpecial(): boolean {
+    if (!this.weaponId) return false;
     if (!this.canAct()) return false;
     if (this.scene.time.now < this.nextSpecialAt) return false;
     const w = this.weapon;
@@ -294,7 +320,10 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
     if (w.id === "spear") {
       this.animDuration = 320;
       this.setVelocity(this.facing.x * 320, this.facing.y * 320);
-      this.scene.time.delayedCall(140, () => this.setVelocity(0, 0));
+      this.scene.time.delayedCall(140, () => {
+        if (!this.stillHere()) return;
+        this.setVelocity(0, 0);
+      });
     } else if (w.id === "dual_blades") {
       this.animDuration = 520;
       this.specialHitsLeft = 3;
@@ -305,7 +334,10 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
       this.animDuration = w.id === "malleus" ? 520 : 480;
     } else if (w.id === "trident_net") {
       this.animDuration = 400;
-      this.scene.time.delayedCall(80, () => this.launchNet());
+      this.scene.time.delayedCall(80, () => {
+        if (!this.stillHere()) return;
+        this.launchNet();
+      });
     } else {
       this.animDuration = 420;
     }
@@ -313,12 +345,17 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
     if (w.id !== "dual_blades" && w.id !== "trident_net") {
       this.hitboxActive = false;
       this.scene.time.delayedCall(Math.max(40, w.windup * 0.6), () => {
+        if (!this.stillHere() || !this.alive) return;
         this.hitboxActive = true;
         this.spawnAttackFx();
-        this.scene.time.delayedCall(90, () => (this.hitboxActive = false));
+        this.scene.time.delayedCall(90, () => {
+          if (!this.stillHere()) return;
+          this.hitboxActive = false;
+        });
       });
     }
     this.scene.time.delayedCall(this.animDuration, () => {
+      if (!this.stillHere()) return;
       if (this.combat === "special") this.combat = "idle";
       this.specialHitsLeft = 0;
     });
@@ -372,6 +409,7 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
     audio.sfx("dodge");
     this.puffDust(6);
     this.scene.time.delayedCall(180, () => {
+      if (!this.stillHere()) return;
       this.setVelocity(0, 0);
       if (this.combat === "dodge") this.combat = "idle";
     });
@@ -386,6 +424,7 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
     this.parriedThisWindow = false;
     this.setVelocity(0, 0);
     this.scene.time.delayedCall(240, () => {
+      if (!this.stillHere()) return;
       if (this.combat === "parry") this.combat = "idle";
     });
     return true;
@@ -448,7 +487,7 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
   setBlocking(on: boolean): void {
     if (!this.alive) return;
     if (on && !this.canAct() && this.combat !== "block") return;
-    if (on && this.weapon.blockStrength < 0.2) return;
+    if (on && this.weapon.blockStrength < 0.2 && !this.forceBlockOk) return;
     this.blocking = on;
     if (on) this.combat = "block";
     else if (this.combat === "block") this.combat = "idle";
@@ -461,6 +500,7 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
     this.hitboxActive = false;
     this.setVelocity(0, 0);
     this.scene.time.delayedCall(ms, () => {
+      if (!this.stillHere()) return;
       if (this.combat === "stagger") this.combat = "idle";
     });
   }
@@ -508,8 +548,9 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
 
     if (now < this.invulnUntil) return "miss";
 
-    if (this.blocking && this.weapon.blockStrength > 0.15) {
-      const block = Math.min(0.92, this.weapon.blockStrength + (this.team === "player" ? getSkillMods().blockBonus : 0));
+    if (this.blocking && (this.weapon.blockStrength > 0.15 || this.forceBlockOk)) {
+      const raw = this.forceBlockOk ? Math.max(0.55, this.weapon.blockStrength) : this.weapon.blockStrength;
+      const block = Math.min(0.92, raw + (this.team === "player" ? getSkillMods().blockBonus : 0));
       const reduced = amount * (1 - block);
       const chip = 0.25 * (this.team === "player" ? getSkillMods().blockChip : 1);
       this.lastDamage = reduced * chip;
@@ -539,6 +580,7 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
       this.die();
     } else {
       this.scene.time.delayedCall(160, () => {
+        if (!this.stillHere()) return;
         if (this.combat === "hurt") this.combat = "idle";
         this.setVelocity(0, 0);
       });
@@ -572,8 +614,19 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
     this.blocking = false;
     this.hitboxActive = false;
     this.setVelocity(0, 0);
-    this.bodyVisual.setAngle(90);
-    this.bodyVisual.setAlpha(0.7);
+    this.bodyVisual.setAngle(95);
+    this.bodyVisual.setAlpha(0.62);
+  }
+
+  /** Winner grants life: blade lowered, body eased back. */
+  poseMercy(): void {
+    this.tableau = "mercy";
+    this.combat = "idle";
+    this.blocking = false;
+    this.hitboxActive = false;
+    this.setVelocity(0, 0);
+    this.bodyVisual.setAngle(-8);
+    this.bodyVisual.setAlpha(1);
   }
 
   poseFlourish(): void {
@@ -648,7 +701,7 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
     const shape = this.attackKind === "special"
       ? this.weaponId === "spear" || this.weaponId === "trident_net" || this.weaponId === "gladius"
         ? "thrust"
-        : isHeavyWeapon(this.weaponId)
+        : this.weaponId && isHeavyWeapon(this.weaponId)
           ? "slam"
           : "slash"
       : weaponMove(this.weapon, this.attackKind).shape;
@@ -708,17 +761,21 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
     if (this.combat === "dodge") lunge = 10;
 
     if (this.tableau === "kneel") {
-      lunge = 2;
-      bodyRot = 28;
-      bob = 8;
+      lunge = -2;
+      bodyRot = 48;
+      bob = 16;
+    } else if (this.tableau === "mercy") {
+      lunge = -10;
+      bodyRot = -10;
+      bob = 2;
     } else if (this.tableau === "flourish") {
       lunge = 14;
       bodyRot = 8;
       bob = 0;
     } else if (this.tableau === "steel" || this.combat === "down") {
       lunge = 0;
-      bodyRot = 90;
-      bob = 0;
+      bodyRot = 95;
+      bob = 18;
     }
 
     this.bodyVisual.setPosition(this.x + this.facing.x * lunge, this.y - 10 + bob + this.facing.y * lunge);
@@ -733,8 +790,8 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
     if (this.combat === "block") this.bodyVisual.setTint(0x88aacc);
     if (this.combat === "parry") this.bodyVisual.setTint(0xffe08a);
     if (this.combat === "dodge") this.bodyVisual.setAlpha(0.55);
-    else if (this.tableau === "kneel" || this.tableau === "flourish") this.bodyVisual.setAlpha(1);
-    else if (this.tableau === "steel" || this.combat === "down") this.bodyVisual.setAlpha(0.7);
+    else if (this.tableau === "kneel" || this.tableau === "flourish" || this.tableau === "mercy") this.bodyVisual.setAlpha(1);
+    else if (this.tableau === "steel" || this.combat === "down") this.bodyVisual.setAlpha(0.62);
     else if (this.alive) this.bodyVisual.setAlpha(1);
 
     if (this.combat === "walk" && now - this.lastDust > 160) {
@@ -762,13 +819,22 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
         this.specialHitsLeft -= 1;
         this.slashSide *= -1;
         this.spawnAttackFx();
-        this.scene.time.delayedCall(40, () => (this.hitboxActive = false));
+        this.scene.time.delayedCall(40, () => {
+          if (!this.stillHere()) return;
+          this.hitboxActive = false;
+        });
       }
     }
   }
 
   private poseWeapons(now: number, t: number, facingAng: number, right: Phaser.Math.Vector2, attacking: boolean): void {
     const id = this.weaponId;
+    if (!id) {
+      this.blade.setVisible(false);
+      this.blade2.setVisible(false);
+      this.shield.setVisible(false);
+      return;
+    }
     const hx = this.x;
     const hy = this.y - 4;
     let reach = 12;
@@ -797,9 +863,24 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
         reach = 22;
         ang = facingAng;
       }
+    } else if (this.tableau === "mercy") {
+      reach = 4;
+      ang = facingAng + 105;
+      ang2 = facingAng - 105;
+      shieldX = hx - right.x * 14;
+      shieldY = hy - right.y * 14;
     } else if (this.tableau === "kneel") {
-      reach = 6;
-      ang = facingAng + 70;
+      reach = 2;
+      ang = facingAng + 95;
+      ang2 = facingAng - 95;
+      shieldX = hx - this.facing.x * 6 - right.x * 8;
+      shieldY = hy + 10;
+    } else if (this.tableau === "steel") {
+      reach = 2;
+      ang = facingAng + 125;
+      ang2 = facingAng - 125;
+      shieldX = hx - this.facing.x * 10;
+      shieldY = hy + 14;
     } else if (this.combat === "hurt" || this.combat === "stagger") {
       reach = 8;
       ang = facingAng + 50;
@@ -903,6 +984,8 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
   }
 
   destroy(fromScene?: boolean): void {
+    this.hitboxActive = false;
+    this.combat = "down";
     this.netShot?.img.destroy();
     this.snareFx?.destroy();
     this.bodyVisual?.destroy();

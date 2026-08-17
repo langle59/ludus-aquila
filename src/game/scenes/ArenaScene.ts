@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { TILE_SIZE, HUD_CAM_PAD } from "../config";
+import { TILE_SIZE, HUD_CAM_PAD, GAME_WIDTH, GAME_HEIGHT } from "../config";
 import { gameState } from "../state/GameState";
 import { bus } from "../systems/bus";
 import { audio } from "../systems/audio";
@@ -13,11 +13,14 @@ import { CombatAI } from "../systems/ai";
 import { bodyStyleFor } from "../systems/assets";
 import { burst, floatNumber, resolveHits } from "../systems/combat";
 import { getRival, houseCrowdTint, isTournamentId } from "../data/houses";
-import { applyArenaVictory, applyArenaDefeat, nextHouseAfter, nextUnlockedOpponent, playerCombatStats, wantsFeast } from "../systems/progression";
+import { applyArenaVictory, applyArenaDefeat, applySchoolBout, nextHouseAfter, nextUnlockedOpponent, playerCombatStats, wantsFeast } from "../systems/progression";
+import { returnFromArena } from "../systems/playFlow";
 import { getWeapon } from "../data/weapons";
 import { palBrought, palCombatStats, palKind } from "../data/pal";
 import { CombatInput } from "../systems/input";
 import { arenaWeapon, clearNightEntry } from "../systems/nights";
+import { getNpc } from "../data/gladiators";
+import { schoolCombatStats } from "../data/school";
 
 type Spectator = {
   img: Phaser.GameObjects.Image;
@@ -42,6 +45,15 @@ export class ArenaScene extends Phaser.Scene {
   private beast?: ArenaBeast;
   private pal?: ArenaBeast;
   private ai!: CombatAI;
+  private studentAi?: CombatAI;
+  private watching = false;
+  private schoolNpcId = "";
+  private watchSpeed = 1;
+  private watchStartedAt = 0;
+  private watchHud: Phaser.GameObjects.GameObject[] = [];
+  private coachUsed = new Set<"steel" | "hold" | "roar">();
+  private coachAtkUntil = 0;
+  private coachBaseAtk = 0;
   private combat!: CombatInput;
   private blockingHeld = false;
   private ended = false;
@@ -74,6 +86,16 @@ export class ArenaScene extends Phaser.Scene {
     this.beast = undefined;
     this.pal = undefined;
     this.spectators = [];
+    this.watching = false;
+    this.schoolNpcId = "";
+    this.studentAi = undefined;
+    this.watchSpeed = 1;
+    this.watchStartedAt = 0;
+    this.watchHud = [];
+    this.coachUsed.clear();
+    this.coachAtkUntil = 0;
+    this.time.timeScale = 1;
+    this.physics.world.timeScale = 1;
   }
 
   create(): void {
@@ -94,6 +116,9 @@ export class ArenaScene extends Phaser.Scene {
     this.pressMs = 0;
     this.fromNight = gameState.pendingNight;
     this.opponentId = gameState.pendingArenaOpponent ?? "serp_1";
+    const school = gameState.pendingSchoolBout;
+    this.watching = Boolean(school);
+    this.schoolNpcId = school?.npcId ?? "";
     const found = getRival(this.opponentId);
     if (!found) {
       this.leave(false);
@@ -116,18 +141,34 @@ export class ArenaScene extends Phaser.Scene {
     this.seatCrowd(built.cols * TILE_SIZE, built.rows * TILE_SIZE, houseTint);
 
     const look = playerLook();
-    this.player = new Fighter(this, built.spawns.player.x, built.spawns.player.y, {
-      key: "player-arena",
-      tunic: look.tunic,
-      accent: look.accent,
-      style: look.style,
-      cape: look.cape,
-      scar: look.scar,
-      crest: look.crest,
-      stats: { ...playerCombatStats() },
-          weapon: arenaWeapon(),
-      team: "player",
-    });
+    if (this.watching) {
+      const npc = getNpc(this.schoolNpcId);
+      this.player = new Fighter(this, built.spawns.player.x, built.spawns.player.y, {
+        key: `school-${npc.id}`,
+        tunic: npc.color,
+        accent: npc.accent,
+        scale: npc.scale,
+        stats: { ...schoolCombatStats(npc.id) },
+        weapon: npc.weapon,
+        team: "ally",
+        style: bodyStyleFor(npc.id),
+      });
+      attachHpBar(this, this.player, npc.name);
+      this.studentAi = new CombatAI(this.player, npc.aiStyle);
+    } else {
+      this.player = new Fighter(this, built.spawns.player.x, built.spawns.player.y, {
+        key: "player-arena",
+        tunic: look.tunic,
+        accent: look.accent,
+        style: look.style,
+        cape: look.cape,
+        scar: look.scar,
+        crest: look.crest,
+        stats: { ...playerCombatStats() },
+        weapon: arenaWeapon() ?? "gladius",
+        team: "player",
+      });
+    }
     this.player.revive(true);
 
     this.enemy = new Fighter(this, built.spawns.enemy.x, built.spawns.enemy.y, {
@@ -148,7 +189,7 @@ export class ArenaScene extends Phaser.Scene {
     this.physics.add.collider(this.enemy, solids);
     this.physics.add.collider(this.player, this.enemy);
 
-    const beastKind = this.championBeastKind(found.house.beastKind, fighter.isChampion);
+    const beastKind = this.watching ? null : this.championBeastKind(found.house.beastKind, fighter.isChampion);
     if (beastKind) {
       const spawnPad =
         beastKind === "elephant"
@@ -170,7 +211,7 @@ export class ArenaScene extends Phaser.Scene {
       this.physics.add.collider(this.beast, this.enemy);
     }
 
-    if (palBrought()) {
+    if (!this.watching && palBrought()) {
       const stats = palCombatStats();
       this.pal = new ArenaBeast(this, this.player.x - 48, this.player.y + 8, palKind(), "player", {
         label: stats.label,
@@ -224,7 +265,8 @@ export class ArenaScene extends Phaser.Scene {
     this.game.canvas.focus();
 
     this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
-    if (fighter.isChampion) bus.emit("boss", fighter.name);
+    if (this.watching) bus.emit("boss", getNpc(this.schoolNpcId).name);
+    else if (fighter.isChampion) bus.emit("boss", fighter.name);
     bus.emit("favor-show", { them: houseTint });
     bus.emit("favor", this.favor);
     if (this.pal) bus.emit("pal-hp-show");
@@ -241,10 +283,16 @@ export class ArenaScene extends Phaser.Scene {
     this.nextTossAt = this.time.now + 1800;
 
     bus.emit("dialogue", {
-      name: fighter.name,
-      lines: fighter.intro,
+      name: this.watching ? getNpc(this.schoolNpcId).name : fighter.name,
+      lines: this.watching
+        ? [
+            "You taught them. Now you watch from the stands.",
+            ...fighter.intro,
+          ]
+        : fighter.intro,
       onDone: () => {
         gameState.paused = false;
+        if (this.watching) this.showWatchHud();
       },
     });
 
@@ -253,7 +301,11 @@ export class ArenaScene extends Phaser.Scene {
       bus.emit("favor-hide");
       bus.emit("pal-hp-hide");
       bus.emit("judgment-hide");
+      this.clearWatchHud();
+      this.time.timeScale = 1;
+      this.physics.world.timeScale = 1;
       this.ai?.destroy();
+      this.studentAi?.destroy();
       this.beast?.destroy();
       this.pal?.destroy();
       bus.off("player-attack", this.doAttack, this);
@@ -266,6 +318,116 @@ export class ArenaScene extends Phaser.Scene {
       audio.setCrowd(false);
       audio.setMusicMood("yard");
     });
+  }
+
+  private showWatchHud(): void {
+    this.clearWatchHud();
+    this.watchStartedAt = this.time.now;
+    this.coachUsed.clear();
+    const banner = this.add
+      .text(GAME_WIDTH / 2, 52, "YOUR STUDENT — coach from the stands (once each)", {
+        fontFamily: "Cinzel, Georgia",
+        fontSize: "15px",
+        color: "#e8c96a",
+        stroke: "#1a1210",
+        strokeThickness: 4,
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(5000);
+    const mkCoach = (x: number, label: string, kind: "steel" | "hold" | "roar") => {
+      const btn = this.add
+        .text(x, GAME_HEIGHT - 78, label, {
+          fontFamily: "Cinzel, Georgia",
+          fontSize: "15px",
+          color: "#e8dcc8",
+          backgroundColor: "#1a1210cc",
+          padding: { x: 10, y: 6 },
+        })
+        .setOrigin(0.5)
+        .setScrollFactor(0)
+        .setDepth(5000)
+        .setInteractive({ useHandCursor: true });
+      btn.on("pointerdown", () => {
+        if (this.coachUsed.has(kind)) return;
+        this.coachCall(kind);
+        btn.setColor("#6a5a4a").disableInteractive();
+      });
+      return btn;
+    };
+    const steel = mkCoach(GAME_WIDTH / 2 - 140, "Steel", "steel");
+    const hold = mkCoach(GAME_WIDTH / 2, "Hold", "hold");
+    const roar = mkCoach(GAME_WIDTH / 2 + 140, "Roar", "roar");
+    const speedBtn = this.add
+      .text(GAME_WIDTH / 2 - 90, GAME_HEIGHT - 32, "Speed 1x", {
+        fontFamily: "Cinzel, Georgia",
+        fontSize: "15px",
+        color: "#e8dcc8",
+        backgroundColor: "#1a1210cc",
+        padding: { x: 12, y: 6 },
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(5000)
+      .setInteractive({ useHandCursor: true });
+    speedBtn.on("pointerdown", () => {
+      this.watchSpeed = this.watchSpeed >= 2 ? 1 : 2;
+      this.time.timeScale = this.watchSpeed;
+      this.physics.world.timeScale = this.watchSpeed;
+      speedBtn.setText(`Speed ${this.watchSpeed}x`);
+    });
+    const skipBtn = this.add
+      .text(GAME_WIDTH / 2 + 90, GAME_HEIGHT - 32, "Skip result", {
+        fontFamily: "Cinzel, Georgia",
+        fontSize: "15px",
+        color: "#e8c96a",
+        backgroundColor: "#1a1210cc",
+        padding: { x: 12, y: 6 },
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(5000)
+      .setInteractive({ useHandCursor: true });
+    skipBtn.on("pointerdown", () => this.skipWatchBout());
+    this.watchHud = [banner, steel, hold, roar, speedBtn, skipBtn];
+  }
+
+  private coachCall(kind: "steel" | "hold" | "roar"): void {
+    if (!this.watching || this.ended || this.resolving || this.coachUsed.has(kind)) return;
+    this.coachUsed.add(kind);
+    if (kind === "steel") {
+      this.coachBaseAtk = this.player.stats.attack;
+      this.player.stats.attack = this.coachBaseAtk + 4;
+      this.coachAtkUntil = this.time.now + 4500;
+      bus.emit("toast", "Steel — strike harder.");
+    } else if (kind === "hold") {
+      this.player.stamina = Math.min(this.player.stats.maxStamina, this.player.stamina + 28);
+      this.player.health = Math.min(this.player.stats.maxHealth, this.player.health + 12);
+      bus.emit("toast", "Hold — breath and guard.");
+    } else {
+      this.addFavor(12);
+      this.swellCrowd(900, "north");
+      bus.emit("toast", "Roar — the stands lean your way.");
+    }
+    audio.sfx("ui");
+  }
+
+
+  private clearWatchHud(): void {
+    for (const g of this.watchHud) g.destroy();
+    this.watchHud = [];
+  }
+
+  private skipWatchBout(): void {
+    if (!this.watching || this.ended || this.resolving) return;
+    const elapsed = this.time.now - this.watchStartedAt;
+    if (!this.firstBlood && elapsed < 8000) {
+      bus.emit("toast", "Wait for first blood, or a few moments.");
+      return;
+    }
+    const won = this.player.health >= this.enemy.health;
+    this.clearWatchHud();
+    this.beginTableau(won);
   }
 
   private championBeastKind(kind: BeastKind | undefined, isChampion: boolean): BeastKind | null {
@@ -470,22 +632,24 @@ export class ArenaScene extends Phaser.Scene {
   };
 
   private onCosmeticsChanged = (): void => {
+    if (this.watching) return;
     const look = playerLook();
     this.player.applyLook(look.tunic, look.accent, look.style, look.cape, look.scar, look.crest);
   };
 
   private onSkillsChanged = (): void => {
+    if (this.watching) return;
     this.player.refreshSkills();
     this.player.health = Math.min(this.player.health, this.player.stats.maxHealth);
   };
 
   private doAttack = (kind: unknown = "light"): void => {
-    if (this.busy()) return;
+    if (this.watching || this.busy()) return;
     this.player.tryAttack(kind === "heavy" ? "heavy" : "light");
   };
 
   private doSpecial = (): void => {
-    if (this.busy()) return;
+    if (this.watching || this.busy()) return;
     this.player.trySpecial();
   };
 
@@ -602,6 +766,27 @@ export class ArenaScene extends Phaser.Scene {
 
     this.updateToss(now);
 
+    if (this.watching) {
+      if (this.coachAtkUntil && now >= this.coachAtkUntil) {
+        this.player.stats.attack = this.coachBaseAtk || this.player.stats.attack;
+        this.coachAtkUntil = 0;
+      }
+      if (this.combat.justPressed("interact")) this.skipWatchBout();
+      this.studentAi?.update(this.enemy, now);
+      if (this.enemy.alive) this.ai.update(this.player, now);
+      else this.enemy.setVelocity(0, 0);
+      if (this.player.hitboxActive) resolveHits(this.player, this.foes(), (t, kind) => this.onFoeHit(this.player, t, kind));
+      if (this.enemy.hitboxActive) resolveHits(this.enemy, [this.player], (t, kind) => this.onFoeHit(this.enemy, t, kind));
+      this.player.updateNet(this.foes(), delta);
+      this.enemy.updateNet([this.player], delta);
+      this.player.syncVisuals(now);
+      this.enemy.syncVisuals(now);
+      bus.emit("boss-hp", this.enemy.health / this.enemy.stats.maxHealth);
+      if (!this.player.alive) this.beginTableau(false);
+      else if (!this.enemy.alive) this.beginTableau(true);
+      return;
+    }
+
     const move = this.combat.moveVector();
     this.player.tryMove(move.x * this.player.moveSpeed, move.y * this.player.moveSpeed);
     if (this.combat.justPressed("attack")) this.doAttack("light");
@@ -659,6 +844,9 @@ export class ArenaScene extends Phaser.Scene {
   private beginTableau(won: boolean): void {
     if (this.resolving || this.ended) return;
     this.resolving = true;
+    this.clearWatchHud();
+    this.time.timeScale = 1;
+    this.physics.world.timeScale = 1;
     this.player.setVelocity(0, 0);
     this.enemy.setVelocity(0, 0);
     this.beast?.setVelocity(0, 0);
@@ -679,8 +867,31 @@ export class ArenaScene extends Phaser.Scene {
     this.swellCrowd(1800);
 
     this.crowdMissio = this.favor >= CROWD_MISSIO;
+    if (this.watching) {
+      this.crowdMissio = true;
+      if (!won) {
+        this.playVerdict(false, true, true);
+        return;
+      }
+      this.player.poseReady();
+      this.enemy.poseKneel();
+      this.time.delayedCall(900, () => {
+        if (!this.ended) this.playVerdict(true, true, true);
+      });
+      return;
+    }
     if (!won) {
       this.playVerdict(false, this.crowdMissio, true);
+      return;
+    }
+
+    // Editor nights: skip missio/iugula (purse fight, not a house spectacle)
+    if (this.fromNight) {
+      this.player.poseReady();
+      this.enemy.poseKneel();
+      this.time.delayedCall(700, () => {
+        if (!this.ended) this.playVerdict(true, true, true);
+      });
       return;
     }
 
@@ -725,31 +936,71 @@ export class ArenaScene extends Phaser.Scene {
   private playVerdict(won: boolean, missio: boolean, followed: boolean): void {
     const winner = won ? this.player : this.enemy;
     const loser = won ? this.enemy : this.player;
-    winner.poseFlourish();
     this.haltBodies();
 
     const dx = this.enemy.x - this.player.x;
     const dy = this.enemy.y - this.player.y;
     const dist = Math.max(1, Math.hypot(dx, dy));
+    const nx = dx / dist;
+    const ny = dy / dist;
 
     if (missio) {
-      loser.poseKneel();
-      const sign = won ? -1 : 1;
-      this.tweens.add({
-        targets: winner,
-        x: winner.x + (dx / dist) * 26 * sign,
-        y: winner.y + (dy / dist) * 16 * sign,
-        duration: 480,
-        ease: "Sine.easeOut",
-      });
-      if (gameState.settings.screenShake) this.cameras.main.shake(70, 0.002);
-      this.sandStain(loser.x, loser.y);
-      audio.sfx("missio");
-      this.time.delayedCall(1300, () => this.finish(won, missio, followed));
+      this.playMercy(won, winner, loser, nx, ny, followed);
       return;
     }
 
-    this.playSlaughter(won, winner, loser, dx / dist, dy / dist, followed);
+    this.playSlaughter(won, winner, loser, nx, ny, followed);
+  }
+
+  /** Spare them: kneel stays living, winner steps back with blade lowered. */
+  private playMercy(
+    won: boolean,
+    winner: Fighter,
+    loser: Fighter,
+    nx: number,
+    ny: number,
+    followed: boolean,
+  ): void {
+    loser.poseKneel();
+    winner.poseMercy();
+    this.verdictFlash(true);
+    this.verdictBanner("MISSIO", "MERCY — LIFE", "#ffe08a");
+
+    const back = won ? -1 : 1;
+    this.tweens.add({
+      targets: winner,
+      x: winner.x + nx * 34 * back,
+      y: winner.y + ny * 22 * back,
+      duration: 560,
+      ease: "Sine.easeOut",
+    });
+    this.tweens.add({
+      targets: this.cameras.main,
+      zoom: 0.94,
+      duration: 480,
+      ease: "Sine.easeOut",
+      yoyo: true,
+      hold: 400,
+    });
+
+    this.sandStain(loser.x, loser.y, 0xd4b06a, 0xffe08a);
+    for (let i = 0; i < 8; i++) {
+      const px = loser.x + Phaser.Math.Between(-18, 18);
+      const py = loser.y + Phaser.Math.Between(-8, 12);
+      const mote = this.add.image(px, py, "spark").setTint(0xffe08a).setDepth(8).setScale(0.45).setAlpha(0.9);
+      this.tweens.add({
+        targets: mote,
+        y: py - Phaser.Math.Between(28, 48),
+        alpha: 0,
+        scale: 0.1,
+        duration: 900 + i * 40,
+        ease: "Sine.easeOut",
+        onComplete: () => mote.destroy(),
+      });
+    }
+    audio.sfx("missio");
+    this.swellCrowd(1400);
+    this.time.delayedCall(1700, () => this.finish(won, true, followed));
   }
 
   private playSlaughter(
@@ -761,54 +1012,150 @@ export class ArenaScene extends Phaser.Scene {
     followed: boolean,
   ): void {
     loser.poseKneel();
+    winner.poseFlourish();
     this.haltBodies();
+
     const wash = this.add
-      .rectangle(this.scale.width / 2, this.scale.height / 2, this.scale.width, this.scale.height, 0xb33a2b, 0.14)
+      .rectangle(this.scale.width / 2, this.scale.height / 2, this.scale.width, this.scale.height, 0xb33a2b, 0.1)
       .setDepth(40)
       .setScrollFactor(0);
     this.tweens.add({
       targets: wash,
-      alpha: 0.28,
-      duration: 360,
+      alpha: 0.32,
+      duration: 280,
       yoyo: true,
-      hold: 200,
+      hold: 420,
     });
+
+    const thrust = won ? 1 : -1;
     this.tweens.add({
       targets: winner,
-      x: winner.x + nx * 18 * (won ? 1 : -1),
-      y: winner.y + ny * 10 * (won ? 1 : -1),
-      duration: 720,
-      ease: "Sine.easeIn",
+      x: winner.x + nx * 28 * thrust,
+      y: winner.y + ny * 16 * thrust,
+      duration: 420,
+      ease: "Quad.easeIn",
     });
-    this.time.delayedCall(380, () => {
+    this.tweens.add({
+      targets: this.cameras.main,
+      zoom: 1.12,
+      duration: 400,
+      ease: "Quad.easeIn",
+    });
+
+    this.time.delayedCall(400, () => {
       if (this.ended) return;
       loser.poseSteel();
-      this.sandStain(loser.x, loser.y);
-      if (gameState.settings.screenShake) this.cameras.main.shake(180, 0.006);
+      winner.poseFlourish();
+      this.verdictFlash(false);
+      this.verdictBanner("IUGULA", "STEEL — DEATH", "#e07060");
+      const midX = (winner.x + loser.x) / 2;
+      const midY = (winner.y + loser.y) / 2;
+      burst(this, midX, midY, 0xc43a2b, true);
+      this.sandStain(loser.x, loser.y, 0x6a2020, 0xb33a2b);
+      if (gameState.settings.screenShake) this.cameras.main.shake(220, 0.008);
+      this.tweens.add({
+        targets: this.cameras.main,
+        zoom: 1,
+        duration: 520,
+        ease: "Sine.easeOut",
+      });
       audio.sfx(won ? "win" : "lose");
       audio.sfx("crowd");
+      this.swellCrowd(1600);
     });
-    this.time.delayedCall(1500, () => {
+    this.time.delayedCall(1900, () => {
       if (wash.active) wash.destroy();
       this.finish(won, false, followed);
     });
   }
 
-  private sandStain(x: number, y: number): void {
-    const stain = this.add.image(x, y + 10, "fx-dust").setDepth(2).setAlpha(0.7).setScale(1.4).setTint(0x6a4a28);
+  private verdictFlash(mercy: boolean): void {
+    const wash = this.add
+      .rectangle(
+        this.scale.width / 2,
+        this.scale.height / 2,
+        this.scale.width,
+        this.scale.height,
+        mercy ? 0xffe08a : 0xb33a2b,
+        mercy ? 0.16 : 0.18,
+      )
+      .setDepth(45)
+      .setScrollFactor(0);
+    this.tweens.add({
+      targets: wash,
+      alpha: 0,
+      duration: mercy ? 700 : 560,
+      onComplete: () => wash.destroy(),
+    });
+  }
+
+  private verdictBanner(latin: string, plain: string, color: string): void {
+    const cx = (this.player.x + this.enemy.x) / 2;
+    const cy = Math.min(this.player.y, this.enemy.y) - 56;
+    const title = this.add
+      .text(cx, cy, latin, {
+        fontFamily: "Cinzel, Georgia",
+        fontSize: "40px",
+        color,
+        stroke: "#1a1210",
+        strokeThickness: 8,
+      })
+      .setOrigin(0.5)
+      .setDepth(5000)
+      .setAlpha(0)
+      .setScale(0.75);
+    const sub = this.add
+      .text(cx, cy + 34, plain, {
+        fontFamily: "Georgia",
+        fontSize: "18px",
+        color: "#e8dcc8",
+        stroke: "#1a1210",
+        strokeThickness: 5,
+      })
+      .setOrigin(0.5)
+      .setDepth(5000)
+      .setAlpha(0);
+    this.tweens.add({
+      targets: title,
+      alpha: 1,
+      scale: 1,
+      duration: 240,
+      ease: "Back.easeOut",
+    });
+    this.tweens.add({
+      targets: sub,
+      alpha: 1,
+      duration: 280,
+      delay: 80,
+    });
+    this.tweens.add({
+      targets: [title, sub],
+      y: "-=28",
+      alpha: 0,
+      delay: 980,
+      duration: 520,
+      onComplete: () => {
+        title.destroy();
+        sub.destroy();
+      },
+    });
+  }
+
+  private sandStain(x: number, y: number, dustTint = 0x6a4a28, ringTint = 0xc2a36b): void {
+    const stain = this.add.image(x, y + 10, "fx-dust").setDepth(2).setAlpha(0.75).setScale(1.5).setTint(dustTint);
     this.tweens.add({
       targets: stain,
       alpha: 0,
-      scale: 2.1,
-      duration: 1400,
+      scale: 2.3,
+      duration: 1500,
       onComplete: () => stain.destroy(),
     });
-    const ring = this.add.image(x, y, "fx-ring").setTint(0xc2a36b).setAlpha(0.55).setScale(0.4).setDepth(3);
+    const ring = this.add.image(x, y, "fx-ring").setTint(ringTint).setAlpha(0.6).setScale(0.35).setDepth(3);
     this.tweens.add({
       targets: ring,
       alpha: 0,
-      scale: 1.15,
-      duration: 520,
+      scale: 1.35,
+      duration: 580,
       onComplete: () => ring.destroy(),
     });
   }
@@ -818,20 +1165,62 @@ export class ArenaScene extends Phaser.Scene {
     this.ended = true;
     this.awaitingJudgment = false;
     this.resetCamera();
+    this.time.timeScale = 1;
+    this.physics.world.timeScale = 1;
     bus.emit("judgment-hide");
     const found = getRival(this.opponentId);
-    const fighter = found!.fighter;
+    if (!found) {
+      this.leave(won);
+      return;
+    }
+    const fighter = found.fighter;
+
+    // Night bouts: skip result modal (it was freezing returns) — toast and go home
+    if (this.fromNight && !this.watching) {
+      if (won) {
+        const r = applyArenaVictory(this.opponentId);
+        bus.emit(
+          "toast",
+          r.nightNote
+            ? `${r.nightNote} +${r.denarii} denarii.`
+            : `Night won. +${r.denarii} denarii  ·  +${r.xp} XP`,
+        );
+      } else {
+        applyArenaDefeat(missio);
+        bus.emit("toast", "The night marked you. Rest in Quarters, or drink unguent.");
+      }
+      this.leave(won);
+      return;
+    }
+
+    if (this.watching) {
+      const npc = getNpc(this.schoolNpcId);
+      const r = applySchoolBout(this.schoolNpcId, this.opponentId, won);
+      let extra = "";
+      if (r.glory) extra += `\n\nGlory. Act goal done for ${npc.name}.`;
+      if (r.allGlory) extra += "\n\nTeacher of the Sand. Speak with Marcellus.";
+      const theirs = npc.id === "aelia" ? "Hers" : "His";
+      bus.emit("result", {
+        title: r.glory ? "Glory" : won ? "The stands roar" : "The body remembers",
+        body: won
+          ? `You watch from the stands.\n${npc.name} stands.\n\n+${r.denarii} denarii${extra}`
+          : `You watch from the stands.\nThe body remembers. ${theirs}, this time.\n${npc.name} will need rest — first recovery this visit is free.`,
+        action: "Return to the ludus",
+      });
+      bus.once("result-closed", () => this.leave(won));
+      return;
+    }
     if (won) {
       const r = applyArenaVictory(this.opponentId);
       let extra = "";
       if (this.opponentId === "tourney_3") {
-        extra = "\n\nThe rudis is yours. Marcellus will put wood in your hand. You are free.\nTitle unlocked: the Free Man.";
+        extra = "\n\nThe rudis is yours. You are free.\nSpeak with Marcellus. The school is next.\nTitle unlocked: the Free Man.";
       } else if (isTournamentId(this.opponentId)) {
         extra = "\n\nThe next bout waits. Do not leave the sand.";
       } else if (fighter.isChampion) {
-        const nxt = nextHouseAfter(found!.house.id);
+        const nxt = nextHouseAfter(found.house.id);
         extra = nxt
-          ? `\n\n${found!.house.latinName} is beaten. ${nxt.latinName} is open.`
+          ? `\n\n${found.house.latinName} is beaten. ${nxt.latinName} is open.`
           : "\n\nThe other houses are beaten. The Rudis waits at the gate.";
         if (r.unlocked) extra += `\nUnlocked: ${getWeapon(r.unlocked).name}`;
       } else if (r.unlocked) extra = `\nUnlocked: ${getWeapon(r.unlocked).name}`;
@@ -853,17 +1242,12 @@ export class ArenaScene extends Phaser.Scene {
         action: chain ? "Next bout" : feast ? "Join the feast" : "Return to the ludus",
       });
     } else {
-      const night = gameState.pendingNight;
       applyArenaDefeat(missio);
       bus.emit("result", {
         title: missio ? "Spared" : "Defeat",
-        body: night
-          ? missio
-            ? `${fighter.defeat.join("\n")}\n\nThe editor's night still marked you. You wake hurt. Rest in Quarters, or drink unguent.`
-            : `${fighter.defeat.join("\n")}\n\nYou fall under the lamps. You wake hurt. A few denarii are lost.`
-          : missio
-            ? `${fighter.defeat.join("\n")}\n\nThe crowd wants you back. Marcellus' men drag you from the sand.\nYou wake in the ludus. Nothing you earned is lost.`
-            : `${fighter.defeat.join("\n")}\n\nYou fall. The stands go quiet.\nYou wake in the ludus. A few denarii are lost. The fall left a mark — equip scars in Quarters.`,
+        body: missio
+          ? `${fighter.defeat.join("\n")}\n\nThe crowd wants you back. Marcellus' men drag you from the sand.\nYou wake in the ludus. Nothing you earned is lost.`
+          : `${fighter.defeat.join("\n")}\n\nYou fall. The stands go quiet.\nYou wake in the ludus. A few denarii are lost. The fall left a mark — equip scars in Quarters.`,
         action: "Return to the ludus",
       });
     }
@@ -875,6 +1259,19 @@ export class ArenaScene extends Phaser.Scene {
     bus.emit("favor-hide");
     bus.emit("pal-hp-hide");
     bus.emit("judgment-hide");
+    gameState.paused = false;
+    gameState.inMenu = false;
+    gameState.inDialogue = false;
+
+    if (this.watching) {
+      gameState.pendingArenaOpponent = null;
+      gameState.pendingSchoolBout = null;
+      clearNightEntry();
+      gameState.restoreVitals();
+      gameState.persist();
+      returnFromArena(this.game);
+      return;
+    }
     if (won && isTournamentId(this.opponentId) && !gameState.save.freedomWon) {
       const next = nextUnlockedOpponent();
       if (next && isTournamentId(next)) {
@@ -888,6 +1285,6 @@ export class ArenaScene extends Phaser.Scene {
     if (won && wantsFeast(this.opponentId, this.fromNight)) gameState.beginFeast();
     else gameState.restoreVitals();
     gameState.persist();
-    bus.emit("return-ludus");
+    returnFromArena(this.game);
   }
 }

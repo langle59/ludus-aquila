@@ -15,6 +15,7 @@ const VARIANT_BASES = new Set([
   "tile-shrine",
   "tile-wood",
   "tile-wood-pale",
+  "tile-wood-dark",
   "tile-yard",
   "tile-wall",
 ]);
@@ -66,6 +67,134 @@ export function paintMap(
   return solids;
 }
 
+const LUDUS_MIRROR_X = 47;
+
+function wallKeysFromBuilt(built: BuiltMap): Set<string> {
+  const walls = new Set<string>();
+  for (const t of built.tiles) {
+    if (t.tex.startsWith("tile-wall") || t.tex === "tile-fence" || t.tex.includes("banner")) {
+      walls.add(`${t.x / TILE_SIZE},${t.y / TILE_SIZE}`);
+    }
+  }
+  return walls;
+}
+
+/** Curated mounts — only kept if that cell is actually a wall/fence/banner. */
+function ludusWallTorches(walls: Set<string>): { x: number; y: number }[] {
+  const candidates: { x: number; y: number }[] = [
+    // Outer north rim
+    { x: 4, y: 0 },
+    { x: 18, y: 0 },
+    { x: 30, y: 0 },
+    { x: 42, y: 0 },
+    { x: 54, y: 0 },
+    // Lanista office
+    { x: 16, y: 5 },
+    { x: 24, y: 5 },
+    { x: 26, y: 2 },
+    // Armory
+    { x: 10, y: 7 },
+    { x: 10, y: 11 },
+    { x: 3, y: 12 },
+    { x: 7, y: 12 },
+    // Hall walls
+    { x: 26, y: 7 },
+    { x: 26, y: 11 },
+    { x: 29, y: 12 },
+    { x: 34, y: 12 },
+    { x: 40, y: 12 },
+    { x: 45, y: 12 },
+    { x: 47, y: 3 },
+    { x: 47, y: 7 },
+    { x: 47, y: 11 },
+    // Quarters / chamber shell
+    { x: 49, y: 7 },
+    { x: 49, y: 11 },
+    { x: 54, y: 6 },
+    { x: 60, y: 8 },
+    // Roost
+    { x: 1, y: 14 },
+    { x: 6, y: 14 },
+    { x: 12, y: 16 },
+    { x: 12, y: 19 },
+    { x: 6, y: 21 },
+    // Shrine
+    { x: 2, y: 22 },
+    { x: 13, y: 22 },
+    { x: 15, y: 25 },
+    { x: 3, y: 29 },
+    { x: 12, y: 29 },
+    // Training yard fence posts
+    { x: 16, y: 13 },
+    { x: 16, y: 24 },
+    { x: 28, y: 13 },
+    { x: 28, y: 24 },
+    { x: 42, y: 13 },
+    { x: 47, y: 13 },
+    { x: 47, y: 24 },
+    { x: 16, y: 20 },
+    { x: 47, y: 20 },
+    // Feast
+    { x: 48, y: 26 },
+    { x: 54, y: 26 },
+    { x: 60, y: 26 },
+    { x: 48, y: 33 },
+    { x: 60, y: 33 },
+    { x: 48, y: 29 },
+    // Drill compound (when present)
+    { x: 48, y: 13 },
+    { x: 54, y: 13 },
+    { x: 60, y: 13 },
+    { x: 48, y: 25 },
+    { x: 60, y: 25 },
+    // Arena gate row
+    { x: 3, y: 30 },
+    { x: 14, y: 30 },
+    { x: 28, y: 30 },
+    { x: 44, y: 30 },
+    // Map edge
+    { x: 0, y: 8 },
+    { x: 0, y: 18 },
+    { x: 0, y: 28 },
+  ];
+
+  const placed: { x: number; y: number }[] = [];
+  const seen = new Set<string>();
+  const add = (tx: number, ty: number) => {
+    const key = `${tx},${ty}`;
+    if (seen.has(key) || !walls.has(key)) return;
+    seen.add(key);
+    placed.push({ x: tx, y: ty });
+  };
+
+  for (const t of candidates) {
+    add(t.x, t.y);
+    const mx = LUDUS_MIRROR_X - t.x;
+    if (mx !== t.x) add(mx, t.y);
+  }
+  return placed;
+}
+
+function arenaWallTorches(cols: number, rows: number): { x: number; y: number }[] {
+  const right = cols - 1;
+  const bottom = rows - 1;
+  const left = [
+    { x: 4, y: 0 },
+    { x: 10, y: 0 },
+    { x: 0, y: 5 },
+    { x: 0, y: 16 },
+    { x: 4, y: bottom },
+    { x: 10, y: bottom },
+  ];
+  const placed: { x: number; y: number }[] = [];
+  for (const t of left) {
+    placed.push(t);
+    const mx = right - t.x;
+    if (mx !== t.x) placed.push({ x: mx, y: t.y });
+  }
+  return placed;
+}
+
 function paintDecor(scene: Phaser.Scene, built: BuiltMap, mood: "ludus" | "arena"): void {
   for (const t of built.tiles) {
     if (t.tex === "tile-column") {
@@ -77,71 +206,25 @@ function paintDecor(scene: Phaser.Scene, built: BuiltMap, mood: "ludus" | "arena
   }
 
   if (mood === "ludus") {
-    const ringX = 24 * TILE_SIZE;
-    const ringY = 19 * TILE_SIZE;
+    const ring = built.spawns.dummy ?? { x: 32 * TILE_SIZE, y: 19 * TILE_SIZE };
+    const ringX = ring.x;
+    const ringY = ring.y;
     const g = scene.add.graphics().setDepth(2);
-    g.lineStyle(3, 0xc4a66e, 0.6);
-    g.strokeCircle(ringX, ringY, 64);
-    g.lineStyle(2, 0x6b4a28, 0.4);
-    g.strokeCircle(ringX, ringY, 58);
-    g.lineStyle(1, 0xe8c96a, 0.25);
-    g.strokeCircle(ringX, ringY, 22);
+    g.lineStyle(5, 0xc4a66e, 0.7);
+    g.strokeCircle(ringX, ringY, 118);
+    g.lineStyle(3, 0x6b4a28, 0.5);
+    g.strokeCircle(ringX, ringY, 108);
+    g.lineStyle(1, 0xe8c96a, 0.35);
+    g.strokeCircle(ringX, ringY, 36);
+    g.lineStyle(1, 0x8a6a44, 0.28);
+    g.strokeCircle(ringX, ringY, 68);
 
-    const torches = [
-      { x: 4, y: 2 },
-      { x: 43, y: 2 },
-      { x: 3, y: 6 },
-      { x: 44, y: 6 },
-      { x: 8, y: 6 },
-      { x: 39, y: 6 },
-      { x: 3, y: 14 },
-      { x: 44, y: 14 },
-      { x: 10, y: 14 },
-      { x: 37, y: 14 },
-      { x: 12, y: 14 },
-      { x: 35, y: 14 },
-      { x: 3, y: 21 },
-      { x: 44, y: 21 },
-      { x: 10, y: 21 },
-      { x: 37, y: 21 },
-      { x: 2, y: 22 },
-      { x: 45, y: 22 },
-      { x: 14, y: 22 },
-      { x: 33, y: 22 },
-      { x: 15, y: 23 },
-      { x: 32, y: 23 },
-      { x: 15, y: 27 },
-      { x: 32, y: 27 },
-      { x: 2, y: 29 },
-      { x: 45, y: 29 },
-      { x: 14, y: 29 },
-      { x: 33, y: 29 },
-      { x: 17, y: 24 },
-      { x: 30, y: 24 },
-      { x: 21, y: 31 },
-      { x: 26, y: 31 },
-    ];
-    for (const t of torches) {
+    const walls = wallKeysFromBuilt(built);
+    for (const t of ludusWallTorches(walls)) {
       placeTorch(scene, t.x * TILE_SIZE + 16, t.y * TILE_SIZE + 10);
     }
-    placeLamp(scene, 5 * TILE_SIZE + 8, 6 * TILE_SIZE + 18);
-    placeLamp(scene, 42 * TILE_SIZE + 16, 6 * TILE_SIZE + 18);
-    placeLamp(scene, 15 * TILE_SIZE + 8, 24 * TILE_SIZE + 16);
-    placeLamp(scene, 15 * TILE_SIZE + 8, 27 * TILE_SIZE + 16);
-    placeLamp(scene, 32 * TILE_SIZE + 8, 24 * TILE_SIZE + 16);
-    placeLamp(scene, 32 * TILE_SIZE + 8, 27 * TILE_SIZE + 16);
-    placeLamp(scene, 12 * TILE_SIZE + 8, 16 * TILE_SIZE + 16);
-    placeLamp(scene, 12 * TILE_SIZE + 8, 19 * TILE_SIZE + 16);
-    placeLamp(scene, 35 * TILE_SIZE + 8, 16 * TILE_SIZE + 16);
-    placeLamp(scene, 35 * TILE_SIZE + 8, 19 * TILE_SIZE + 16);
   } else {
-    const torches = [
-      { x: 4, y: 3 },
-      { x: 27, y: 3 },
-      { x: 4, y: 18 },
-      { x: 27, y: 18 },
-    ];
-    for (const t of torches) {
+    for (const t of arenaWallTorches(built.cols, built.rows)) {
       placeTorch(scene, t.x * TILE_SIZE + 16, t.y * TILE_SIZE + 8, built.torchTint);
     }
   }

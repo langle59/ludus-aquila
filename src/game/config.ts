@@ -46,11 +46,11 @@ export const COLORS = {
 export const CONTROLS_TEXT = [
   "WASD / Arrow Keys — Move",
   "ATTACK button or Space — Light attack",
-  "HEAVY button or G — Heavy attack",
+  "HEAVY button or F — Heavy attack",
   "Shift — Dodge (roll into a swing for a perfect dodge)",
   "Q — Block (hold)",
   "R — Special",
-  "F — Parry (tap into a swing)",
+  "G — Parry (tap into a swing)",
   "V — Drink unguent (bought vials; restores health and stamina)",
   "E — Talk / Interact",
   "Tab — Equipment",

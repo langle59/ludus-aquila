@@ -23,9 +23,15 @@ export type ObjectiveId =
   | "equip_gladius"
   | "attack_dummy"
   | "learn_stamina"
+  | "learn_heavy"
   | "learn_dodge"
   | "learn_block"
+  | "learn_parry"
   | "spar_friend"
+  | "bout_titus"
+  | "bout_rufus"
+  | "bout_brom"
+  | "bout_aelia"
   | "return_lanista"
   | "first_arena"
   | "defeat_rival"
@@ -33,7 +39,9 @@ export type ObjectiveId =
   | "tournament_1"
   | "tournament_2"
   | "tournament_3"
-  | "free";
+  | "free"
+  | "take_school"
+  | "school";
 
 export type SkillId =
   | "iron_edge"
@@ -185,12 +193,40 @@ export interface HouseDef {
   nextHouseId?: string;
 }
 
+export type SchoolNpcId = "titus" | "brom" | "aelia" | "rufus";
+
+export interface SchoolRecord {
+  wins: number;
+  losses: number;
+  injured: boolean;
+  glory: boolean;
+  training: number;
+  specialty: number;
+  /** Completed multi-beat yard lessons (persists across visits). */
+  lessons: number;
+  /** Cleared rungs on their 3-bout school ladder (0–3). Glory at 3. */
+  rung: number;
+}
+
+export interface ChamberDecor {
+  floor: string;
+  rug: string;
+  bed: string;
+  banner: string;
+  light: string;
+  extra: string;
+  trophy: string;
+}
+
 export interface SaveData {
   version: number;
   playerName: string;
   playerHouse: string | null;
   tournamentWins: number;
   freedomWon: boolean;
+  lanistaUnlocked: boolean;
+  school: Record<SchoolNpcId, SchoolRecord>;
+  chamber: ChamberDecor;
   nightKind: "exhibition" | "weapon" | null;
   nightOpponent: string | null;
   nightWins: number;
@@ -204,7 +240,7 @@ export interface SaveData {
   statPoints: number;
   denarii: number;
   reputation: ReputationTier;
-  equippedWeapon: WeaponId;
+  equippedWeapon: WeaponId | null;
   unlockedWeapons: WeaponId[];
   defeatedOpponents: string[];
   defeatedHouses: string[];
@@ -254,11 +290,11 @@ export type CombatBindAction = "attack" | "heavy" | "dodge" | "block" | "special
 
 export const DEFAULT_KEYBINDS: Record<CombatBindAction, string> = {
   attack: "SPACE",
-  heavy: "G",
+  heavy: "F",
   dodge: "SHIFT",
   block: "Q",
   special: "R",
-  parry: "F",
+  parry: "G",
   interact: "E",
   unguent: "V",
 };

@@ -1,10 +1,11 @@
-import type { TunicColor } from "../types";
-import type { BodyStyle } from "../systems/assets";
-import { COLORS } from "../config";
+import { getHouse, getRival } from "./houses";
+import { CHAMBER_ITEMS } from "./chamber";
 import { gameState } from "../state/GameState";
-import { getRival } from "./houses";
+import type { BodyStyle } from "../systems/assets";
+import type { TunicColor } from "../types";
+import { COLORS } from "../config";
 
-export type ShopKind = "tunic" | "plume" | "helm" | "cape" | "scar" | "title";
+export type ShopKind = "tunic" | "plume" | "helm" | "cape" | "scar" | "title" | "chamber";
 
 export interface ShopItem {
   id: string;
@@ -85,8 +86,25 @@ export const TITLE_TEXT: Record<string, string> = {
   stripe: "of the Stripe",
   tusk: "of the Tusk",
   ivory: "of the Ivory",
+  aquila: "Champion of Aquila",
   freeman: "the Free Man",
+  lanista: "Lanista of Aquila",
+  "sand-teacher": "Teacher of the Sand",
 };
+
+/** Champion title uses the house you pledged at create. */
+export function titleExtra(key: string): string {
+  if (key === "aquila") {
+    const house = gameState.save.playerHouse ? getHouse(gameState.save.playerHouse) : undefined;
+    return house ? `Champion of the ${house.animalName}` : "Champion of Aquila";
+  }
+  return TITLE_TEXT[key] ?? "";
+}
+
+export function shopItemLabel(item: ShopItem): string {
+  if (item.id === "title-aquila") return titleExtra("aquila");
+  return item.name;
+}
 
 export const SHOP_TABS: { kind: ShopKind; label: string; hint: string }[] = [
   { kind: "tunic", label: "Tunics", hint: "Yard cloth and house dyes" },
@@ -95,6 +113,7 @@ export const SHOP_TABS: { kind: ShopKind; label: string; hint: string }[] = [
   { kind: "cape", label: "Capes", hint: "Cloth at the shoulders" },
   { kind: "scar", label: "Scars", hint: "Marks from a real fall in the arena" },
   { kind: "title", label: "Titles", hint: "A name the crowd can shout" },
+  { kind: "chamber", label: "Chamber", hint: "The loft above quarters. Yours after the school." },
 ];
 
 export const SHOP_ITEMS: ShopItem[] = [
@@ -160,11 +179,22 @@ export const SHOP_ITEMS: ShopItem[] = [
   { id: "title-stripe", kind: "title", name: "of the Stripe", description: "Earned against the Tiger.", cost: 150, requiresOpponent: "tigris" },
   { id: "title-tusk", kind: "title", name: "of the Tusk", description: "Earned against the Rhino.", cost: 160, requiresOpponent: "rhinoceros" },
   { id: "title-ivory", kind: "title", name: "of the Ivory", description: "Earned against the Elephant.", cost: 170, requiresOpponent: "elephas" },
+  { id: "title-aquila", kind: "title", name: "House champion", description: "Named in the yard. The four fell to you under your pledged colours.", cost: 0, requiresFlag: "tutorialComplete" },
   { id: "title-freeman", kind: "title", name: "the Free Man", description: "Won with the rudis. No man owns your name.", cost: 0, requiresFlag: "freedomWon" },
+  { id: "title-lanista", kind: "title", name: "Lanista of Aquila", description: "The book of the school is yours.", cost: 0, requiresFlag: "lanistaUnlocked" },
+  { id: "title-sand-teacher", kind: "title", name: "Teacher of the Sand", description: "The four took glory under your hand.", cost: 0, requiresFlag: "act3Complete" },
   { id: "scar-none", kind: "scar", name: "No scar", description: "Unmarked.", cost: 0 },
   { id: "scar-cheek", kind: "scar", name: "Cheek cut", description: "From an arena fall you were not spared. Looks only.", cost: 0, requiresFlag: "steelScar1" },
   { id: "scar-brow", kind: "scar", name: "Brow cut", description: "A second unsaved fall. The helm did not save it.", cost: 0, requiresFlag: "steelScar2" },
   { id: "scar-sash", kind: "scar", name: "Marked sash", description: "A third fall. A dark band the crowd will read.", cost: 0, requiresFlag: "steelScar3" },
+  ...CHAMBER_ITEMS.map((it) => ({
+    id: it.id,
+    kind: "chamber" as const,
+    name: it.name,
+    description: it.description,
+    cost: it.cost,
+    requiresFlag: "lanistaUnlocked",
+  })),
 ];
 
 export function starterCosmetics(tunic: TunicColor): string[] {
@@ -183,6 +213,11 @@ function pledgedOwnsOpponent(opponentId: string): boolean {
 
 export function shopUnlocked(item: ShopItem): boolean {
   if (item.requiresFlag === "freedomWon") return Boolean(gameState.save.freedomWon);
+  if (item.requiresFlag === "tutorialComplete") return Boolean(gameState.save.tutorialComplete);
+  if (item.requiresFlag === "lanistaUnlocked") {
+    if (item.id === "trophy-last") return Boolean(gameState.save.lanistaUnlocked) && gameState.save.defeatedHouses.length > 0;
+    return Boolean(gameState.save.lanistaUnlocked);
+  }
   if (item.requiresFlag && !gameState.save.storyFlags[item.requiresFlag]) return false;
   if (item.requiresOpponent) {
     if (gameState.save.defeatedOpponents.includes(item.requiresOpponent)) return true;
@@ -193,6 +228,11 @@ export function shopUnlocked(item: ShopItem): boolean {
 
 export function shopLockHint(item: ShopItem): string {
   if (item.requiresFlag === "freedomWon") return "Win the Rudis first.";
+  if (item.requiresFlag === "tutorialComplete") return "Win the yard first.";
+  if (item.requiresFlag === "lanistaUnlocked") {
+    if (item.id === "trophy-last") return "Beat a house champion first.";
+    return "Take the school from Marcellus first.";
+  }
   if (item.requiresFlag?.startsWith("steelScar")) return "Lose an arena fight without being spared.";
   if (item.requiresFlag) return "That mark is still locked.";
   if (item.requiresOpponent) {
@@ -206,7 +246,7 @@ export function lookWithItem(itemId: string | null): ReturnType<typeof playerLoo
   const look = playerLook();
   if (!itemId) return look;
   const item = SHOP_ITEMS.find((i) => i.id === itemId);
-  if (!item) return look;
+  if (!item || item.kind === "chamber") return look;
   const key = item.id.slice(item.kind.length + 1);
   if (item.kind === "tunic") look.tunic = TUNIC_HEX[key] ?? look.tunic;
   if (item.kind === "plume") {
@@ -224,7 +264,7 @@ export function lookWithItem(itemId: string | null): ReturnType<typeof playerLoo
 export function previewTitle(itemId: string | null): string {
   const item = itemId ? SHOP_ITEMS.find((i) => i.id === itemId) : null;
   if (!item || item.kind !== "title") return displayTitle();
-  const extra = TITLE_TEXT[item.id.replace("title-", "")] ?? "";
+  const extra = titleExtra(item.id.replace("title-", ""));
   return extra ? `${gameState.save.playerName} ${extra}` : gameState.save.playerName;
 }
 
@@ -234,7 +274,7 @@ export function playerLook(): { tunic: number; accent: number; style: BodyStyle;
   const accent = PLUME_HEX[s.plume ?? "gold"] ?? COLORS.gold;
   const helm = s.helm ?? "gladiator";
   const style: BodyStyle = helm === "lanista" ? "lanista" : helm === "champion" ? "champion" : "gladiator";
-  const title = TITLE_TEXT[s.title ?? "none"] ?? "";
+  const title = titleExtra(s.title ?? "none");
   const cape = CAPE_HEX[s.cape ?? "none"] ?? 0;
   const scar = s.scar ?? "none";
   const crest = s.plume ?? "gold";
@@ -243,7 +283,7 @@ export function playerLook(): { tunic: number; accent: number; style: BodyStyle;
 
 export function displayTitle(): string {
   const s = gameState.save;
-  const extra = TITLE_TEXT[s.title ?? "none"] ?? "";
+  const extra = titleExtra(s.title ?? "none");
   return extra ? `${s.playerName} ${extra}` : s.playerName;
 }
 
@@ -254,5 +294,6 @@ export function equippedId(kind: ShopKind): string {
   if (kind === "helm") return `helm-${s.helm ?? "gladiator"}`;
   if (kind === "cape") return `cape-${s.cape ?? "none"}`;
   if (kind === "scar") return `scar-${s.scar ?? "none"}`;
+  if (kind === "chamber") return s.chamber?.rug ?? "rug-none";
   return `title-${s.title ?? "none"}`;
 }

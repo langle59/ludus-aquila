@@ -226,6 +226,7 @@ export function generatePlaceholderAssets(scene: Phaser.Scene): void {
   makeFloorFamily(scene, "tile-shrine", 0xc4bcb0, 0x9a9488, 0xe0d8cc, "flag");
   makeFloorFamily(scene, "tile-wood", 0x7a4e2c, 0x5a3418, 0x9a6a42, "plank");
   makeFloorFamily(scene, "tile-wood-pale", 0x8a6240, 0x6a4428, 0xb08a5a, "plank");
+  makeFloorFamily(scene, "tile-wood-dark", 0x4a2c14, 0x2a180c, 0x6a3c20, "plank");
   makeFloorFamily(scene, "tile-sand-coil", 0x6a7a48, 0x4a5a30, 0x8a9a60, "sand");
   makeFloorFamily(scene, "tile-sand-mud", 0x8a6a40, 0x5a4018, 0xa88858, "dirt");
   makeFloorFamily(scene, "tile-sand-stripe", 0xc49a50, 0x8a6428, 0xe8c878, "sand");
@@ -445,10 +446,18 @@ function makeMosaic(scene: Phaser.Scene): void {
     }
   });
   canvasTex(scene, "tile-ring", 32, 32, (ctx) => {
-    px(ctx, 0, 0, 32, 32, 0x9a7548);
-    speckles(ctx, 32, 32, rng(9), 0x7a5a32, 20, 0.4);
-    px(ctx, 0, 14, 32, 4, 0xc4a66e, 0.55);
-    px(ctx, 0, 15, 32, 2, 0x6b4a28, 0.45);
+    px(ctx, 0, 0, 32, 32, 0x8a6840);
+    speckles(ctx, 32, 32, rng(9), 0x6a4a28, 24, 0.45);
+    speckles(ctx, 32, 32, rng(3), 0xc4a66e, 10, 0.25);
+    // Worn packed rim
+    px(ctx, 0, 0, 32, 2, 0x5a3a18, 0.35);
+    px(ctx, 0, 30, 32, 2, 0x5a3a18, 0.35);
+    px(ctx, 0, 0, 2, 32, 0x5a3a18, 0.3);
+    px(ctx, 30, 0, 2, 32, 0x5a3a18, 0.3);
+    px(ctx, 0, 13, 32, 6, 0xb89458, 0.4);
+    px(ctx, 0, 15, 32, 2, 0x6b4a28, 0.55);
+    px(ctx, 4, 8, 3, 2, 0x4a3018, 0.35);
+    px(ctx, 22, 22, 4, 2, 0x4a3018, 0.3);
   });
 }
 
@@ -478,19 +487,32 @@ function makeRack(scene: Phaser.Scene): void {
 
 function makeDummy(scene: Phaser.Scene): void {
   canvasTex(scene, "prop-dummy", 40, 56, (ctx) => {
+    // Stake + base
     px(ctx, 17, 30, 6, 24, 0x5a3a18);
-    px(ctx, 16, 50, 8, 4, 0x3a2410);
+    px(ctx, 18, 30, 2, 24, 0x7a5230, 0.45);
+    px(ctx, 14, 50, 12, 4, 0x3a2410);
     px(ctx, 12, 52, 16, 3, 0x4a3018);
-    circ(ctx, 20, 16, 11, 0xc2a36b);
-    px(ctx, 10, 16, 20, 16, 0xc2a36b);
-    px(ctx, 10, 28, 20, 6, 0xa8884c);
-    px(ctx, 8, 18, 4, 12, 0xb8925a);
-    px(ctx, 28, 18, 4, 12, 0xb8925a);
-    px(ctx, 14, 12, 12, 3, 0x3a2a18);
-    px(ctx, 16, 18, 3, 3, 0x3a2a18);
-    px(ctx, 22, 18, 3, 3, 0x3a2a18);
-    px(ctx, 18, 24, 5, 2, 0x6b3a28, 0.6);
-    px(ctx, 12, 32, 16, 3, 0x6b4a28);
+    px(ctx, 13, 52, 14, 1, 0x6b4a28, 0.4);
+    // Scarred torso
+    circ(ctx, 20, 16, 12, 0xc2a36b);
+    px(ctx, 9, 16, 22, 18, 0xc2a36b);
+    px(ctx, 10, 17, 20, 4, 0xd4b87a, 0.35);
+    px(ctx, 10, 28, 20, 7, 0xa8884c);
+    // Arms
+    px(ctx, 6, 18, 5, 14, 0xb8925a);
+    px(ctx, 29, 18, 5, 14, 0xb8925a);
+    px(ctx, 6, 18, 5, 3, 0xd4b87a, 0.4);
+    px(ctx, 29, 18, 5, 3, 0xd4b87a, 0.4);
+    // Face / wear
+    px(ctx, 13, 11, 14, 4, 0x3a2a18);
+    px(ctx, 15, 17, 3, 3, 0x3a2a18);
+    px(ctx, 23, 17, 3, 3, 0x3a2a18);
+    px(ctx, 17, 23, 6, 2, 0x6b3a28, 0.65);
+    // Slash scars
+    px(ctx, 12, 20, 8, 1, 0x6a2420, 0.55);
+    px(ctx, 22, 26, 6, 1, 0x5a3a18, 0.5);
+    px(ctx, 14, 32, 12, 3, 0x6b4a28);
+    px(ctx, 15, 33, 10, 1, COLORS.gold, 0.35);
   });
 }
 
@@ -1642,6 +1664,9 @@ function makeDecor(scene: Phaser.Scene): void {
 function makeInteriorProps(scene: Phaser.Scene): void {
   makeRug(scene, "tile-rug-armory", 0x6a2420, 0x3a1410, COLORS.gold);
   makeRug(scene, "tile-rug-quarters", 0x5a4a38, 0x3a3024, 0xe8dcc8);
+  makeRug(scene, "tile-rug-crimson", COLORS.crimson, 0x4a1418, COLORS.gold);
+  makeRug(scene, "tile-rug-ivory", 0xe8dcc8, 0xb8a888, 0x6a4a28);
+  makeRug(scene, "tile-rug-eagle", 0x3a2418, 0x1a1210, COLORS.gold);
   canvasTex(scene, "tile-straw", 32, 32, (ctx) => {
     px(ctx, 0, 0, 32, 32, 0x6b4424);
     px(ctx, 0, 0, 32, 1, 0x8a6240, 0.35);
@@ -1671,15 +1696,38 @@ function makeInteriorProps(scene: Phaser.Scene): void {
     oval(ctx, 12, 7, 5, 2, 0x2a1c10, 0.55);
   });
   canvasTex(scene, "prop-bed", 48, 32, (ctx) => {
-    px(ctx, 2, 10, 44, 20, 0x5a3a18);
-    px(ctx, 4, 12, 40, 16, 0x8a6a44);
-    px(ctx, 6, 14, 36, 12, 0xe8dcc8);
-    px(ctx, 6, 18, 36, 8, COLORS.crimson, 0.85);
-    px(ctx, 8, 20, 20, 3, shade(COLORS.crimson, 0.15), 0.45);
-    px(ctx, 28, 12, 14, 8, 0xf0e6d2);
-    px(ctx, 30, 14, 10, 4, 0xe0d4c0);
-    px(ctx, 4, 28, 6, 4, 0x4a2c10);
-    px(ctx, 38, 28, 6, 4, 0x4a2c10);
+    drawBed(ctx, 0xe8dcc8, COLORS.crimson);
+  });
+  canvasTex(scene, "prop-bed-crimson", 48, 32, (ctx) => {
+    drawBed(ctx, COLORS.crimson, 0x6a2030);
+  });
+  canvasTex(scene, "prop-bed-ivory", 48, 32, (ctx) => {
+    drawBed(ctx, 0xf0e6d2, 0xe8dcc8);
+  });
+  canvasTex(scene, "prop-hanging", 28, 48, (ctx) => {
+    drawHanging(ctx, COLORS.crimson);
+  });
+  canvasTex(scene, "prop-hanging-crimson", 28, 48, (ctx) => {
+    drawHanging(ctx, COLORS.crimson);
+  });
+  canvasTex(scene, "prop-hanging-ivory", 28, 48, (ctx) => {
+    drawHanging(ctx, 0xe8dcc8);
+  });
+  canvasTex(scene, "prop-hanging-eagle", 28, 48, (ctx) => {
+    drawHanging(ctx, 0x3a2418);
+    px(ctx, 10, 16, 8, 2, COLORS.gold, 0.9);
+    px(ctx, 12, 14, 4, 10, COLORS.gold, 0.85);
+    px(ctx, 8, 18, 12, 2, COLORS.gold, 0.7);
+    circ(ctx, 14, 13, 2, COLORS.gold);
+  });
+  canvasTex(scene, "prop-desk", 40, 28, (ctx) => {
+    px(ctx, 4, 20, 8, 8, 0x4a2c10);
+    px(ctx, 28, 20, 8, 8, 0x4a2c10);
+    px(ctx, 2, 10, 36, 14, 0x6b4a2f);
+    px(ctx, 4, 10, 32, 4, 0x8a6a44);
+    px(ctx, 6, 16, 16, 4, 0xe8dcc8);
+    px(ctx, 8, 17, 12, 1, 0x3a2414, 0.45);
+    circ(ctx, 30, 18, 3, COLORS.gold, 0.8);
   });
   canvasTex(scene, "prop-chest", 32, 24, (ctx) => {
     px(ctx, 2, 8, 28, 14, 0x6b4a2f);
@@ -1757,25 +1805,35 @@ function makeInteriorProps(scene: Phaser.Scene): void {
     circ(ctx, 8, 24, 3, 0x8a8478);
     px(ctx, 4, 22, 8, 2, COLORS.gold, 0.65);
   });
-  canvasTex(scene, "prop-trophy-empty", 28, 36, (ctx) => {
-    px(ctx, 2, 8, 24, 26, 0x5a3a18);
-    px(ctx, 2, 8, 24, 3, 0x8a6a44);
-    px(ctx, 4, 11, 20, 20, 0x4a3018);
-    px(ctx, 5, 12, 18, 2, 0x6a4a28, 0.5);
-    circ(ctx, 14, 18, 3, 0x8a8478);
-    px(ctx, 13, 20, 2, 8, 0x6a6458);
-    circ(ctx, 14, 28, 2, 0x8a8478);
-    px(ctx, 6, 30, 16, 3, COLORS.gold, 0.65);
+  canvasTex(scene, "prop-trophy-empty", 36, 44, (ctx) => {
+    // Stone plinth
+    px(ctx, 4, 28, 28, 14, 0x4a4038);
+    px(ctx, 6, 28, 24, 3, 0x8a8478);
+    px(ctx, 5, 40, 26, 3, 0x3a322c);
+    px(ctx, 8, 41, 20, 2, COLORS.gold, 0.55);
+    // Wooden niche
+    px(ctx, 6, 6, 24, 24, 0x5a3a18);
+    px(ctx, 6, 6, 24, 3, 0x8a6a44);
+    px(ctx, 8, 9, 20, 18, 0x3a2414);
+    px(ctx, 9, 10, 18, 2, 0x6a4a28, 0.45);
+    // Mount pegs
+    circ(ctx, 12, 14, 2, 0x8a8478);
+    circ(ctx, 24, 14, 2, 0x8a8478);
+    circ(ctx, 18, 22, 2, 0x6a6458);
+    px(ctx, 17, 22, 2, 8, 0x6a6458);
   });
-  canvasTex(scene, "prop-trophy-banner", 20, 30, (ctx) => {
-    px(ctx, 1, 2, 18, 3, 0x4a4038);
-    circ(ctx, 2, 4, 2, COLORS.gold);
-    circ(ctx, 18, 4, 2, COLORS.gold);
-    px(ctx, 3, 5, 14, 20, 0xe8dcc8);
-    px(ctx, 3, 5, 14, 4, 0xffffff, 0.35);
-    px(ctx, 3, 25, 5, 3, 0xe8dcc8);
-    px(ctx, 12, 25, 5, 3, 0xe8dcc8);
-    px(ctx, 9, 5, 2, 18, 0x1a1210, 0.12);
+  canvasTex(scene, "prop-trophy-banner", 26, 40, (ctx) => {
+    px(ctx, 2, 2, 22, 4, 0x4a4038);
+    circ(ctx, 3, 4, 2, COLORS.gold);
+    circ(ctx, 23, 4, 2, COLORS.gold);
+    px(ctx, 4, 6, 18, 26, 0xe8dcc8);
+    px(ctx, 4, 6, 18, 5, 0xffffff, 0.35);
+    px(ctx, 4, 6, 18, 26, 0x1a1210, 0.08);
+    px(ctx, 12, 6, 2, 24, 0x1a1210, 0.14);
+    px(ctx, 4, 32, 6, 5, 0xe8dcc8);
+    px(ctx, 16, 32, 6, 5, 0xe8dcc8);
+    px(ctx, 5, 35, 4, 3, 0xe8dcc8);
+    px(ctx, 17, 35, 4, 3, 0xe8dcc8);
   });
   canvasTex(scene, "prop-dice-table", 88, 48, (ctx) => {
     px(ctx, 18, 36, 8, 12, 0x4a2c10);
@@ -1859,113 +1917,148 @@ function makeInteriorProps(scene: Phaser.Scene): void {
 
 const BONE = 0xe8dcc8;
 const BONE_D = 0xb8a888;
+const BONE_S = 0x8a7a62;
 const BONE_H = 0x2a2218;
 
 function boneSkull(ctx: Ctx, cx: number, cy: number, rx: number, ry: number): void {
   oval(ctx, cx, cy, rx, ry, BONE);
-  oval(ctx, cx, cy + 1, rx - 2, ry - 2, BONE_D, 0.35);
-  oval(ctx, cx - rx * 0.35, cy, 3, 4, BONE_H);
-  oval(ctx, cx + rx * 0.35, cy, 3, 4, BONE_H);
-  oval(ctx, cx, cy + ry * 0.35, 2, 2, BONE_H);
+  oval(ctx, cx, cy + 1, rx - 2, ry - 2, BONE_D, 0.4);
+  oval(ctx, cx - rx * 0.38, cy - 1, 3.5, 4.5, BONE_H);
+  oval(ctx, cx + rx * 0.38, cy - 1, 3.5, 4.5, BONE_H);
+  oval(ctx, cx, cy + ry * 0.28, 2.5, 2, BONE_H);
+  px(ctx, cx - 3, cy + ry * 0.55, 6, 2, BONE_S, 0.7);
+}
+
+function boneJaw(ctx: Ctx, cx: number, cy: number, w: number): void {
+  px(ctx, cx - w / 2, cy, w, 3, BONE);
+  for (let i = 0; i < 4; i++) px(ctx, cx - w / 2 + 2 + i * 3, cy + 2, 1, 3, BONE);
 }
 
 function makeTrophySkeletons(scene: Phaser.Scene): void {
-  canvasTex(scene, "trophy-skel-serpent", 28, 24, (ctx) => {
-    boneSkull(ctx, 8, 8, 6, 5);
-    fillPoly(ctx, [[8, 12], [2, 14], [8, 16]], BONE);
-    px(ctx, 10, 14, 4, 3, BONE);
-    px(ctx, 13, 12, 4, 3, BONE_D);
-    px(ctx, 16, 14, 4, 3, BONE);
-    px(ctx, 19, 12, 4, 3, BONE_D);
-    px(ctx, 22, 15, 4, 3, BONE);
-    circ(ctx, 6, 8, 2, BONE_H);
-    circ(ctx, 10, 8, 2, BONE_H);
-  });
-  canvasTex(scene, "trophy-skel-bear", 28, 24, (ctx) => {
-    boneSkull(ctx, 14, 12, 11, 9);
-    circ(ctx, 5, 7, 4, BONE);
-    circ(ctx, 23, 7, 4, BONE);
-    circ(ctx, 5, 7, 2, BONE_H);
-    circ(ctx, 23, 7, 2, BONE_H);
-    px(ctx, 10, 18, 8, 3, BONE);
-    px(ctx, 11, 20, 1, 3, BONE);
-    px(ctx, 13, 20, 1, 3, BONE);
-    px(ctx, 15, 20, 1, 3, BONE);
-    px(ctx, 17, 20, 1, 3, BONE);
-  });
-  canvasTex(scene, "trophy-skel-wolf", 28, 24, (ctx) => {
-    boneSkull(ctx, 15, 11, 8, 7);
-    fillPoly(ctx, [[10, 12], [1, 15], [10, 18], [15, 15]], BONE);
-    px(ctx, 8, 3, 3, 6, BONE);
-    px(ctx, 19, 3, 3, 6, BONE);
-    px(ctx, 2, 15, 8, 2, BONE_D);
-    px(ctx, 3, 16, 1, 3, BONE);
-    px(ctx, 5, 16, 1, 3, BONE);
-    px(ctx, 7, 16, 1, 3, BONE);
-  });
-  canvasTex(scene, "trophy-skel-lion", 28, 24, (ctx) => {
-    for (const [x, y] of [[6, 6], [22, 6], [4, 12], [24, 12], [8, 4], [20, 4], [14, 3]]) {
-      circ(ctx, x, y, 3, BONE_D);
+  canvasTex(scene, "trophy-skel-serpent", 40, 36, (ctx) => {
+    boneSkull(ctx, 12, 10, 8, 7);
+    boneJaw(ctx, 12, 16, 10);
+    // Coiled vertebrae
+    for (let i = 0; i < 6; i++) {
+      const t = i / 5;
+      const x = 18 + t * 16;
+      const y = 14 + Math.sin(t * Math.PI * 2) * 6;
+      circ(ctx, x, y, 3, i % 2 ? BONE : BONE_D);
+      circ(ctx, x, y, 1, BONE_H, 0.5);
     }
-    boneSkull(ctx, 14, 12, 8, 7);
-    px(ctx, 10, 18, 8, 3, BONE);
-    px(ctx, 11, 20, 1, 2, BONE);
-    px(ctx, 17, 20, 1, 2, BONE);
+    circ(ctx, 9, 9, 2, BONE_H);
+    circ(ctx, 15, 9, 2, BONE_H);
+    px(ctx, 8, 8, 2, 1, COLORS.gold, 0.4);
   });
-  canvasTex(scene, "trophy-skel-bull", 28, 24, (ctx) => {
-    boneSkull(ctx, 14, 14, 9, 7);
-    fillPoly(ctx, [[8, 8], [1, 2], [6, 8]], BONE);
-    fillPoly(ctx, [[20, 8], [27, 2], [22, 8]], BONE);
-    px(ctx, 1, 2, 4, 2, BONE_D);
-    px(ctx, 23, 2, 4, 2, BONE_D);
-    px(ctx, 10, 20, 8, 2, BONE);
+  canvasTex(scene, "trophy-skel-bear", 40, 36, (ctx) => {
+    circ(ctx, 8, 10, 5, BONE);
+    circ(ctx, 32, 10, 5, BONE);
+    circ(ctx, 8, 10, 2, BONE_H);
+    circ(ctx, 32, 10, 2, BONE_H);
+    boneSkull(ctx, 20, 16, 13, 11);
+    boneJaw(ctx, 20, 26, 14);
+    px(ctx, 14, 12, 3, 2, BONE_H, 0.35);
+    px(ctx, 23, 12, 3, 2, BONE_H, 0.35);
   });
-  canvasTex(scene, "trophy-skel-boar", 28, 24, (ctx) => {
-    boneSkull(ctx, 14, 12, 8, 7);
-    fillPoly(ctx, [[8, 14], [4, 18], [10, 16]], BONE);
-    fillPoly(ctx, [[20, 14], [24, 18], [18, 16]], BONE);
-    px(ctx, 4, 17, 5, 2, BONE);
-    px(ctx, 19, 17, 5, 2, BONE);
-    circ(ctx, 6, 8, 3, BONE);
-    circ(ctx, 22, 8, 3, BONE);
-    px(ctx, 11, 18, 6, 3, BONE);
+  canvasTex(scene, "trophy-skel-wolf", 40, 36, (ctx) => {
+    // Ears
+    fillPoly(ctx, [[12, 8], [10, 1], [16, 8]], BONE);
+    fillPoly(ctx, [[24, 8], [30, 1], [28, 8]], BONE);
+    px(ctx, 11, 3, 2, 4, BONE_D);
+    px(ctx, 27, 3, 2, 4, BONE_D);
+    boneSkull(ctx, 20, 14, 10, 9);
+    // Long snout
+    fillPoly(ctx, [[14, 16], [2, 20], [14, 24], [20, 18]], BONE);
+    px(ctx, 4, 19, 10, 2, BONE_D);
+    boneJaw(ctx, 10, 22, 12);
   });
-  canvasTex(scene, "trophy-skel-rhino", 28, 24, (ctx) => {
-    boneSkull(ctx, 14, 14, 9, 7);
-    fillPoly(ctx, [[16, 10], [26, 4], [18, 12]], BONE);
-    px(ctx, 22, 4, 4, 2, BONE_D);
-    px(ctx, 10, 20, 8, 2, BONE);
+  canvasTex(scene, "trophy-skel-lion", 40, 36, (ctx) => {
+    // Mane ruff of bone plates
+    for (const [x, y, r] of [
+      [8, 10, 4],
+      [32, 10, 4],
+      [6, 18, 4],
+      [34, 18, 4],
+      [12, 6, 3],
+      [28, 6, 3],
+      [20, 4, 4],
+      [10, 24, 3],
+      [30, 24, 3],
+    ] as const) {
+      circ(ctx, x, y, r, BONE_D);
+      circ(ctx, x, y, r - 1, BONE_S, 0.35);
+    }
+    boneSkull(ctx, 20, 16, 10, 9);
+    boneJaw(ctx, 20, 24, 12);
   });
-  canvasTex(scene, "trophy-skel-elephant", 28, 24, (ctx) => {
-    boneSkull(ctx, 14, 12, 9, 7);
-    circ(ctx, 5, 8, 4, BONE);
-    circ(ctx, 23, 8, 4, BONE);
-    circ(ctx, 5, 8, 2, BONE_H);
-    circ(ctx, 23, 8, 2, BONE_H);
-    fillPoly(ctx, [[8, 14], [2, 18], [10, 16]], BONE);
-    fillPoly(ctx, [[20, 14], [26, 18], [18, 16]], BONE);
-    px(ctx, 2, 17, 6, 2, BONE_D);
-    px(ctx, 20, 17, 6, 2, BONE_D);
-    px(ctx, 10, 20, 8, 2, BONE);
+  canvasTex(scene, "trophy-skel-bull", 40, 36, (ctx) => {
+    boneSkull(ctx, 20, 18, 11, 9);
+    // Broad horns
+    fillPoly(ctx, [[12, 12], [2, 2], [4, 6], [14, 14]], BONE);
+    fillPoly(ctx, [[28, 12], [38, 2], [36, 6], [26, 14]], BONE);
+    px(ctx, 1, 2, 5, 2, BONE_D);
+    px(ctx, 34, 2, 5, 2, BONE_D);
+    circ(ctx, 3, 3, 2, BONE_S);
+    circ(ctx, 37, 3, 2, BONE_S);
+    boneJaw(ctx, 20, 26, 12);
   });
-  canvasTex(scene, "trophy-skel-tiger", 28, 24, (ctx) => {
-    boneSkull(ctx, 15, 12, 8, 7);
-    fillPoly(ctx, [[10, 12], [2, 15], [10, 18], [15, 15]], BONE);
-    px(ctx, 8, 3, 3, 6, BONE);
-    px(ctx, 19, 3, 3, 6, BONE);
-    px(ctx, 9, 4, 1, 4, BONE_D);
-    px(ctx, 20, 4, 1, 4, BONE_D);
-    px(ctx, 14, 6, 2, 6, BONE_D);
-    px(ctx, 3, 15, 8, 2, BONE_D);
-    px(ctx, 4, 16, 1, 3, BONE);
-    px(ctx, 6, 16, 1, 3, BONE);
-    px(ctx, 8, 16, 1, 3, BONE);
+  canvasTex(scene, "trophy-skel-boar", 40, 36, (ctx) => {
+    circ(ctx, 9, 12, 4, BONE);
+    circ(ctx, 31, 12, 4, BONE);
+    boneSkull(ctx, 20, 16, 10, 9);
+    // Tusks
+    fillPoly(ctx, [[12, 20], [4, 28], [10, 22]], BONE);
+    fillPoly(ctx, [[28, 20], [36, 28], [30, 22]], BONE);
+    px(ctx, 4, 26, 6, 2, BONE_D);
+    px(ctx, 30, 26, 6, 2, BONE_D);
+    boneJaw(ctx, 20, 24, 10);
   });
-  canvasTex(scene, "trophy-skel-eagle", 28, 24, (ctx) => {
-    boneSkull(ctx, 12, 12, 7, 6);
-    fillPoly(ctx, [[12, 11], [26, 10], [12, 15]], BONE);
-    px(ctx, 6, 5, 4, 5, BONE);
-    px(ctx, 15, 5, 4, 5, BONE);
+  canvasTex(scene, "trophy-skel-rhino", 40, 36, (ctx) => {
+    boneSkull(ctx, 18, 18, 11, 9);
+    // Horn spike
+    fillPoly(ctx, [[22, 12], [36, 2], [26, 14], [22, 16]], BONE);
+    px(ctx, 30, 4, 6, 2, BONE_D);
+    circ(ctx, 34, 4, 2, BONE_S);
+    boneJaw(ctx, 18, 26, 12);
+  });
+  canvasTex(scene, "trophy-skel-elephant", 40, 36, (ctx) => {
+    circ(ctx, 8, 12, 5, BONE);
+    circ(ctx, 32, 12, 5, BONE);
+    circ(ctx, 8, 12, 2, BONE_H);
+    circ(ctx, 32, 12, 2, BONE_H);
+    boneSkull(ctx, 20, 16, 11, 9);
+    // Curved tusks
+    fillPoly(ctx, [[12, 20], [2, 28], [6, 30], [14, 22]], BONE);
+    fillPoly(ctx, [[28, 20], [38, 28], [34, 30], [26, 22]], BONE);
+    px(ctx, 2, 27, 8, 2, BONE_D);
+    px(ctx, 30, 27, 8, 2, BONE_D);
+    boneJaw(ctx, 20, 24, 12);
+  });
+  canvasTex(scene, "trophy-skel-tiger", 40, 36, (ctx) => {
+    fillPoly(ctx, [[12, 10], [10, 2], [16, 10]], BONE);
+    fillPoly(ctx, [[24, 10], [30, 2], [28, 10]], BONE);
+    px(ctx, 12, 4, 2, 5, BONE_D);
+    px(ctx, 26, 4, 2, 5, BONE_D);
+    boneSkull(ctx, 20, 15, 10, 9);
+    // Fang snout + stripe marks
+    fillPoly(ctx, [[14, 16], [4, 20], [14, 24], [20, 18]], BONE);
+    px(ctx, 18, 8, 4, 8, BONE_D, 0.55);
+    px(ctx, 6, 19, 8, 2, BONE_D);
+    boneJaw(ctx, 12, 22, 12);
+  });
+  canvasTex(scene, "trophy-skel-eagle", 40, 36, (ctx) => {
+    // Beak
+    fillPoly(ctx, [[18, 14], [34, 12], [18, 20]], BONE);
+    px(ctx, 28, 11, 6, 3, BONE_D);
+    boneSkull(ctx, 16, 16, 9, 8);
+    // Crest bones
+    px(ctx, 10, 6, 4, 7, BONE);
+    px(ctx, 14, 4, 3, 6, BONE_D);
+    px(ctx, 8, 8, 3, 5, BONE_S);
+    // Wing suggestion
+    fillPoly(ctx, [[8, 18], [2, 28], [10, 24]], BONE_D);
+    fillPoly(ctx, [[22, 20], [36, 26], [24, 24]], BONE_D);
+    boneJaw(ctx, 16, 22, 8);
   });
 }
 
@@ -2060,6 +2153,29 @@ function makeRug(scene: Phaser.Scene, key: string, base: number, dark: number, s
     for (let y = 8; y < 26; y += 4) px(ctx, 6, y, 20, 1, shade(base, -0.08), 0.35);
     px(ctx, 14, 14, 4, 4, stitch, 0.45);
   });
+}
+
+function drawBed(ctx: Ctx, linen: number, blanket: number): void {
+  px(ctx, 2, 10, 44, 20, 0x5a3a18);
+  px(ctx, 4, 12, 40, 16, 0x8a6a44);
+  px(ctx, 6, 14, 36, 12, linen);
+  px(ctx, 6, 18, 36, 8, blanket, 0.9);
+  px(ctx, 8, 20, 20, 3, shade(blanket, 0.15), 0.45);
+  px(ctx, 28, 12, 14, 8, shade(linen, 0.12));
+  px(ctx, 30, 14, 10, 4, shade(linen, -0.08));
+  px(ctx, 4, 28, 6, 4, 0x4a2c10);
+  px(ctx, 38, 28, 6, 4, 0x4a2c10);
+}
+
+function drawHanging(ctx: Ctx, color: number): void {
+  px(ctx, 2, 2, 24, 3, 0x4a3a2c);
+  circ(ctx, 4, 3, 2, COLORS.gold);
+  circ(ctx, 24, 3, 2, COLORS.gold);
+  px(ctx, 4, 6, 20, 38, color);
+  px(ctx, 5, 6, 18, 4, shade(color, 0.12));
+  px(ctx, 6, 36, 16, 6, shade(color, -0.18));
+  px(ctx, 8, 42, 4, 4, shade(color, -0.28));
+  px(ctx, 16, 42, 4, 4, shade(color, -0.28));
 }
 
 function makeMenuArt(scene: Phaser.Scene): void {

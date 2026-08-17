@@ -8,8 +8,12 @@ import { SHOP_ITEMS, shopUnlocked } from "../data/shop";
 import { grantPalPoint, grantPalXp, palAnimalName, palBrought, palTier, palTitle, palUnlocked } from "../data/pal";
 import { applyPrayerStats, prayerDodgeIframes, prayerMoveSpeed, clearPrayer } from "../data/patrons";
 import { recordWeaponWin } from "../data/weapons";
+import { allSchoolGlory, bumpSchoolTraining, chamberSlotFromId, isSchoolNpc, schoolGloryCount, schoolNextId, SCHOOL_IDS } from "../data/school";
+import { getSchoolCircuitFighter } from "../data/schoolCircuit";
+import { getNpc } from "../data/gladiators";
 import { bus } from "./bus";
 import { completeNight, ensureNight, arenaWeapon } from "./nights";
+import { queueActIntro } from "./objectives";
 
 const REP_ORDER: ReputationTier[] = [
   "Unknown",
@@ -203,6 +207,10 @@ export function equipCosmetic(id: string): void {
   if (item.kind === "title") s.title = id.replace("title-", "");
   if (item.kind === "cape") s.cape = id.replace("cape-", "");
   if (item.kind === "scar") s.scar = id.replace("scar-", "");
+  if (item.kind === "chamber") {
+    const slot = chamberSlotFromId(id);
+    s.chamber = { ...s.chamber, [slot]: id };
+  }
   gameState.persist();
   bus.emit("cosmetics-changed");
 }
@@ -250,7 +258,8 @@ export function applyArenaVictory(opponentId: string): { denarii: number; xp: nu
   if (s.activePrayer === "fortuna") denarii = Math.round(denarii * 1.2);
   addDenarii(denarii);
   const { leveled } = addXp(xp);
-  recordWeaponWin(arenaWeapon());
+  const armed = arenaWeapon();
+  if (armed) recordWeaponWin(armed);
   const unlocked: WeaponId[] = [];
   let palNote: string | undefined;
   if (firstWin && fighter.rewards.unlockWeapon) {
@@ -303,6 +312,7 @@ export function applyArenaVictory(opponentId: string): { denarii: number; xp: nu
         palNote = `Your ${palAnimalName(s).toLowerCase()} becomes ${palTitle(palTier(s), s)}.`;
       }
       ensureNight();
+      queueActIntro();
     }
   }
   if (palUnlocked(s) && palBrought(s)) {
@@ -362,6 +372,96 @@ function grantSteelScar(): void {
   else if (n === 3) grant("scar-sash", "steelScar3", "A marked sash is yours. Equip it in Quarters → Scars.");
 }
 
+export function restSchoolInjury(npcId: string): "ok" | "free" | "poor" | "healthy" | "unknown" {
+  if (!isSchoolNpc(npcId)) return "unknown";
+  const rec = gameState.save.school[npcId];
+  if (!rec.injured) return "healthy";
+  const free = gameState.schoolFreeRestAvailable;
+  if (!free && gameState.save.denarii < REST_COST) return "poor";
+  if (free) gameState.schoolFreeRestAvailable = false;
+  else addDenarii(-REST_COST);
+  rec.injured = false;
+  gameState.persist();
+  bus.emit("skills-changed");
+  return free ? "free" : "ok";
+}
+
+export function applySchoolBout(npcId: string, opponentId: string, won: boolean): { denarii: number; glory: boolean; allGlory: boolean } {
+  const rec = isSchoolNpc(npcId) ? gameState.save.school[npcId] : null;
+  const found = getRival(opponentId);
+  const circuitHit = getSchoolCircuitFighter(opponentId);
+  let denarii = 0;
+  let glory = false;
+  if (rec) {
+    if (won) {
+      rec.wins += 1;
+      denarii = Math.max(8, Math.round((found?.fighter.rewards.denarii ?? 20) * 0.4));
+      addDenarii(denarii);
+      addXp(18);
+      const rung = circuitHit?.rung ?? (found?.fighter.isChampion ? 2 : 0);
+      if (!rec.glory && rung === rec.rung) {
+        rec.rung = Math.min(3, rec.rung + 1);
+      }
+      if ((found?.fighter.isChampion || rec.rung >= 3) && !rec.glory) {
+        rec.glory = true;
+        rec.rung = 3;
+        glory = true;
+        grantStudentGloryBeat(npcId);
+      }
+    } else {
+      rec.losses += 1;
+      rec.injured = true;
+      const npc = isSchoolNpc(npcId) ? npcId : "";
+      const theirs = npc === "aelia" ? "Hers" : "His";
+      bus.emit("toast", `The body remembers. ${theirs}, this time.`);
+    }
+  }
+  const allGlory = allSchoolGlory();
+  if (allGlory) grantSchoolGloryClimax();
+  if (gameState.save.lanistaUnlocked) gameState.setObjective("school");
+  gameState.restoreVitals();
+  gameState.persist();
+  return { denarii, glory, allGlory };
+}
+
+const GLORY_BEATS: Record<string, { toast: string; denarii: number; xp: number }> = {
+  titus: { toast: "Titus holds the line. Glory.", denarii: 25, xp: 40 },
+  brom: { toast: "Brom breaks the pride. Glory.", denarii: 28, xp: 45 },
+  aelia: { toast: "Aelia’s clean cut. Glory.", denarii: 30, xp: 50 },
+  rufus: { toast: "Rufus slips clear. Glory. Speak with Marcellus.", denarii: 35, xp: 55 },
+};
+
+function grantStudentGloryBeat(npcId: string): void {
+  const beat = GLORY_BEATS[npcId];
+  const next = schoolNextId(npcId);
+  if (!beat) {
+    bus.emit("toast", `${getNpc(npcId).name} earned glory.`);
+    return;
+  }
+  addDenarii(beat.denarii);
+  addXp(beat.xp);
+  const unlock = next ? ` ${getNpc(next).name}'s locker opens.` : "";
+  bus.emit("toast", `${beat.toast}${unlock} (+${beat.denarii} denarii)`);
+}
+
+export function grantSchoolGloryClimax(): void {
+  const s = gameState.save;
+  if (!allSchoolGlory()) return;
+  if (s.storyFlags.act3Complete) return;
+  s.storyFlags.act3Ready = true;
+  s.storyFlags.act3Complete = true;
+  if (!s.ownedCosmetics.includes("title-sand-teacher")) s.ownedCosmetics.push("title-sand-teacher");
+  if (!s.title || s.title === "lanista" || s.title === "aquila" || s.title === "none") {
+    s.title = "sand-teacher";
+  }
+  s.currentObjective = "school";
+  addXp(80);
+  addDenarii(40);
+  gameState.persist();
+  bus.emit("cosmetics-changed");
+  bus.emit("toast", "Teacher of the Sand. The four have glory under your hand.");
+}
+
 export function applySparReward(npcId: string, playerWon: boolean): { xp: number; denarii: number } {
   const wins = gameState.save.sparWins[npcId] ?? 0;
   gameState.save.sparWins[npcId] = wins + 1;
@@ -377,15 +477,24 @@ export function applySparReward(npcId: string, playerWon: boolean): { xp: number
   }
   addXp(xp);
   addDenarii(denarii);
+  bumpSchoolTraining(npcId);
   gameState.restoreVitals();
   gameState.persist();
+  if (gameState.save.lanistaUnlocked && isSchoolNpc(npcId)) {
+    const rec = gameState.save.school[npcId];
+    bus.emit("toast", `${getNpc(npcId).name}: Training ${rec.training}/6 (spar adds training)`);
+  }
   return { xp, denarii };
 }
 
 function advanceAfterWin(id: string): void {
   const s = gameState.save;
+  if (s.lanistaUnlocked) {
+    gameState.setObjective("school");
+    return;
+  }
   if (s.freedomWon) {
-    gameState.setObjective("free");
+    gameState.setObjective("take_school");
     return;
   }
   if (id === "tourney_1") {
@@ -397,7 +506,7 @@ function advanceAfterWin(id: string): void {
     return;
   }
   if (id === "tourney_3") {
-    gameState.setObjective("free");
+    gameState.setObjective(s.lanistaUnlocked ? "school" : "take_school");
     return;
   }
   const found = getRival(id);

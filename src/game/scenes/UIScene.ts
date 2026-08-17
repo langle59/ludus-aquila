@@ -2,22 +2,61 @@ import Phaser from "phaser";
 import { COLORS, GAME_HEIGHT, GAME_WIDTH, REST_COST, UNGUENT_COST, UNGUENT_MAX } from "../config";
 import { gameState } from "../state/GameState";
 import { bus } from "../systems/bus";
-import { currentObjectiveText } from "../systems/objectives";
+import { currentObjectiveText, actHudPrefix, currentAct, ACT_META, type ActId } from "../systems/objectives";
 import { WEAPON_ORDER, getWeapon, masteryHint, masteryLevel, weaponIconKey } from "../data/weapons";
-import { getHouse, houseTitleColor, isTournamentId } from "../data/houses";
+import { getHouse, houseTitleColor, isTournamentId, getRival } from "../data/houses";
 import { TOURNAMENT_HOUSE } from "../data/tournament";
-import { isOpponentUnlocked, canUnlockSkill, unlockSkill, hasSkill, buyCosmetic, buyUnguent, isHouseUnlocked, houseLockHint, rivalHouses, tournamentUnlocked, restInjury, playerCombatStats } from "../systems/progression";
+import { isOpponentUnlocked, canUnlockSkill, unlockSkill, hasSkill, buyCosmetic, buyUnguent, isHouseUnlocked, houseLockHint, rivalHouses, tournamentUnlocked, restInjury, restSchoolInjury, playerCombatStats } from "../systems/progression";
 import { currentNight, enterNight, ensureNight, arenaWeapon, nightEditorLine } from "../systems/nights";
 import { TABLE_BETS, TABLE_GAMES, takeTableBet, settleTakenBet, rollAleaDice, aleaOutcome, freshDeck, drawCard, handTotal, isNatural, dealerShouldHit, blackjackCompare, cardTex, type AleaResult, type Card, type BlackjackOutcome } from "../systems/gambling";
 import { audio } from "../systems/audio";
 import { makeBodyTexture } from "../systems/assets";
 import { SKILL_BRANCHES, skillsInBranch, type SkillDef } from "../data/skills";
-import { SHOP_ITEMS, SHOP_TABS, TUNIC_HEX, PLUME_HEX, CAPE_HEX, ownsCosmetic, shopUnlocked, shopLockHint, equippedId, displayTitle, lookWithItem, previewTitle, type ShopKind } from "../data/shop";
+import { SHOP_ITEMS, SHOP_TABS, TUNIC_HEX, PLUME_HEX, CAPE_HEX, ownsCosmetic, shopUnlocked, shopLockHint, equippedId, displayTitle, lookWithItem, previewTitle, shopItemLabel, type ShopKind } from "../data/shop";
 import { palAnimalName, palBondHint, palBondProgress, palBrought, palCombatStats, palDisplayName, palNextHint, palSkillsInBranch, palTexture, palTier, palTintColor, palTintId, palTitle, palUnlocked, canUnlockPalSkill, hasPalSkill, unlockPalSkill, PAL_SKILL_BRANCHES, PAL_TINTS, rollPalName, setPalTint, togglePalBrought, type PalSkillDef } from "../data/pal";
 import { PATRONS, getPatron, patronUnlocked, patronLockHint, prayTo, prayerHudLine } from "../data/patrons";
+import {
+  grantLanista,
+  chamberItemEquipped,
+  getSchoolRecord,
+  schoolReadyForUndercard,
+  schoolReadyForChampion,
+  schoolReadinessLabel,
+  schoolMatchupHint,
+  schoolPowerCompare,
+  schoolNextFoeId,
+  schoolReadyChecklist,
+  schoolGloryCount,
+  schoolStudentUnlocked,
+  schoolUnlockHint,
+  schoolReadyNeeds,
+  schoolBoutLocked,
+  meterBar,
+  SCHOOL_FOCUS,
+  SCHOOL_IDS,
+  isSchoolNpc,
+} from "../data/school";
+import { getStudentCircuit, schoolCircuitRungLabel } from "../data/schoolCircuit";
+import type { SchoolNpcId } from "../types";
+import {
+  CHAMBER_ITEMS,
+  CHAMBER_TABS,
+  chamberBedTex,
+  chamberExtraTex,
+  chamberFloorTex,
+  chamberHangingTex,
+  chamberHangingTint,
+  chamberRugTex,
+  chamberSlotFromId,
+  chamberThumbTex,
+  chamberWithPreview,
+  lastTrophyHouse,
+  type ChamberSlot,
+} from "../data/chamber";
+import { getNpc, HOUSE_GLADIATORS } from "../data/gladiators";
 import { generateHouseName } from "../data/names";
 import { ACTION_LABELS, controlsHelpText, eventToKeyName, mergedKeybinds, prettyKey, trySetBind, type CombatAction } from "../systems/input";
-import { enterMenu } from "../systems/playFlow";
+import { enterMenu, returnFromArena } from "../systems/playFlow";
 
 type MenuPage = "root" | "stats" | "skills" | "equipment" | "objectives" | "controls" | "settings" | "keybinds" | "rename";
 
@@ -32,6 +71,13 @@ export class UIScene extends Phaser.Scene {
   private titleLabel!: Phaser.GameObjects.Text;
   private objectiveLabel!: Phaser.GameObjects.Text;
   private prayerLabel!: Phaser.GameObjects.Text;
+  private objectivePanel?: Phaser.GameObjects.Container;
+  private objectiveBg?: Phaser.GameObjects.Rectangle;
+  private objectiveTitle?: Phaser.GameObjects.Text;
+  private objectiveBody?: Phaser.GameObjects.Text;
+  private objectivePrayer?: Phaser.GameObjects.Text;
+  private objectiveToggle?: Phaser.GameObjects.Text;
+  private objectiveMinimized = false;
   private bossWrap: Phaser.GameObjects.GameObject[] = [];
   private favorWrap: Phaser.GameObjects.GameObject[] = [];
   private favorMarker?: Phaser.GameObjects.Rectangle;
@@ -83,6 +129,11 @@ export class UIScene extends Phaser.Scene {
   private talkLabel!: Phaser.GameObjects.Text;
   private talkHint!: Phaser.GameObjects.Text;
   private dimmer: Phaser.GameObjects.Rectangle | null = null;
+  private resultClosing = false;
+  private boundWindowEsc: ((e: KeyboardEvent) => void) | null = null;
+  private escaping = false;
+  private returningLudus = false;
+  private resultAutoTimer: ReturnType<typeof setTimeout> | null = null;
   private resultPending = false;
   private comboLabel!: Phaser.GameObjects.Text;
   private comboHideAt = 0;
@@ -92,15 +143,30 @@ export class UIScene extends Phaser.Scene {
   private waitingBind: CombatAction | null = null;
   private shopTab: ShopKind = "tunic";
   private roostTab: "care" | "looks" = "care";
+  private gateTab: "steel" | "school" = "steel";
+  private schoolNpc: string | null = null;
+  private schoolHouse: string | null = null;
   private shopPreviewId: string | null = null;
+  private chamberTab: ChamberSlot = "floor";
   private minimapWrap?: Phaser.GameObjects.Container;
   private minimapGfx?: Phaser.GameObjects.Graphics;
+  private minimapLabel?: Phaser.GameObjects.Text;
   private minimapScene = "none";
   private renameValue = "";
   private renameLabel?: Phaser.GameObjects.Text;
   private musicMuteText?: Phaser.GameObjects.Text;
   private judgmentOpen = false;
   private judgmentWrap: Phaser.GameObjects.GameObject[] = [];
+  private actCardOpen = false;
+  private actCardAct: ActId | null = null;
+  private pendingActCard: ActId | null = null;
+  private actCardWrap: Phaser.GameObjects.GameObject[] = [];
+  private drillHudWrap: Phaser.GameObjects.GameObject[] = [];
+  private drillHudScore?: Phaser.GameObjects.Text;
+  private drillHudTime?: Phaser.GameObjects.Text;
+  private drillHudPrompt?: Phaser.GameObjects.Text;
+  private drillHowtoWrap: Phaser.GameObjects.GameObject[] = [];
+  private drillHowtoId: string | null = null;
 
   constructor() {
     super("UIScene");
@@ -116,6 +182,16 @@ export class UIScene extends Phaser.Scene {
     this.resultPending = false;
     this.judgmentOpen = false;
     this.judgmentWrap = [];
+    this.actCardOpen = false;
+    this.actCardAct = null;
+    this.pendingActCard = null;
+    this.actCardWrap = [];
+    this.drillHudWrap = [];
+    this.drillHudScore = undefined;
+    this.drillHudTime = undefined;
+    this.drillHudPrompt = undefined;
+    this.drillHowtoWrap = [];
+    this.drillHowtoId = null;
     this.bossWrap = [];
     this.favorWrap = [];
     this.gateHouse = null;
@@ -125,6 +201,12 @@ export class UIScene extends Phaser.Scene {
     this.aleaPending = null;
     this.bjBusy = false;
     this.bj = null;
+    this.resultClosing = false;
+    this.returningLudus = false;
+    if (this.resultAutoTimer != null) {
+      clearTimeout(this.resultAutoTimer);
+      this.resultAutoTimer = null;
+    }
   }
 
   create(): void {
@@ -153,7 +235,16 @@ export class UIScene extends Phaser.Scene {
       .setDepth(100)
       .setVisible(false);
 
-    this.weaponLabel = this.add.text(28, GAME_HEIGHT - 40, "", { fontFamily: "Georgia", fontSize: "16px", color: "#d4a84b", stroke: "#1a1210", strokeThickness: 4 }).setScrollFactor(0).setDepth(100);
+    this.weaponLabel = this.add
+      .text(198, GAME_HEIGHT - 36, "", {
+        fontFamily: "Georgia",
+        fontSize: "15px",
+        color: "#d4a84b",
+        stroke: "#1a1210",
+        strokeThickness: 4,
+      })
+      .setScrollFactor(0)
+      .setDepth(100);
     this.addAttackButton();
     this.addHeavyButton();
     this.addNetButton();
@@ -181,30 +272,9 @@ export class UIScene extends Phaser.Scene {
     coinBg.on("pointerover", () => coinBg.setFillStyle(0x3a281c));
     coinBg.on("pointerout", () => coinBg.setFillStyle(0x2a1c16));
 
-    this.objectiveLabel = this.add
-      .text(GAME_WIDTH / 2, 18, "", {
-        fontFamily: "Cinzel, Georgia",
-        fontSize: "15px",
-        color: "#f0e6d2",
-        backgroundColor: "#1a1210cc",
-        padding: { x: 14, y: 6 },
-      })
-      .setOrigin(0.5, 0)
-      .setScrollFactor(0)
-      .setDepth(100);
-
-    this.prayerLabel = this.add
-      .text(GAME_WIDTH / 2, 46, "", {
-        fontFamily: "Cinzel, Georgia",
-        fontSize: "13px",
-        color: "#e8c96a",
-        backgroundColor: "#1a1210cc",
-        padding: { x: 12, y: 4 },
-      })
-      .setOrigin(0.5, 0)
-      .setScrollFactor(0)
-      .setDepth(100)
-      .setVisible(false);
+    this.buildObjectivePanel();
+    this.objectiveLabel = this.objectiveBody!;
+    this.prayerLabel = this.objectivePrayer!;
 
     this.comboLabel = this.add
       .text(GAME_WIDTH / 2, 118, "", {
@@ -225,6 +295,7 @@ export class UIScene extends Phaser.Scene {
     bus.on("dialogue", this.openDialogue, this);
     bus.on("armory", this.openArmory, this);
     bus.on("gate", this.openGate, this);
+    bus.on("locker", this.openLocker, this);
     bus.on("result", this.openResult, this);
     bus.on("boss", this.showBoss, this);
     bus.on("boss-hide", this.hideBoss, this);
@@ -234,6 +305,7 @@ export class UIScene extends Phaser.Scene {
     bus.on("judgment-show", this.showJudgment, this);
     bus.on("judgment-hide", this.hideJudgment, this);
     bus.on("return-ludus", this.returnLudus, this);
+    bus.on("ludus-resumed", this.onLudusResumed, this);
     bus.on("pal-hp-show", this.showPalHp, this);
     bus.on("pal-hp", this.onPalHp, this);
     bus.on("pal-hp-hide", this.hidePalHp, this);
@@ -241,6 +313,8 @@ export class UIScene extends Phaser.Scene {
     bus.on("spar-available", this.setSparButton, this);
     bus.on("talk-available", this.setTalkButton, this);
     bus.on("shop", this.openShop, this);
+    bus.on("chamber", this.openChamber, this);
+    bus.on("lanista-offer", this.openLanistaOffer, this);
     bus.on("shrine", this.openShrine, this);
     bus.on("roost", this.openRoost, this);
     bus.on("dice", this.openTable, this);
@@ -252,28 +326,21 @@ export class UIScene extends Phaser.Scene {
     bus.on("parry", this.onParry, this);
     bus.on("minimap", this.onMinimap, this);
     bus.on("minimap-scene", this.onMinimapScene, this);
+    bus.on("act-card", this.showActCard, this);
+    bus.on("drill-show", this.showDrillHud, this);
+    bus.on("drill-hide", this.hideDrillHud, this);
+    bus.on("drill-score", this.onDrillScore, this);
+    bus.on("drill-howto", this.showDrillHowto, this);
 
     this.input.keyboard?.on("keydown-ESC", () => {
-      if (this.judgmentOpen) return;
-      if (this.pausePage === "rename" && this.overlay) {
-        this.pausePage = "stats";
-        this.renderPause();
-        return;
-      }
-      if (this.resultPending) {
-        this.finishResult();
-        return;
-      }
-      if (this.dialogueBox) {
-        this.advanceDialogue();
-        return;
-      }
-      if (this.overlay) {
-        this.closeOverlay();
-        return;
-      }
-      this.openPause();
+      this.onEscapeKey();
     });
+    // Backup if Phaser keyboard is dead mid-freeze — browser Escape still works
+    this.boundWindowEsc = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      this.onEscapeKey();
+    };
+    window.addEventListener("keydown", this.boundWindowEsc, true);
     this.input.keyboard?.on("keydown-TAB", (e: KeyboardEvent) => {
       e.preventDefault();
       if (this.judgmentOpen) return;
@@ -283,6 +350,10 @@ export class UIScene extends Phaser.Scene {
       else this.openArmory();
     });
     this.input.keyboard?.on("keydown-SPACE", () => {
+      if (this.actCardOpen) {
+        this.dismissActCard();
+        return;
+      }
       if (this.judgmentOpen) {
         this.pickJudgment(true);
         return;
@@ -299,6 +370,10 @@ export class UIScene extends Phaser.Scene {
       if (gameState.inDialogue || gameState.inMenu || gameState.paused || this.overlay) return;
     });
     this.input.keyboard?.on("keydown-ENTER", () => {
+      if (this.actCardOpen) {
+        this.dismissActCard();
+        return;
+      }
       if (this.judgmentOpen) {
         this.pickJudgment(true);
         return;
@@ -310,6 +385,7 @@ export class UIScene extends Phaser.Scene {
       if (this.resultPending) this.finishResult();
     });
     this.input.keyboard?.on("keydown-C", () => {
+      if (this.actCardOpen) return;
       if (this.judgmentOpen) return;
       if (this.pausePage === "rename") return;
       if (this.resultPending || gameState.inDialogue) return;
@@ -326,6 +402,7 @@ export class UIScene extends Phaser.Scene {
       gameState.settings.showMinimap = !gameState.settings.showMinimap;
       gameState.persistSettings();
       if (!gameState.settings.showMinimap) this.minimapWrap?.setVisible(false);
+      else this.minimapWrap?.setVisible(true);
     });
     this.input.keyboard?.on("keydown-K", () => {
       if (this.judgmentOpen) return;
@@ -340,6 +417,10 @@ export class UIScene extends Phaser.Scene {
       this.renderPause();
     });
     this.input.keyboard?.on("keydown-E", () => {
+      if (this.actCardOpen) {
+        this.dismissActCard();
+        return;
+      }
       if (this.judgmentOpen) {
         this.pickJudgment(true);
         return;
@@ -372,6 +453,7 @@ export class UIScene extends Phaser.Scene {
       bus.off("dialogue", this.openDialogue, this);
       bus.off("armory", this.openArmory, this);
       bus.off("gate", this.openGate, this);
+      bus.off("locker", this.openLocker, this);
       bus.off("result", this.openResult, this);
       bus.off("boss", this.showBoss, this);
       bus.off("boss-hide", this.hideBoss, this);
@@ -381,6 +463,7 @@ export class UIScene extends Phaser.Scene {
       bus.off("judgment-show", this.showJudgment, this);
       bus.off("judgment-hide", this.hideJudgment, this);
       bus.off("return-ludus", this.returnLudus, this);
+      bus.off("ludus-resumed", this.onLudusResumed, this);
       bus.off("pal-hp-show", this.showPalHp, this);
       bus.off("pal-hp", this.onPalHp, this);
       bus.off("pal-hp-hide", this.hidePalHp, this);
@@ -388,6 +471,8 @@ export class UIScene extends Phaser.Scene {
       bus.off("spar-available", this.setSparButton, this);
       bus.off("talk-available", this.setTalkButton, this);
       bus.off("shop", this.openShop, this);
+      bus.off("chamber", this.openChamber, this);
+      bus.off("lanista-offer", this.openLanistaOffer, this);
       bus.off("shrine", this.openShrine, this);
       bus.off("roost", this.openRoost, this);
       bus.off("dice", this.openTable, this);
@@ -399,7 +484,19 @@ export class UIScene extends Phaser.Scene {
       bus.off("parry", this.onParry, this);
       bus.off("minimap", this.onMinimap, this);
       bus.off("minimap-scene", this.onMinimapScene, this);
+      bus.off("act-card", this.showActCard, this);
+      bus.off("drill-show", this.showDrillHud, this);
+      bus.off("drill-hide", this.hideDrillHud, this);
+      bus.off("drill-score", this.onDrillScore, this);
+      bus.off("drill-howto", this.showDrillHowto, this);
       this.hideFavor();
+      this.hideDrillHud();
+      this.hideDrillHowto();
+      this.dismissActCard(true);
+      if (this.boundWindowEsc) {
+        window.removeEventListener("keydown", this.boundWindowEsc, true);
+        this.boundWindowEsc = null;
+      }
     });
   }
 
@@ -415,17 +512,109 @@ export class UIScene extends Phaser.Scene {
     const pts = s.statPoints > 0 ? `  ·  ${s.statPoints} skill` : "";
     this.levelLabel.setText(`Lv ${s.level}   ${Math.floor(s.xp)}/${s.xpToNext} XP${pts}`);
     const vialKey = prettyKey(mergedKeybinds().unguent);
-    this.weaponLabel.setText(`${getWeapon(arenaWeapon()).name}  ·  ${vialKey} unguent  ${s.unguent ?? 0}/${UNGUENT_MAX}`);
-    this.setNetButton(arenaWeapon() === "trident_net");
+    const equipped = arenaWeapon();
+    this.weaponLabel.setText(
+      equipped ? `${getWeapon(equipped).name}  ·  ${vialKey} unguent  ${s.unguent ?? 0}/${UNGUENT_MAX}` : `Unarmed  ·  equip in the armory`,
+    );
+    if (gameState.pendingSchoolBout) this.weaponLabel.setText("You watch from the stands.");
+    this.setNetButton(equipped === "trident_net");
     this.denariiLabel.setText(`${s.denarii} denarii`);
     this.titleLabel.setText(displayTitle());
-    this.objectiveLabel.setText(currentObjectiveText());
-    const prayer = prayerHudLine();
-    this.prayerLabel.setText(prayer).setVisible(Boolean(prayer));
+    this.refreshObjectivePanel();
     this.musicMuteText?.setText(audio.musicMuteLabel());
     if (this.comboLabel.visible && this.time.now > this.comboHideAt) {
       this.comboLabel.setAlpha(Math.max(0, this.comboLabel.alpha - 0.08));
       if (this.comboLabel.alpha <= 0) this.comboLabel.setVisible(false);
+    }
+  }
+
+  private buildObjectivePanel(): void {
+    const panelW = 520;
+    this.objectivePanel = this.add.container(GAME_WIDTH / 2, 10).setScrollFactor(0).setDepth(110);
+    this.objectiveBg = this.add
+      .rectangle(0, 0, panelW, 64, 0x1a1210, 0.9)
+      .setStrokeStyle(2, COLORS.gold)
+      .setOrigin(0.5, 0)
+      .setInteractive({ useHandCursor: true });
+    this.objectiveTitle = this.add
+      .text(0, 8, "", {
+        fontFamily: "Cinzel, Georgia",
+        fontSize: "13px",
+        color: "#d4a84b",
+      })
+      .setOrigin(0.5, 0);
+    this.objectiveBody = this.add
+      .text(0, 28, "", {
+        fontFamily: "Georgia",
+        fontSize: "15px",
+        color: "#f0e6d2",
+        align: "center",
+        wordWrap: { width: panelW - 56 },
+      })
+      .setOrigin(0.5, 0);
+    this.objectivePrayer = this.add
+      .text(0, 48, "", {
+        fontFamily: "Cinzel, Georgia",
+        fontSize: "12px",
+        color: "#e8c96a",
+        align: "center",
+        wordWrap: { width: panelW - 56 },
+      })
+      .setOrigin(0.5, 0)
+      .setVisible(false);
+    this.objectiveToggle = this.add
+      .text(panelW / 2 - 18, 6, "—", {
+        fontFamily: "Cinzel, Georgia",
+        fontSize: "16px",
+        color: "#d4a84b",
+      })
+      .setOrigin(0.5, 0)
+      .setInteractive({ useHandCursor: true });
+
+    this.objectivePanel.add([this.objectiveBg, this.objectiveTitle, this.objectiveBody, this.objectivePrayer, this.objectiveToggle]);
+
+    const toggle = () => {
+      this.objectiveMinimized = !this.objectiveMinimized;
+      this.refreshObjectivePanel();
+    };
+    this.objectiveBg.on("pointerdown", toggle);
+    this.objectiveToggle.on("pointerdown", (pointer: Phaser.Input.Pointer, _x: number, _y: number, event: Phaser.Types.Input.EventData) => {
+      event.stopPropagation();
+      toggle();
+    });
+  }
+
+  private refreshObjectivePanel(): void {
+    if (!this.objectivePanel || !this.objectiveBg || !this.objectiveTitle || !this.objectiveBody || !this.objectiveToggle) return;
+    const meta = ACT_META[currentAct()];
+    const prefix = actHudPrefix();
+    const full = currentObjectiveText();
+    const body = full.startsWith(prefix) ? full.slice(prefix.length) : full;
+    const prayer = prayerHudLine();
+
+    this.objectiveTitle.setText(`Act ${meta.roman} — ${meta.title}`);
+    this.objectiveBody.setText(body);
+    this.objectivePrayer!.setText(prayer).setVisible(Boolean(prayer) && !this.objectiveMinimized);
+    this.objectiveToggle.setText(this.objectiveMinimized ? "+" : "—");
+
+    if (this.objectiveMinimized) {
+      this.objectiveBody.setVisible(false);
+      this.objectivePrayer!.setVisible(false);
+      this.objectiveBg.setSize(280, 28);
+      this.objectiveTitle.setY(6);
+      this.objectiveToggle.setPosition(122, 4);
+    } else {
+      this.objectiveBody.setVisible(true);
+      this.objectiveBody.setY(28);
+      const bodyH = Math.max(18, this.objectiveBody.height);
+      let h = 36 + bodyH;
+      if (prayer) {
+        this.objectivePrayer!.setY(32 + bodyH);
+        h += this.objectivePrayer!.height + 8;
+      }
+      this.objectiveBg.setSize(520, h + 10);
+      this.objectiveTitle.setY(8);
+      this.objectiveToggle.setPosition(242, 6);
     }
   }
 
@@ -475,27 +664,121 @@ export class UIScene extends Phaser.Scene {
     this.lock(false);
     gameState.paused = false;
     gameState.inMenu = false;
+    this.flushActCard();
   }
 
-  private finishResult(): void {
-    if (!this.overlay && !this.resultPending) return;
-    this.closeOverlay();
-    bus.emit("result-closed");
+  /** Never swallow Escape — judgment used to `return` and trap the player. */
+  private onEscapeKey(): void {
+    if (this.escaping) return;
+    this.escaping = true;
+    try {
+      if (this.drillHowtoId) {
+        this.hideDrillHowto();
+        return;
+      }
+      if (this.actCardOpen) {
+        this.dismissActCard();
+        return;
+      }
+      if (this.judgmentOpen) {
+        this.hideJudgment();
+        bus.emit("judgment-pick", { follow: true });
+        return;
+      }
+      if (this.pausePage === "rename" && this.overlay) {
+        this.pausePage = "stats";
+        this.renderPause();
+        return;
+      }
+      if (this.resultPending || this.resultClosing) {
+        this.finishResult();
+        return;
+      }
+      if (this.dialogueBox) {
+        this.advanceDialogue();
+        return;
+      }
+      if (this.overlay) {
+        this.closeOverlay();
+        return;
+      }
+      // Soft-lock recovery: clear flags / orphaned blockers, then pause
+      this.forceUnlockUi();
+      this.openPause();
+    } finally {
+      window.setTimeout(() => {
+        this.escaping = false;
+      }, 120);
+    }
   }
 
-  private returnLudus = (): void => {
+  /** Strip every UI lock and orphaned fullscreen blocker. */
+  private forceUnlockUi(): void {
+    this.resultClosing = false;
+    this.resultPending = false;
+    this.judgmentOpen = false;
+    this.judgmentWrap.forEach((o) => {
+      try {
+        o.destroy();
+      } catch {
+        /* ignore */
+      }
+    });
+    this.judgmentWrap = [];
+    if (this.actCardOpen) this.dismissActCard(true);
+    this.pendingActCard = null;
+    this.dimmer?.destroy();
+    this.dimmer = null;
+    this.overlay?.destroy();
+    this.overlay = null;
+    this.dialogueBox?.destroy();
+    this.dialogueBox = null;
+    this.hideDrillHowto();
     gameState.paused = false;
     gameState.inMenu = false;
     gameState.inDialogue = false;
-    this.hideJudgment();
-    this.resultPending = false;
-    if (this.scene.isActive("ArenaScene") || this.scene.isSleeping("ArenaScene") || this.scene.isPaused("ArenaScene")) {
-      this.scene.stop("ArenaScene");
+    this.lock(false);
+  }
+
+  private finishResult(): void {
+    if (this.resultClosing) return;
+    this.resultClosing = true;
+    if (this.resultAutoTimer != null) {
+      clearTimeout(this.resultAutoTimer);
+      this.resultAutoTimer = null;
     }
-    this.time.delayedCall(30, () => {
-      if (this.scene.isSleeping("LudusScene")) this.scene.wake("LudusScene");
-      else if (!this.scene.isActive("LudusScene")) this.scene.launch("LudusScene");
-    });
+
+    this.forceUnlockUi();
+    bus.emit("result-closed");
+
+    // If leave() didn't bring us home (and this isn't a tournament chain), force it
+    window.setTimeout(() => {
+      this.resultClosing = false;
+      const next = gameState.pendingArenaOpponent;
+      const tourneyChain =
+        Boolean(next) && isTournamentId(next!) && !gameState.save.freedomWon && this.scene.isActive("ArenaScene");
+      if (tourneyChain) return;
+      if (!this.scene.isActive("LudusScene")) this.returnLudus();
+    }, 200);
+  }
+
+  private onLudusResumed = (): void => {
+    this.forceUnlockUi();
+  };
+
+  private returnLudus = (): void => {
+    if (this.returningLudus) return;
+    this.returningLudus = true;
+    this.forceUnlockUi();
+    if (this.resultAutoTimer != null) {
+      clearTimeout(this.resultAutoTimer);
+      this.resultAutoTimer = null;
+    }
+    returnFromArena(this.game);
+    window.setTimeout(() => {
+      this.forceUnlockUi();
+      this.returningLudus = false;
+    }, 250);
   };
 
   private box(w: number, h: number, title: string): Phaser.GameObjects.Container {
@@ -525,8 +808,6 @@ export class UIScene extends Phaser.Scene {
       fn();
     });
     c.add([bg, t]);
-    bg.setScrollFactor(0);
-    t.setScrollFactor(0);
   }
 
   openPause(): void {
@@ -944,12 +1225,12 @@ export class UIScene extends Phaser.Scene {
         this.perfectText = undefined;
       },
     });
-    if (payload?.first) this.toast("Parry! They stagger. Tap F into a swing.");
+    if (payload?.first) this.toast(`Parry! They stagger. Tap ${prettyKey(mergedKeybinds().parry)} into a swing.`);
   };
 
   openShop = (): void => {
     if (this.resultPending) return;
-    const c = this.box(1180, 640, "QUARTERS");
+    const c = this.box(1180, 640, this.shopTab === "chamber" ? "CHAMBER" : "QUARTERS");
     c.add(this.add.rectangle(0, -278, 1120, 8, COLORS.crimson, 0.85));
     c.add(this.add.rectangle(-400, 8, 220, 470, 0x3a281c, 0.55).setStrokeStyle(1, 0x8a6a3a, 0.45));
     c.add(
@@ -964,7 +1245,10 @@ export class UIScene extends Phaser.Scene {
 
     const items = SHOP_ITEMS.filter((it) => it.kind === this.shopTab);
     if (!this.shopPreviewId || !items.some((it) => it.id === this.shopPreviewId)) {
-      this.shopPreviewId = equippedId(this.shopTab);
+      this.shopPreviewId =
+        this.shopTab === "chamber"
+          ? items.find((it) => chamberItemEquipped(it.id))?.id ?? items[0]?.id ?? null
+          : equippedId(this.shopTab);
     }
     const selected = items.find((it) => it.id === this.shopPreviewId) ?? items[0];
     const look = lookWithItem(selected?.id ?? null);
@@ -974,12 +1258,12 @@ export class UIScene extends Phaser.Scene {
 
     if (selected) {
       const owned = ownsCosmetic(selected.id);
-      const equipped = equippedId(selected.kind) === selected.id;
+      const equipped = selected.kind === "chamber" ? chamberItemEquipped(selected.id) : equippedId(selected.kind) === selected.id;
       const locked = !shopUnlocked(selected);
       const canBuy = !owned && !locked && gameState.save.denarii >= selected.cost;
       c.add(
         this.add
-          .text(-530, 60, selected.name, {
+          .text(-530, 60, shopItemLabel(selected), {
             fontFamily: "Cinzel, Georgia",
             fontSize: "16px",
             color: "#e8dcc8",
@@ -1000,9 +1284,13 @@ export class UIScene extends Phaser.Scene {
       const actionLabel = locked
         ? "Locked"
         : equipped
-          ? "Wearing"
+          ? selected.kind === "chamber"
+            ? "Placed"
+            : "Wearing"
           : owned
-            ? "Equip"
+            ? selected.kind === "chamber"
+              ? "Place"
+              : "Equip"
             : canBuy
               ? `Buy  ·  ${selected.cost} denarii`
               : `Need ${selected.cost} denarii`;
@@ -1017,14 +1305,14 @@ export class UIScene extends Phaser.Scene {
             return;
           }
           if (equipped) {
-            this.toast("Already wearing that.");
+            this.toast(selected.kind === "chamber" ? "Already placed." : "Already wearing that.");
             return;
           }
           const result = buyCosmetic(selected.id);
           if (result === "poor") this.toast("Not enough denarii.");
           else if (result === "locked") this.toast("That is still locked.");
-          else if (result === "bought") this.toast(`Bought ${selected.name}.`);
-          else this.toast(`Equipped ${selected.name}.`);
+          else if (result === "bought") this.toast(`Bought ${shopItemLabel(selected)}.`);
+          else this.toast(`Equipped ${shopItemLabel(selected)}.`);
           audio.sfx("ui");
           this.openShop();
         },
@@ -1076,16 +1364,25 @@ export class UIScene extends Phaser.Scene {
       );
     }
 
-    const tab = SHOP_TABS.find((t) => t.kind === this.shopTab) ?? SHOP_TABS[0];
+    const tabs = SHOP_TABS.filter((entry) => entry.kind !== "chamber");
+    if (this.shopTab === "chamber") this.shopTab = "tunic";
+    const tab = tabs.find((t) => t.kind === this.shopTab) ?? tabs[0];
     const tabY = -218;
+    const showChamber = Boolean(gameState.save.lanistaUnlocked);
+    const tabCount = tabs.length + (showChamber ? 1 : 0);
+    const pitch = tabCount > 6 ? 102 : 118;
+    const start = tabCount > 6 ? -310 : -205;
     c.add(this.add.rectangle(90, tabY, 760, 46, 0x1a1210, 0.72).setStrokeStyle(1, 0x8a6a3a, 0.55));
-    SHOP_TABS.forEach((entry, i) => {
-      this.addShopTab(c, -205 + i * 118, tabY, entry.label, entry.kind === this.shopTab, () => {
+    tabs.forEach((entry, i) => {
+      this.addShopTab(c, start + i * pitch, tabY, entry.label, entry.kind === this.shopTab, () => {
         this.shopTab = entry.kind;
         this.shopPreviewId = null;
         this.openShop();
       });
     });
+    if (showChamber) {
+      this.addShopTab(c, start + tabs.length * pitch, tabY, "Chamber", false, () => this.openChamberDecor());
+    }
     c.add(
       this.add
         .text(90, -178, `${tab.hint}  ·  Click an item to preview.`, {
@@ -1106,7 +1403,7 @@ export class UIScene extends Phaser.Scene {
       const x = startX + col * colW;
       const y = -136 + row * rowH;
       const owned = ownsCosmetic(item.id);
-      const equipped = equippedId(item.kind) === item.id;
+      const equipped = item.kind === "chamber" ? chamberItemEquipped(item.id) : equippedId(item.kind) === item.id;
       const locked = !shopUnlocked(item);
       const canBuy = !owned && !locked && gameState.save.denarii >= item.cost;
       const previewing = item.id === selected?.id;
@@ -1127,7 +1424,7 @@ export class UIScene extends Phaser.Scene {
         .setInteractive({ useHandCursor: true });
       const chip = this.add.rectangle(x - cardW / 2 + 18, y, 18, 18, locked ? 0x3a3028 : swatch).setStrokeStyle(1, previewing ? COLORS.gold : 0x1a1210);
       const name = this.add
-        .text(x - cardW / 2 + 34, y - 10, item.name, {
+        .text(x - cardW / 2 + 34, y - 10, shopItemLabel(item), {
           fontFamily: "Georgia",
           fontSize: "14px",
           color: locked ? "#6a5a4a" : "#e8dcc8",
@@ -1136,15 +1433,21 @@ export class UIScene extends Phaser.Scene {
       const status = locked
         ? item.requiresFlag === "freedomWon"
           ? "Locked — win the Rudis"
+          : item.requiresFlag === "lanistaUnlocked"
+            ? "Locked — take the school"
           : item.requiresFlag
             ? "Locked — lose an arena fight without being spared"
             : shopLockHint(item)
         : previewing
           ? equipped
-            ? "Preview  ·  wearing"
+            ? item.kind === "chamber"
+              ? "Preview  ·  placed"
+              : "Preview  ·  wearing"
             : "Preview"
           : equipped
-            ? "Wearing"
+            ? item.kind === "chamber"
+              ? "Placed"
+              : "Wearing"
             : owned
               ? "Owned"
               : `${item.cost} denarii`;
@@ -1190,6 +1493,235 @@ export class UIScene extends Phaser.Scene {
     });
     c.add([bg, t]);
   }
+
+  openChamber = (): void => {
+    this.openChamberDecor();
+  };
+
+  openChamberDecor = (): void => {
+    if (this.resultPending) return;
+    if (!gameState.save.lanistaUnlocked) {
+      this.toast("Take the school from Marcellus first.");
+      return;
+    }
+    const items = CHAMBER_ITEMS.filter((it) => chamberSlotFromId(it.id) === this.chamberTab);
+    if (!this.shopPreviewId || !items.some((it) => it.id === this.shopPreviewId)) {
+      this.shopPreviewId = items.find((it) => chamberItemEquipped(it.id))?.id ?? items[0]?.id ?? null;
+    }
+    const selected = items.find((it) => it.id === this.shopPreviewId) ?? items[0];
+    const shopItem = selected ? SHOP_ITEMS.find((it) => it.id === selected.id) : undefined;
+    const c = this.box(1180, 660, "CHAMBER");
+    c.add(this.add.rectangle(0, -288, 1120, 8, COLORS.crimson, 0.85));
+    c.add(
+      this.add
+        .text(0, -268, `${gameState.save.denarii} denarii  ·  furnish the loft`, {
+          fontFamily: "Georgia",
+          fontSize: "15px",
+          color: "#e8dcc8",
+        })
+        .setOrigin(0.5),
+    );
+
+    CHAMBER_TABS.forEach((entry, i) => {
+      this.addShopTab(c, -360 + i * 108, -228, entry.label, entry.slot === this.chamberTab, () => {
+        this.chamberTab = entry.slot;
+        this.shopPreviewId = null;
+        this.openChamberDecor();
+      });
+    });
+
+    this.drawChamberMini(c, -430, -150, this.shopPreviewId);
+    const thumb = chamberThumbTex(selected?.id ?? "floor-pale");
+    if (this.textures.exists(thumb)) {
+      c.add(this.add.image(-430, 70, thumb).setScale(selected && chamberSlotFromId(selected.id) === "bed" ? 2.2 : 2.4));
+    }
+    if (selected) {
+      c.add(this.add.text(-430, 118, selected.name, { fontFamily: "Cinzel, Georgia", fontSize: "16px", color: "#e8dcc8" }).setOrigin(0.5));
+      c.add(
+        this.add
+          .text(-430, 142, selected.description, {
+            fontFamily: "Georgia",
+            fontSize: "13px",
+            color: "#c4b49a",
+            wordWrap: { width: 240 },
+            align: "center",
+          })
+          .setOrigin(0.5, 0),
+      );
+      const owned = ownsCosmetic(selected.id);
+      const equipped = chamberItemEquipped(selected.id);
+      const locked = shopItem ? !shopUnlocked(shopItem) : false;
+      const canBuy = !owned && !locked && gameState.save.denarii >= selected.cost;
+      const actionLabel = locked
+        ? "Locked"
+        : equipped
+          ? "Placed"
+          : owned
+            ? "Place"
+            : canBuy
+              ? `Buy  ·  ${selected.cost} denarii`
+              : `Need ${selected.cost} denarii`;
+      this.addBtn(
+        c,
+        -430,
+        220,
+        actionLabel,
+        () => {
+          if (!shopItem) return;
+          if (locked) {
+            this.toast(shopLockHint(shopItem));
+            return;
+          }
+          if (equipped) {
+            this.toast("Already placed.");
+            return;
+          }
+          const result = buyCosmetic(selected.id);
+          if (result === "poor") this.toast("Not enough denarii.");
+          else if (result === "locked") this.toast("That is still locked.");
+          else if (result === "bought") this.toast(`Bought ${selected.name}.`);
+          else this.toast(`Placed ${selected.name}.`);
+          audio.sfx("ui");
+          this.openChamberDecor();
+        },
+        220,
+      );
+    }
+
+    items.forEach((item, i) => {
+      const col = i % 2;
+      const row = Math.floor(i / 2);
+      const x = 80 + col * 300;
+      const y = -160 + row * 70;
+      const shopIt = SHOP_ITEMS.find((it) => it.id === item.id)!;
+      const owned = ownsCosmetic(item.id);
+      const equipped = chamberItemEquipped(item.id);
+      const locked = !shopUnlocked(shopIt);
+      const previewing = item.id === selected?.id;
+      const card = this.add
+        .rectangle(x, y, 280, 60, previewing ? 0x3a281c : 0x1a1210, 0.96)
+        .setStrokeStyle(previewing ? 2 : 1, previewing ? COLORS.gold : equipped ? 0x8ecf6a : 0x5a4a38)
+        .setInteractive({ useHandCursor: true });
+      const thumbTex = chamberThumbTex(item.id);
+      const chip = this.textures.exists(thumbTex)
+        ? this.add.image(x - 118, y, thumbTex).setDisplaySize(28, 28)
+        : this.add.rectangle(x - 118, y, 22, 22, COLORS.gold);
+      const name = this.add.text(x - 96, y - 12, item.name, { fontFamily: "Georgia", fontSize: "15px", color: locked ? "#6a5a4a" : "#e8dcc8" }).setOrigin(0, 0.5);
+      const status = locked
+        ? shopLockHint(shopIt)
+        : equipped
+          ? "Placed"
+          : owned
+            ? "Owned"
+            : `${item.cost} denarii`;
+      const detail = this.add
+        .text(x - 96, y + 12, status, {
+          fontFamily: "Georgia",
+          fontSize: "12px",
+          color: equipped ? "#8ecf6a" : owned || (!locked && gameState.save.denarii >= item.cost) ? "#d4a84b" : "#6a5a4a",
+        })
+        .setOrigin(0, 0.5);
+      card.on("pointerover", () => card.setFillStyle(previewing ? 0x4a3424 : 0x3a281c));
+      card.on("pointerout", () => card.setFillStyle(previewing ? 0x3a281c : 0x1a1210));
+      card.on("pointerdown", () => {
+        audio.sfx("ui");
+        this.shopPreviewId = item.id;
+        this.openChamberDecor();
+      });
+      c.add([card, chip, name, detail]);
+    });
+
+    this.addBtn(c, 80, 280, "Quarters", () => {
+      this.shopTab = "tunic";
+      this.openShop();
+    }, 180);
+    this.addBtn(c, 280, 280, "Close", () => this.closeOverlay(), 180);
+  };
+
+  private drawChamberMini(c: Phaser.GameObjects.Container, ox: number, oy: number, previewId: string | null): void {
+    const ts = 18;
+    const cols = 13;
+    const rows = 5;
+    const decor = chamberWithPreview(previewId);
+    c.add(this.add.rectangle(ox, oy + 8, cols * ts + 12, rows * ts + 12, 0x1a1210, 0.95).setStrokeStyle(2, COLORS.gold));
+    const tile = (tx: number, ty: number, tex: string, depth = 0) => {
+      if (!this.textures.exists(tex)) return;
+      const img = this.add.image(ox - (cols * ts) / 2 + tx * ts + ts / 2, oy - (rows * ts) / 2 + ty * ts + ts / 2, tex);
+      img.setDisplaySize(ts, ts);
+      c.add(img);
+    };
+    const floor = chamberFloorTex(decor.floor);
+    for (let ty = 0; ty < rows; ty++) {
+      for (let tx = 0; tx < cols; tx++) {
+        if (ty === 4 && tx !== 5 && tx !== 6) tile(tx, ty, "tile-wall");
+        else tile(tx, ty, floor);
+      }
+    }
+    const rug = chamberRugTex(decor.rug);
+    if (rug) {
+      for (let ty = 1; ty <= 2; ty++) {
+        for (let tx = 2; tx <= 10; tx++) tile(tx, ty, rug);
+      }
+    }
+    const prop = (tx: number, ty: number, tex: string, scale = 0.55, tint?: number) => {
+      if (!this.textures.exists(tex)) return;
+      const img = this.add.image(ox - (cols * ts) / 2 + tx * ts + ts / 2, oy - (rows * ts) / 2 + ty * ts + ts / 2, tex);
+      img.setScale(scale);
+      if (tint != null) img.setTint(tint);
+      c.add(img);
+    };
+    const hang = chamberHangingTex(decor.banner);
+    if (hang) {
+      const tint = chamberHangingTint(decor.banner);
+      prop(4, 0, hang, 0.42, tint);
+      prop(6, 0, hang, 0.42, tint);
+      prop(8, 0, hang, 0.42, tint);
+    }
+    if (decor.light === "light-lamps") {
+      prop(1, 0, "prop-lamp", 0.7);
+      prop(12, 0, "prop-lamp", 0.7);
+    } else if (decor.light === "light-brazier") {
+      prop(1, 2, "prop-brazier", 0.5);
+    }
+    if (decor.trophy === "trophy-empty" || decor.trophy === "trophy-eagle" || decor.trophy === "trophy-last") {
+      prop(2, 0, "prop-trophy-empty", 0.7);
+      if (decor.trophy === "trophy-eagle") prop(2, 0, "trophy-skel-eagle", 0.7);
+      if (decor.trophy === "trophy-last") {
+        const house = lastTrophyHouse();
+        const tex = `trophy-skel-${house?.beastKind ?? "eagle"}`;
+        if (this.textures.exists(tex)) prop(2, 0, tex, 0.7);
+      }
+    }
+    const extra = chamberExtraTex(decor.extra);
+    if (extra) prop(2, 2, extra, 0.55);
+    const bed = chamberBedTex(decor.bed);
+    if (bed) prop(11, 1, bed, 0.55);
+    prop(9, 2, "prop-desk", 0.55);
+    c.add(this.add.text(ox, oy + rows * ts * 0.5 + 18, "Preview", { fontFamily: "Georgia", fontSize: "12px", color: "#d4a84b" }).setOrigin(0.5));
+  }
+
+  openLanistaOffer = (): void => {
+    if (gameState.save.lanistaUnlocked) return;
+    const c = this.box(560, 360, "THE SCHOOL");
+    c.add(
+      this.add
+        .text(0, -90, "Marcellus offers the book of the school.\nThe loft, the Drill Yard east of the ring,\nand a second gate for the four.", {
+          fontFamily: "Georgia",
+          fontSize: "16px",
+          color: "#e8dcc8",
+          align: "center",
+          wordWrap: { width: 460 },
+        })
+        .setOrigin(0.5),
+    );
+    this.addBtn(c, 0, 20, "Take the school", () => {
+      if (grantLanista()) {
+        this.toast("The loft is yours. Title: Lanista of Aquila.");
+      }
+      this.closeOverlay();
+    }, 240);
+    this.addBtn(c, 0, 80, "Not yet", () => this.closeOverlay(), 240);
+  };
 
   openRoost = (): void => {
     if (this.resultPending) return;
@@ -2106,66 +2638,89 @@ export class UIScene extends Phaser.Scene {
     c.add(this.add.rectangle(0, -258, 920, 8, 0x6a2420, 0.9));
     c.add(this.add.rectangle(-310, 8, 280, 430, 0x241810, 0.72).setStrokeStyle(1, 0x8a6a3a, 0.5));
     const s = gameState.save;
-    const cur = getWeapon(s.equippedWeapon);
-    this.textures.get(weaponIconKey(cur.id))?.setFilter(Phaser.Textures.FilterMode.NEAREST);
-    const icon = this.add.image(-310, -150, weaponIconKey(cur.id)).setScale(3.2);
-    icon.setTint(0xffffff);
-    c.add(icon);
-    c.add(
-      this.add
-        .text(-310, -88, cur.name, {
-          fontFamily: "Cinzel, Georgia",
-          fontSize: "20px",
-          color: "#e8c96a",
-          wordWrap: { width: 250 },
-          align: "center",
-        })
-        .setOrigin(0.5),
-    );
-    c.add(
-      this.add
-        .text(-310, -20, `Light  ${cur.light.name}\nHeavy  ${cur.heavy.name}\nSpecial  ${cur.specialName}`, {
-          fontFamily: "Georgia",
-          fontSize: "15px",
-          color: "#e8dcc8",
-          align: "center",
-        })
-        .setOrigin(0.5),
-    );
-    c.add(
-      this.add
-        .text(-310, 70, cur.specialDescription, {
-          fontFamily: "Georgia",
-          fontSize: "13px",
-          color: "#c4b49a",
-          wordWrap: { width: 250 },
-          align: "center",
-        })
-        .setOrigin(0.5, 0),
-    );
-    c.add(
-      this.add
-        .text(-310, 150, cur.description, {
-          fontFamily: "Georgia",
-          fontSize: "13px",
-          color: "#d4a84b",
-          wordWrap: { width: 250 },
-          align: "center",
-        })
-        .setOrigin(0.5, 0),
-    );
-    const lv = masteryLevel(cur.id);
-    c.add(
-      this.add
-        .text(-310, 210, `Mastery  ${lv === 2 ? "II" : lv === 1 ? "I" : "—"}\n${masteryHint(cur.id)}`, {
-          fontFamily: "Georgia",
-          fontSize: "12px",
-          color: "#8ecf6a",
-          wordWrap: { width: 250 },
-          align: "center",
-        })
-        .setOrigin(0.5, 0),
-    );
+    const cur = s.equippedWeapon ? getWeapon(s.equippedWeapon) : null;
+    if (cur) {
+      this.textures.get(weaponIconKey(cur.id))?.setFilter(Phaser.Textures.FilterMode.NEAREST);
+      const icon = this.add.image(-310, -150, weaponIconKey(cur.id)).setScale(3.2);
+      icon.setTint(0xffffff);
+      c.add(icon);
+      c.add(
+        this.add
+          .text(-310, -88, cur.name, {
+            fontFamily: "Cinzel, Georgia",
+            fontSize: "20px",
+            color: "#e8c96a",
+            wordWrap: { width: 250 },
+            align: "center",
+          })
+          .setOrigin(0.5),
+      );
+      c.add(
+        this.add
+          .text(-310, -20, `Light  ${cur.light.name}\nHeavy  ${cur.heavy.name}\nSpecial  ${cur.specialName}`, {
+            fontFamily: "Georgia",
+            fontSize: "15px",
+            color: "#e8dcc8",
+            align: "center",
+          })
+          .setOrigin(0.5),
+      );
+      c.add(
+        this.add
+          .text(-310, 70, cur.specialDescription, {
+            fontFamily: "Georgia",
+            fontSize: "13px",
+            color: "#c4b49a",
+            wordWrap: { width: 250 },
+            align: "center",
+          })
+          .setOrigin(0.5, 0),
+      );
+      c.add(
+        this.add
+          .text(-310, 150, cur.description, {
+            fontFamily: "Georgia",
+            fontSize: "13px",
+            color: "#d4a84b",
+            wordWrap: { width: 250 },
+            align: "center",
+          })
+          .setOrigin(0.5, 0),
+      );
+      const lv = masteryLevel(cur.id);
+      c.add(
+        this.add
+          .text(-310, 210, `Mastery  ${lv === 2 ? "II" : lv === 1 ? "I" : "—"}\n${masteryHint(cur.id)}`, {
+            fontFamily: "Georgia",
+            fontSize: "12px",
+            color: "#8ecf6a",
+            wordWrap: { width: 250 },
+            align: "center",
+          })
+          .setOrigin(0.5, 0),
+      );
+    } else {
+      c.add(
+        this.add
+          .text(-310, -40, "Empty hands", {
+            fontFamily: "Cinzel, Georgia",
+            fontSize: "22px",
+            color: "#e8c96a",
+          })
+          .setOrigin(0.5),
+      );
+      c.add(
+        this.add
+          .text(-310, 20, "Take a gladius from the rack.\nThe yard waits for steel.", {
+            fontFamily: "Georgia",
+            fontSize: "15px",
+            color: "#c4b49a",
+            align: "center",
+            wordWrap: { width: 250 },
+          })
+          .setOrigin(0.5, 0),
+      );
+    }
 
     WEAPON_ORDER.forEach((id, i) => {
       const w = getWeapon(id);
@@ -2212,28 +2767,35 @@ export class UIScene extends Phaser.Scene {
   }
 
   openGate(): void {
+    if (gameState.save.lanistaUnlocked && this.gateTab === "school") {
+      this.renderSchoolGate();
+      return;
+    }
     const rivals = rivalHouses();
     const showTourney = tournamentUnlocked() || gameState.save.freedomWon;
+    const lanista = Boolean(gameState.save.lanistaUnlocked);
+    const tabShift = lanista ? 44 : 0;
     if (!this.gateHouse) {
       if (gameState.save.freedomWon) ensureNight();
       const night = currentNight();
-      const c = this.box(720, 700, "ARENA GATE");
+      const c = this.box(720, lanista ? 760 : 700, "ARENA GATE");
+      if (lanista) this.addGateTabs(c, lanista ? 760 : 700);
       if (night) {
         c.add(
           this.add
-            .text(0, -268, nightEditorLine(night), { fontFamily: "Cinzel, Georgia", fontSize: "15px", color: "#e8c96a" })
+            .text(0, -268 + tabShift, nightEditorLine(night), { fontFamily: "Cinzel, Georgia", fontSize: "15px", color: "#e8c96a" })
             .setOrigin(0.5),
         );
         c.add(
           this.add
-            .text(0, -246, `${night.fighterName} of ${night.houseName}  ·  ${night.kind === "weapon" ? night.weaponName + "  ·  " : ""}+${night.bonusDenarii} denarii`, {
+            .text(0, -246 + tabShift, `${night.fighterName} of ${night.houseName}  ·  ${night.kind === "weapon" ? night.weaponName + "  ·  " : ""}+${night.bonusDenarii} denarii`, {
               fontFamily: "Georgia",
               fontSize: "14px",
               color: "#e8dcc8",
             })
             .setOrigin(0.5),
         );
-        this.addBtn(c, 0, -210, "Enter tonight", () => {
+        this.addBtn(c, 0, -210 + tabShift, "Enter tonight", () => {
           const ok = enterNight();
           if (ok === "locked") {
             this.toast("The armory still lacks that steel.");
@@ -2249,13 +2811,13 @@ export class UIScene extends Phaser.Scene {
         }, 220);
         c.add(
           this.add
-            .text(0, -168, "Or rematch a house", { fontFamily: "Georgia", fontSize: "14px", color: "#c4b49a" })
+            .text(0, -168 + tabShift, "Or rematch a house", { fontFamily: "Georgia", fontSize: "14px", color: "#c4b49a" })
             .setOrigin(0.5),
         );
       } else {
-        c.add(this.add.text(0, -250, "Choose a house", { fontFamily: "Georgia", fontSize: "18px", color: "#e8dcc8" }).setOrigin(0.5));
+        c.add(this.add.text(0, -250 + tabShift, "Choose a house", { fontFamily: "Georgia", fontSize: "18px", color: "#e8dcc8" }).setOrigin(0.5));
       }
-      const startY = night ? -124 : -214;
+      const startY = (night ? -124 : -214) + tabShift;
       const pitch = 76;
       const btnOff = 34;
       rivals.forEach((h, i) => {
@@ -2325,6 +2887,387 @@ export class UIScene extends Phaser.Scene {
     }, 200);
   }
 
+  private addGateTabs(c: Phaser.GameObjects.Container, boxH: number): void {
+    const y = -boxH / 2 + 64;
+    this.addShopTab(c, -90, y, "Your steel", this.gateTab === "steel", () => {
+      this.gateTab = "steel";
+      this.gateHouse = null;
+      this.schoolNpc = null;
+      this.schoolHouse = null;
+      this.openGate();
+    });
+    this.addShopTab(c, 90, y, "The School", this.gateTab === "school", () => {
+      this.gateTab = "school";
+      this.gateHouse = null;
+      this.openGate();
+    });
+  }
+
+  private renderSchoolGate(): void {
+    if (!this.schoolNpc) {
+      const c = this.box(760, 700, "ARENA GATE");
+      this.addGateTabs(c, 700);
+      c.add(
+        this.add
+          .text(0, -250, `Glory ${schoolGloryCount()}/${SCHOOL_IDS.length} · Order: Titus → Brom → Aelia → Rufus`, {
+            fontFamily: "Georgia",
+            fontSize: "15px",
+            color: "#e8dcc8",
+          })
+          .setOrigin(0.5),
+      );
+      HOUSE_GLADIATORS.forEach((npc, i) => {
+        const rec = getSchoolRecord(npc.id);
+        const unlocked = schoolStudentUnlocked(npc.id);
+        const col = i % 2;
+        const row = Math.floor(i / 2);
+        const x = col === 0 ? -190 : 190;
+        const y = -170 + row * 168;
+        const record = `${rec.wins}–${rec.losses}`;
+        const readyChamp = schoolReadyForChampion(npc.id);
+        const readyUnder = schoolReadyForUndercard(npc.id);
+        const status = schoolReadinessLabel(npc.id);
+        const need = schoolReadyNeeds(npc.id);
+        const train = unlocked
+          ? `Train ${rec.training}/${need.prideTraining} · Spec ${rec.specialty ?? 0}/3 · Lessons ${rec.lessons ?? 0}/${need.prideLessons}`
+          : schoolUnlockHint(npc.id);
+        const nameColor = rec.glory ? "#8ecf6a" : unlocked ? "#e8c96a" : "#6a5a4a";
+        c.add(
+          this.add
+            .text(x, y, unlocked || rec.glory ? `${npc.name}` : `${npc.name}`, {
+              fontFamily: "Cinzel, Georgia",
+              fontSize: "18px",
+              color: nameColor,
+            })
+            .setOrigin(0.5),
+        );
+        if (rec.glory) {
+          c.add(this.add.text(x, y + 18, "DONE", { fontFamily: "Cinzel, Georgia", fontSize: "12px", color: "#8ecf6a" }).setOrigin(0.5));
+        } else if (!unlocked) {
+          c.add(this.add.text(x, y + 18, "LOCKED", { fontFamily: "Cinzel, Georgia", fontSize: "12px", color: "#6a5a4a" }).setOrigin(0.5));
+        }
+        c.add(
+          this.add
+            .text(x, y + (rec.glory || !unlocked ? 36 : 22), `${npc.title}  ·  ${getWeapon(npc.weapon).shortName}`, {
+              fontFamily: "Georgia",
+              fontSize: "14px",
+              color: unlocked ? "#e8dcc8" : "#6a5a4a",
+            })
+            .setOrigin(0.5),
+        );
+        const statusY = rec.glory || !unlocked ? 56 : 42;
+        c.add(
+          this.add
+            .text(x, statusY, rec.glory ? `Record ${record}` : `Record ${record}  ·  ${status}`, {
+              fontFamily: "Georgia",
+              fontSize: "13px",
+              color: !unlocked ? "#6a5a4a" : rec.injured ? "#c07060" : readyChamp || rec.glory ? "#8ecf6a" : readyUnder ? "#e8c96a" : "#b8a890",
+            })
+            .setOrigin(0.5),
+        );
+        c.add(
+          this.add
+            .text(x, statusY + 18, rec.glory ? `Path 3/3` : train, {
+              fontFamily: "Georgia",
+              fontSize: "12px",
+              color: unlocked ? "#b8a890" : "#6a5a4a",
+              wordWrap: { width: 300 },
+              align: "center",
+            })
+            .setOrigin(0.5),
+        );
+        if (!unlocked) {
+          /* locked — no book */
+        } else if (rec.injured) {
+          const free = gameState.schoolFreeRestAvailable;
+          this.addBtn(c, x, y + 92, free ? "Rest  ·  free" : `Rest  ·  ${REST_COST} denarii`, () => {
+            const result = restSchoolInjury(npc.id);
+            if (result === "ok" || result === "free") {
+              this.toast(result === "free" ? `${npc.name} rests — first recovery is on the house.` : `${npc.name} rests. The limp leaves them.`);
+            } else if (result === "poor") this.toast("Not enough denarii.");
+            else this.toast("They are not injured.");
+            this.openGate();
+          }, 200);
+        } else if (rec.glory) {
+          this.addBtn(c, x, y + 92, "Exhibition", () => {
+            this.schoolNpc = npc.id;
+            this.schoolHouse = null;
+            this.openGate();
+          }, 160);
+        } else {
+          this.addBtn(c, x, y + 92, "Book fight", () => {
+            this.schoolNpc = npc.id;
+            this.schoolHouse = null;
+            this.openGate();
+          }, 160);
+        }
+      });
+      this.addBtn(c, 0, 300, "Stay at the ludus", () => {
+        this.schoolNpc = null;
+        this.schoolHouse = null;
+        this.closeOverlay();
+      });
+      return;
+    }
+    const student = getNpc(this.schoolNpc);
+    const studentRec = getSchoolRecord(student.id);
+    const circuit = getStudentCircuit(student.id);
+    const foes = circuit?.fighters ?? [];
+    const c = this.box(640, 600, "THE SCHOOL");
+    c.add(
+      this.add
+        .text(0, -250, student.name, {
+          fontFamily: "Cinzel, Georgia",
+          fontSize: "22px",
+          color: studentRec.glory ? "#8ecf6a" : "#e8c96a",
+        })
+        .setOrigin(0.5),
+    );
+    if (studentRec.glory) {
+      c.add(this.add.text(0, -222, "DONE", { fontFamily: "Cinzel, Georgia", fontSize: "14px", color: "#8ecf6a" }).setOrigin(0.5));
+    }
+    c.add(
+      this.add
+        .text(0, studentRec.glory ? -198 : -218, circuit ? `${circuit.label} · Bout ${Math.min(3, studentRec.rung + 1)}/3` : "School path", {
+          fontFamily: "Georgia",
+          fontSize: "14px",
+          color: "#b8a890",
+        })
+        .setOrigin(0.5),
+    );
+    if (!foes.length) {
+      c.add(this.add.text(0, -40, "No school path for this student.", { fontFamily: "Georgia", fontSize: "16px", color: "#c4b49a" }).setOrigin(0.5));
+    }
+    foes.forEach((f, i) => {
+      const y = -155 + i * 88;
+      const cleared = studentRec.rung > i || studentRec.glory;
+      const gate = schoolBoutLocked(student.id, i);
+      const exhibition = studentRec.glory;
+      const locked = exhibition ? false : gate.locked;
+      const match = schoolMatchupHint(student.id, f.id);
+      const compare = schoolPowerCompare(student.id, f.id);
+      const matchColor = match === "Fair" ? "#8ecf6a" : match === "Hard" ? "#e8c96a" : "#c07060";
+      const step = schoolCircuitRungLabel(i);
+      c.add(
+        this.add
+          .text(0, y, `${i + 1}. ${step}  ·  ${f.name}${cleared && !exhibition ? "  ✓" : ""}`, {
+            fontFamily: "Georgia",
+            fontSize: "15px",
+            color: locked ? "#6a5a4a" : cleared && !exhibition ? "#8ecf6a" : "#e8dcc8",
+          })
+          .setOrigin(0.5),
+      );
+      c.add(
+        this.add
+          .text(0, y + 18, `HP ${compare.foe.maxHealth} / ATK ${compare.foe.attack}  ·  ${match}`, {
+            fontFamily: "Georgia",
+            fontSize: "12px",
+            color: locked ? "#6a5a4a" : matchColor,
+          })
+          .setOrigin(0.5),
+      );
+      if (locked) {
+        c.add(
+          this.add
+            .text(0, y + 36, gate.reason, {
+              fontFamily: "Georgia",
+              fontSize: "12px",
+              color: "#6a5a4a",
+            })
+            .setOrigin(0.5),
+        );
+      } else if (cleared && !exhibition) {
+        c.add(this.add.text(0, y + 36, "Cleared", { fontFamily: "Georgia", fontSize: "12px", color: "#8ecf6a" }).setOrigin(0.5));
+      } else {
+        this.addBtn(c, 0, y + 42, exhibition ? "Exhibition" : i === 2 ? "Send — pride" : "Send", () => {
+          gameState.pendingSchoolBout = { npcId: student.id, opponentId: f.id };
+          gameState.pendingArenaOpponent = f.id;
+          this.gateHouse = null;
+          this.schoolNpc = null;
+          this.schoolHouse = null;
+          this.closeOverlay();
+          bus.emit("enter-arena", f.id);
+        }, 200);
+      }
+    });
+
+    if (!studentRec.glory && schoolStudentUnlocked(student.id) && !studentRec.injured) {
+      ensureNight();
+      const night = currentNight();
+      if (night && schoolReadyForUndercard(student.id)) {
+        this.addBtn(c, 0, 195, "Send to night", () => {
+          gameState.pendingSchoolBout = { npcId: student.id, opponentId: night.opponentId };
+          const r = enterNight();
+          if (r !== "ok") {
+            gameState.pendingSchoolBout = null;
+            this.toast(r === "locked" ? "Night is locked." : "No night bout.");
+            return;
+          }
+          this.gateHouse = null;
+          this.schoolNpc = null;
+          this.schoolHouse = null;
+          this.closeOverlay();
+          bus.emit("enter-arena", night.opponentId);
+        }, 200);
+      }
+    }
+
+    this.addBtn(c, -120, 250, "Students", () => {
+      this.schoolNpc = null;
+      this.schoolHouse = null;
+      this.openGate();
+    }, 180);
+    this.addBtn(c, 120, 250, "Stay at the ludus", () => {
+      this.schoolNpc = null;
+      this.schoolHouse = null;
+      this.closeOverlay();
+    }, 200);
+  }
+
+  openLocker = (id: unknown): void => {
+    if (typeof id !== "string" || !isSchoolNpc(id)) return;
+    const npc = getNpc(id);
+    const rec = getSchoolRecord(id);
+    const focus = SCHOOL_FOCUS[id as SchoolNpcId];
+    const foeId = schoolNextFoeId(id);
+    const unlocked = schoolStudentUnlocked(id);
+    const need = schoolReadyNeeds(id);
+    const c = this.box(600, 580, "LOCKER");
+    c.add(this.add.text(0, -245, npc.name, { fontFamily: "Cinzel, Georgia", fontSize: "26px", color: unlocked || rec.glory ? "#e8c96a" : "#6a5a4a" }).setOrigin(0.5));
+    if (rec.glory) {
+      c.add(this.add.text(0, -214, "DONE", { fontFamily: "Cinzel, Georgia", fontSize: "16px", color: "#8ecf6a" }).setOrigin(0.5));
+      c.add(
+        this.add
+          .text(0, -188, `Act goal complete · Glory ${schoolGloryCount()}/${SCHOOL_IDS.length}`, {
+            fontFamily: "Georgia",
+            fontSize: "14px",
+            color: "#8ecf6a",
+          })
+          .setOrigin(0.5),
+      );
+      schoolReadyChecklist(id).forEach((item, i) => {
+        c.add(
+          this.add
+            .text(0, -150 + i * 24, `${item.ok ? "✓" : "○"}  ${item.label}`, {
+              fontFamily: "Georgia",
+              fontSize: "13px",
+              color: item.ok ? "#8ecf6a" : "#b8a890",
+            })
+            .setOrigin(0.5),
+        );
+      });
+      c.add(this.add.text(0, 20, "Exhibition bouts only.", { fontFamily: "Georgia", fontSize: "14px", color: "#b8a890" }).setOrigin(0.5));
+      this.addBtn(c, 0, 90, "Exhibition", () => {
+        this.gateTab = "school";
+        this.schoolNpc = id;
+        this.schoolHouse = null;
+        this.openGate();
+      }, 180);
+      this.addBtn(c, 0, 160, "Close", () => this.closeOverlay(), 160);
+      return;
+    }
+
+    c.add(this.add.text(0, -214, focus.specialty, { fontFamily: "Georgia", fontSize: "15px", color: "#e8dcc8" }).setOrigin(0.5));
+    c.add(this.add.text(0, -190, focus.line, { fontFamily: "Georgia", fontSize: "13px", color: "#b8a890" }).setOrigin(0.5));
+    c.add(
+      this.add
+        .text(0, -160, `Training  ${meterBar(rec.training, 6)}  ${rec.training}/${need.prideTraining}`, {
+          fontFamily: "Georgia",
+          fontSize: "14px",
+          color: "#e8dcc8",
+        })
+        .setOrigin(0.5),
+    );
+    c.add(
+      this.add
+        .text(0, -138, `Lessons  ${rec.lessons ?? 0}/${need.prideLessons}  ·  Path ${Math.min(3, rec.rung)}/3  ·  ${rec.wins}–${rec.losses}`, {
+          fontFamily: "Georgia",
+          fontSize: "13px",
+          color: "#b8a890",
+        })
+        .setOrigin(0.5),
+    );
+
+    const readyLabel = schoolReadinessLabel(id);
+    const readyColor = !unlocked ? "#6a5a4a" : schoolReadyForChampion(id) ? "#8ecf6a" : schoolReadyForUndercard(id) ? "#e8c96a" : "#c07060";
+    c.add(this.add.text(0, -108, readyLabel, { fontFamily: "Cinzel, Georgia", fontSize: "16px", color: readyColor }).setOrigin(0.5));
+    if (unlocked) {
+      c.add(this.add.text(0, -84, "SPAR adds Training · Teach adds Lessons", { fontFamily: "Georgia", fontSize: "12px", color: "#9a8a78" }).setOrigin(0.5));
+    }
+    schoolReadyChecklist(id).forEach((item, i) => {
+      c.add(
+        this.add
+          .text(0, -55 + i * 20, `${item.ok ? "✓" : "○"}  ${item.label}`, {
+            fontFamily: "Georgia",
+            fontSize: "13px",
+            color: item.ok ? "#8ecf6a" : "#b8a890",
+          })
+          .setOrigin(0.5),
+      );
+    });
+
+    if (!unlocked) {
+      c.add(
+        this.add
+          .text(0, 50, schoolUnlockHint(id), {
+            fontFamily: "Georgia",
+            fontSize: "14px",
+            color: "#c07060",
+            align: "center",
+            wordWrap: { width: 480 },
+          })
+          .setOrigin(0.5),
+      );
+    } else if (rec.injured) {
+      c.add(this.add.text(0, 40, "Injured — rest them before booking.", { fontFamily: "Georgia", fontSize: "14px", color: "#c07060" }).setOrigin(0.5));
+    } else if (foeId) {
+      const rival = schoolPowerCompare(id, foeId);
+      const foe = getRival(foeId)?.fighter;
+      const step = schoolCircuitRungLabel(Math.min(2, rec.rung));
+      c.add(
+        this.add
+          .text(0, 45, foe ? `Next: ${step} · ${foe.name}` : "Next school foe", {
+            fontFamily: "Georgia",
+            fontSize: "14px",
+            color: "#e8c96a",
+          })
+          .setOrigin(0.5),
+      );
+      c.add(
+        this.add
+          .text(0, 68, `Them HP ${rival.foe.maxHealth} / ATK ${rival.foe.attack}  ·  ${rival.match}`, {
+            fontFamily: "Georgia",
+            fontSize: "13px",
+            color: rival.match === "Fair" ? "#8ecf6a" : rival.match === "Hard" ? "#e8c96a" : "#c07060",
+          })
+          .setOrigin(0.5),
+      );
+    }
+
+    if (rec.injured && unlocked) {
+      const free = gameState.schoolFreeRestAvailable;
+      this.addBtn(c, 0, 130, free ? "Rest  ·  free" : `Rest  ·  ${REST_COST} denarii`, () => {
+        const result = restSchoolInjury(id);
+        if (result === "ok" || result === "free") this.toast(result === "free" ? `${npc.name} rests — on the house.` : `${npc.name} rests.`);
+        else if (result === "poor") this.toast("Not enough denarii.");
+        this.openLocker(id);
+      }, 220);
+    } else if (unlocked) {
+      this.addBtn(c, -140, 145, "Teach", () => {
+        this.closeOverlay();
+        bus.emit("teach-start", id);
+      }, 160);
+      this.addBtn(c, 140, 145, "Book fight", () => {
+        this.gateTab = "school";
+        this.schoolNpc = id;
+        this.schoolHouse = null;
+        this.openGate();
+      }, 160);
+    }
+    this.addBtn(c, 0, 215, "Close", () => this.closeOverlay(), 160);
+  };
+
+
   openDialogue = (payload: { name: string; lines: string[]; onDone?: () => void }): void => {
     this.closeOverlay();
     gameState.inDialogue = true;
@@ -2365,6 +3308,7 @@ export class UIScene extends Phaser.Scene {
       const done = this.dialogueDone;
       this.dialogueDone = undefined;
       done?.();
+      this.flushActCard();
       return;
     }
     this.renderDialogue();
@@ -2376,21 +3320,65 @@ export class UIScene extends Phaser.Scene {
     this.perfectText?.destroy();
     this.perfectFlash = undefined;
     this.perfectText = undefined;
-    const c = this.box(620, 360, payload.title);
+
+    const wrapW = 540;
+    const probe = this.add
+      .text(-9999, -9999, payload.body, {
+        fontFamily: "Georgia",
+        fontSize: "17px",
+        wordWrap: { width: wrapW },
+        align: "center",
+      })
+      .setOrigin(0.5, 0);
+    const measured = probe.height;
+    probe.destroy();
+
+    const header = 72;
+    const footer = 76;
+    const gap = 20;
+    const tall = Math.min(GAME_HEIGHT - 48, Math.max(340, header + measured + gap + footer));
+    const c = this.box(660, tall, payload.title);
     this.resultPending = true;
+    gameState.paused = true;
+    gameState.inMenu = true;
+
+    const bodyTop = -tall / 2 + header;
+    const btnY = tall / 2 - 42;
+    const maxBodyH = Math.max(80, btnY - 28 - bodyTop);
+
+    let fontSize = 17;
+    const body = this.add
+      .text(0, bodyTop, payload.body, {
+        fontFamily: "Georgia",
+        fontSize: `${fontSize}px`,
+        color: "#e8dcc8",
+        wordWrap: { width: wrapW },
+        align: "center",
+      })
+      .setOrigin(0.5, 0);
+    while (body.height > maxBodyH && fontSize > 13) {
+      fontSize -= 1;
+      body.setStyle({ fontSize: `${fontSize}px` });
+    }
+    if (body.height > maxBodyH) {
+      body.setCrop(0, 0, Math.ceil(body.width), Math.floor(maxBodyH));
+    }
+    c.add(body);
+    const action = payload.action ?? "Continue";
+    this.addBtn(c, 0, btnY, action, () => this.finishResult(), 280);
     c.add(
       this.add
-        .text(0, 20, payload.body, {
+        .text(0, btnY + 36, "Returns on its own in a moment — or click / Space", {
           fontFamily: "Georgia",
-          fontSize: "18px",
-          color: "#e8dcc8",
-          wordWrap: { width: 520 },
-          align: "center",
+          fontSize: "13px",
+          color: "#9a8a78",
         })
         .setOrigin(0.5),
     );
-    this.addBtn(c, 0, 130, payload.action ?? "Continue", () => this.finishResult(), 280);
+    this.dimmer?.setDepth(1998);
     this.dimmer?.on("pointerdown", () => this.finishResult());
+    if (this.resultAutoTimer != null) clearTimeout(this.resultAutoTimer);
+    this.resultAutoTimer = setTimeout(() => this.finishResult(), 2400);
   };
 
   showBoss = (name: string): void => {
@@ -2483,15 +3471,27 @@ export class UIScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setScrollFactor(0)
       .setDepth(3501);
+    const callSub = this.add
+      .text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 68, missio ? "MERCY" : "STEEL", {
+        fontFamily: "Cinzel, Georgia",
+        fontSize: "22px",
+        color: missio ? "#e8dcc8" : "#e8b0a8",
+        stroke: "#1a1210",
+        strokeThickness: 5,
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(3501);
     audio.sfx(missio ? "missio" : "crowd");
     this.tweens.add({
-      targets: [this.perfectFlash, this.perfectText],
+      targets: [this.perfectFlash, this.perfectText, callSub],
       alpha: 0,
       delay: 280,
       duration: 900,
       onComplete: () => {
         this.perfectFlash?.destroy();
         this.perfectText?.destroy();
+        callSub.destroy();
         this.perfectFlash = undefined;
         this.perfectText = undefined;
       },
@@ -2504,9 +3504,11 @@ export class UIScene extends Phaser.Scene {
     const crowdMissio = payload.crowd === "missio";
     const followAct = crowdMissio ? "Mercy" : "Steel";
     const defyAct = crowdMissio ? "Steel" : "Mercy";
+    const followMercy = followAct === "Mercy";
+    const defyMercy = defyAct === "Mercy";
     const y = GAME_HEIGHT / 2 + 92;
     const header = this.add
-      .text(GAME_WIDTH / 2, y - 58, crowdMissio ? "THE CROWD CALLS MISSIO" : "THE CROWD CALLS IUGULA", {
+      .text(GAME_WIDTH / 2, y - 64, crowdMissio ? "THE CROWD CALLS MISSIO" : "THE CROWD CALLS IUGULA", {
         fontFamily: "Cinzel, Georgia",
         fontSize: "22px",
         color: crowdMissio ? "#ffe08a" : "#e07060",
@@ -2517,9 +3519,9 @@ export class UIScene extends Phaser.Scene {
       .setScrollFactor(0)
       .setDepth(3600);
     const sub = this.add
-      .text(GAME_WIDTH / 2, y - 28, "Follow the stands, or go against them.", {
+      .text(GAME_WIDTH / 2, y - 34, crowdMissio ? "They beg for life — follow, or defy." : "They demand death — follow, or defy.", {
         fontFamily: "Georgia",
-        fontSize: "16px",
+        fontSize: "15px",
         color: "#e8dcc8",
         stroke: "#1a1210",
         strokeThickness: 4,
@@ -2528,46 +3530,55 @@ export class UIScene extends Phaser.Scene {
       .setScrollFactor(0)
       .setDepth(3600);
     const followBg = this.add
-      .rectangle(GAME_WIDTH / 2 - 150, y + 28, 220, 72, 0x3a281c, 0.96)
-      .setStrokeStyle(3, COLORS.gold)
+      .rectangle(GAME_WIDTH / 2 - 150, y + 34, 236, 88, followMercy ? 0x3a2e18 : 0x3a1814, 0.96)
+      .setStrokeStyle(3, followMercy ? COLORS.gold : 0xe07060)
       .setScrollFactor(0)
       .setDepth(3600)
       .setInteractive({ useHandCursor: true });
     const followLabel = this.add
-      .text(GAME_WIDTH / 2 - 150, y + 16, "FOLLOW", {
+      .text(GAME_WIDTH / 2 - 150, y + 12, followAct.toUpperCase(), {
         fontFamily: "Cinzel, Georgia",
-        fontSize: "20px",
-        color: "#e8c96a",
+        fontSize: "26px",
+        color: followMercy ? "#ffe08a" : "#e07060",
       })
       .setOrigin(0.5)
       .setScrollFactor(0)
       .setDepth(3601);
     const followHint = this.add
-      .text(GAME_WIDTH / 2 - 150, y + 40, `${followAct}  ·  E`, {
+      .text(GAME_WIDTH / 2 - 150, y + 40, followMercy ? "Spare them" : "Finish them", {
         fontFamily: "Georgia",
         fontSize: "14px",
         color: "#e8dcc8",
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(3601);
+    const followKey = this.add
+      .text(GAME_WIDTH / 2 - 150, y + 60, "Follow the crowd  ·  E", {
+        fontFamily: "Georgia",
+        fontSize: "12px",
+        color: "#b8a890",
       })
       .setOrigin(0.5)
       .setScrollFactor(0)
       .setDepth(3601);
     const defyBg = this.add
-      .rectangle(GAME_WIDTH / 2 + 150, y + 28, 220, 72, 0x3a1814, 0.96)
-      .setStrokeStyle(3, 0xe07060)
+      .rectangle(GAME_WIDTH / 2 + 150, y + 34, 236, 88, defyMercy ? 0x3a2e18 : 0x3a1814, 0.96)
+      .setStrokeStyle(3, defyMercy ? COLORS.gold : 0xe07060)
       .setScrollFactor(0)
       .setDepth(3600)
       .setInteractive({ useHandCursor: true });
     const defyLabel = this.add
-      .text(GAME_WIDTH / 2 + 150, y + 16, "DEFY", {
+      .text(GAME_WIDTH / 2 + 150, y + 12, defyAct.toUpperCase(), {
         fontFamily: "Cinzel, Georgia",
-        fontSize: "20px",
-        color: "#e07060",
+        fontSize: "26px",
+        color: defyMercy ? "#ffe08a" : "#e07060",
       })
       .setOrigin(0.5)
       .setScrollFactor(0)
       .setDepth(3601);
     const defyHint = this.add
-      .text(GAME_WIDTH / 2 + 150, y + 40, `${defyAct}  ·  Q`, {
+      .text(GAME_WIDTH / 2 + 150, y + 40, defyMercy ? "Spare them" : "Finish them", {
         fontFamily: "Georgia",
         fontSize: "14px",
         color: "#e8dcc8",
@@ -2575,13 +3586,22 @@ export class UIScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setScrollFactor(0)
       .setDepth(3601);
-    followBg.on("pointerover", () => followBg.setFillStyle(0x4a3424));
-    followBg.on("pointerout", () => followBg.setFillStyle(0x3a281c));
+    const defyKey = this.add
+      .text(GAME_WIDTH / 2 + 150, y + 60, "Defy the crowd  ·  Q", {
+        fontFamily: "Georgia",
+        fontSize: "12px",
+        color: "#b8a890",
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(3601);
+    followBg.on("pointerover", () => followBg.setFillStyle(followMercy ? 0x4a3a20 : 0x5a2420));
+    followBg.on("pointerout", () => followBg.setFillStyle(followMercy ? 0x3a2e18 : 0x3a1814));
     followBg.on("pointerdown", () => this.pickJudgment(true));
-    defyBg.on("pointerover", () => defyBg.setFillStyle(0x5a2420));
-    defyBg.on("pointerout", () => defyBg.setFillStyle(0x3a1814));
+    defyBg.on("pointerover", () => defyBg.setFillStyle(defyMercy ? 0x4a3a20 : 0x5a2420));
+    defyBg.on("pointerout", () => defyBg.setFillStyle(defyMercy ? 0x3a2e18 : 0x3a1814));
     defyBg.on("pointerdown", () => this.pickJudgment(false));
-    this.judgmentWrap = [header, sub, followBg, followLabel, followHint, defyBg, defyLabel, defyHint];
+    this.judgmentWrap = [header, sub, followBg, followLabel, followHint, followKey, defyBg, defyLabel, defyHint, defyKey];
   };
 
   private hideJudgment = (): void => {
@@ -2612,6 +3632,7 @@ export class UIScene extends Phaser.Scene {
     rows: number;
     playerX: number;
     playerY: number;
+    area?: string;
     marks: { x: number; y: number; color: number; kind: string }[];
   }): void => {
     if (this.minimapScene !== "ludus" || !gameState.settings.showMinimap || !payload.show) {
@@ -2620,12 +3641,17 @@ export class UIScene extends Phaser.Scene {
     }
     const w = 168;
     const h = 126;
+    const areaText = `${(payload.area ?? "Ludus").toUpperCase()}  ·  M`;
     if (!this.minimapWrap) {
-      this.minimapWrap = this.add.container(18, GAME_HEIGHT - h - 18).setScrollFactor(0).setDepth(140);
-      const bg = this.add.rectangle(w / 2, h / 2, w, h, 0x1a1210, 0.82).setStrokeStyle(2, COLORS.gold);
+      this.minimapWrap = this.add.container(16, GAME_HEIGHT - h - 14).setScrollFactor(0).setDepth(140);
+      const bg = this.add.rectangle(w / 2, h / 2, w, h, 0x1a1210, 0.9).setStrokeStyle(2, COLORS.gold);
       this.minimapGfx = this.add.graphics();
-      const label = this.add.text(w / 2, 8, "YARD  ·  M", { fontFamily: "Cinzel, Georgia", fontSize: "11px", color: "#d4a84b" }).setOrigin(0.5, 0);
-      this.minimapWrap.add([bg, this.minimapGfx, label]);
+      this.minimapLabel = this.add
+        .text(w / 2, 8, areaText, { fontFamily: "Cinzel, Georgia", fontSize: "11px", color: "#d4a84b" })
+        .setOrigin(0.5, 0);
+      this.minimapWrap.add([bg, this.minimapGfx, this.minimapLabel]);
+    } else {
+      this.minimapLabel?.setText(areaText);
     }
     this.minimapWrap.setVisible(true);
     const g = this.minimapGfx!;
@@ -2652,19 +3678,364 @@ export class UIScene extends Phaser.Scene {
   };
 
   toast = (msg: string): void => {
+    // Mid-screen toasts bury result/dialogue copy — pin them high during arena or overlays
+    const arenaUp =
+      this.scene.isActive("ArenaScene") || this.scene.isPaused("ArenaScene") || this.scene.isSleeping("ArenaScene");
+    const pinTop = this.resultPending || Boolean(this.overlay) || arenaUp || gameState.paused || gameState.inMenu;
+    const y = pinTop ? 56 : GAME_HEIGHT / 2 - 80;
     const t = this.add
-      .text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 80, msg, {
+      .text(GAME_WIDTH / 2, y, msg, {
         fontFamily: "Georgia",
-        fontSize: "20px",
+        fontSize: "18px",
         color: "#e8c96a",
         backgroundColor: "#1a1210ee",
         padding: { x: 16, y: 10 },
       })
       .setOrigin(0.5)
       .setScrollFactor(0)
-      .setDepth(4000);
-    this.tweens.add({ targets: t, alpha: 0, y: t.y - 30, delay: 900, duration: 400, onComplete: () => t.destroy() });
+      .setDepth(5000);
+    this.tweens.add({ targets: t, alpha: 0, y: t.y - 24, delay: 1100, duration: 400, onComplete: () => t.destroy() });
   };
+
+  showDrillHowto = (payload: {
+    id: string;
+    title: string;
+    student: string;
+    teaching: string;
+    goal: string;
+    steps: string[];
+  }): void => {
+    this.hideDrillHowto();
+    this.lock(true);
+    this.drillHowtoId = payload.id;
+    const dim = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x0a0806, 0.72).setScrollFactor(0).setDepth(3500);
+    const panel = this.add
+      .rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, 640, 460, 0x1a1210, 0.96)
+      .setStrokeStyle(2, COLORS.gold)
+      .setScrollFactor(0)
+      .setDepth(3501);
+    const title = this.add
+      .text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 195, payload.title, {
+        fontFamily: "Cinzel, Georgia",
+        fontSize: "28px",
+        color: "#e8c96a",
+        stroke: "#1a1210",
+        strokeThickness: 5,
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(3502);
+    const role = this.add
+      .text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 160, `You are the teacher · ${payload.student} learns by watching`, {
+        fontFamily: "Georgia",
+        fontSize: "15px",
+        color: "#e8c96a",
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(3502);
+    const teaching = this.add
+      .text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 118, payload.teaching, {
+        fontFamily: "Georgia",
+        fontSize: "16px",
+        color: "#c4b49a",
+        align: "center",
+        wordWrap: { width: 560 },
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(3502);
+    const goalLabel = this.add
+      .text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 68, "WHAT TO DO", {
+        fontFamily: "Cinzel, Georgia",
+        fontSize: "13px",
+        color: "#9a8a78",
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(3502);
+    const goal = this.add
+      .text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 42, payload.goal, {
+        fontFamily: "Georgia",
+        fontSize: "20px",
+        color: "#fff4d8",
+        align: "center",
+        wordWrap: { width: 540 },
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(3502);
+    const steps: Phaser.GameObjects.GameObject[] = [];
+    payload.steps.forEach((line, i) => {
+      steps.push(
+        this.add
+          .text(GAME_WIDTH / 2 - 260, GAME_HEIGHT / 2 + 5 + i * 36, `${i + 1}.  ${line}`, {
+            fontFamily: "Georgia",
+            fontSize: "15px",
+            color: "#e8dcc8",
+            wordWrap: { width: 520 },
+          })
+          .setOrigin(0, 0)
+          .setScrollFactor(0)
+          .setDepth(3502),
+      );
+    });
+    const beginBg = this.add
+      .rectangle(GAME_WIDTH / 2 - 100, GAME_HEIGHT / 2 + 165, 180, 44, 0x3a2a18, 1)
+      .setStrokeStyle(2, COLORS.gold)
+      .setScrollFactor(0)
+      .setDepth(3502)
+      .setInteractive({ useHandCursor: true });
+    const beginTxt = this.add
+      .text(GAME_WIDTH / 2 - 100, GAME_HEIGHT / 2 + 165, "Show them", {
+        fontFamily: "Cinzel, Georgia",
+        fontSize: "18px",
+        color: "#e8c96a",
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(3503);
+    const cancelBg = this.add
+      .rectangle(GAME_WIDTH / 2 + 100, GAME_HEIGHT / 2 + 165, 160, 44, 0x2a2018, 1)
+      .setStrokeStyle(2, 0x6a5a48)
+      .setScrollFactor(0)
+      .setDepth(3502)
+      .setInteractive({ useHandCursor: true });
+    const cancelTxt = this.add
+      .text(GAME_WIDTH / 2 + 100, GAME_HEIGHT / 2 + 165, "Cancel", {
+        fontFamily: "Cinzel, Georgia",
+        fontSize: "18px",
+        color: "#c4b49a",
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(3503);
+    beginBg.on("pointerdown", () => {
+      const id = this.drillHowtoId;
+      this.hideDrillHowto();
+      if (id) bus.emit("drill-begin", id);
+    });
+    cancelBg.on("pointerdown", () => this.hideDrillHowto());
+    this.drillHowtoWrap = [
+      dim,
+      panel,
+      title,
+      role,
+      teaching,
+      goalLabel,
+      goal,
+      ...steps,
+      beginBg,
+      beginTxt,
+      cancelBg,
+      cancelTxt,
+    ];
+  };
+
+  hideDrillHowto = (): void => {
+    this.drillHowtoWrap.forEach((o) => o.destroy());
+    this.drillHowtoWrap = [];
+    this.drillHowtoId = null;
+    if (!this.overlay && !this.dialogueBox && !this.actCardOpen && !this.judgmentOpen) this.lock(false);
+  };
+
+  showDrillHud = (payload: {
+    title: string;
+    sub: string;
+    score: string;
+    time: number;
+    prompt?: string;
+    demo?: boolean;
+  }): void => {
+    this.hideDrillHud();
+    const y = 64;
+    const bg = this.add
+      .rectangle(GAME_WIDTH / 2, y + 48, 720, 118, 0x1a1210, 0.94)
+      .setStrokeStyle(2, payload.demo ? 0x7ab8e8 : COLORS.gold)
+      .setScrollFactor(0)
+      .setDepth(2800);
+    const title = this.add
+      .text(GAME_WIDTH / 2, y, payload.title, {
+        fontFamily: "Cinzel, Georgia",
+        fontSize: "22px",
+        color: "#e8c96a",
+        stroke: "#1a1210",
+        strokeThickness: 5,
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(2801);
+    const sub = this.add
+      .text(GAME_WIDTH / 2, y + 26, payload.sub, {
+        fontFamily: "Georgia",
+        fontSize: "14px",
+        color: "#e8dcc8",
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(2801);
+    this.drillHudPrompt = this.add
+      .text(GAME_WIDTH / 2, y + 54, payload.prompt ?? "", {
+        fontFamily: "Cinzel, Georgia",
+        fontSize: "22px",
+        color: payload.demo ? "#9ec8f0" : "#fff4d8",
+        stroke: "#1a1210",
+        strokeThickness: 5,
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(2801);
+    this.drillHudScore = this.add
+      .text(GAME_WIDTH / 2, y + 86, `Shown  ${payload.score}`, {
+        fontFamily: "Cinzel, Georgia",
+        fontSize: "16px",
+        color: "#8ecf6a",
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(2801);
+    const hint = this.add
+      .text(GAME_WIDTH / 2, y + 104, "No timer — the circle waits for you · E cancels", {
+        fontFamily: "Georgia",
+        fontSize: "12px",
+        color: "#9a8a78",
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(2801);
+    this.drillHudWrap = [bg, title, sub, this.drillHudPrompt, this.drillHudScore, hint];
+    this.drillHudTime = undefined;
+  };
+
+  hideDrillHud = (): void => {
+    this.drillHudWrap.forEach((o) => o.destroy());
+    this.drillHudWrap = [];
+    this.drillHudScore = undefined;
+    this.drillHudTime = undefined;
+    this.drillHudPrompt = undefined;
+  };
+
+  onDrillScore = (payload: { score: string; time: number; prompt?: string }): void => {
+    this.drillHudScore?.setText(`Shown  ${payload.score}`);
+    if (payload.prompt != null) this.drillHudPrompt?.setText(payload.prompt);
+  };
+
+  showActCard = (act: ActId): void => {
+    if (this.actCardOpen) return;
+    if (this.overlay || this.resultPending || gameState.inDialogue || this.judgmentOpen || this.dialogueBox) {
+      this.pendingActCard = act;
+      return;
+    }
+    this.renderActCard(act);
+  };
+
+  private flushActCard(): void {
+    if (this.pendingActCard == null) return;
+    if (this.overlay || this.resultPending || gameState.inDialogue || this.judgmentOpen || this.dialogueBox || this.actCardOpen) {
+      return;
+    }
+    const act = this.pendingActCard;
+    this.pendingActCard = null;
+    this.renderActCard(act);
+  }
+
+  private renderActCard(act: ActId): void {
+    const meta = ACT_META[act];
+    this.actCardOpen = true;
+    this.actCardAct = act;
+    this.lock(true);
+    audio.sfx("ui");
+
+    const dim = this.add
+      .rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x0a0806, 0.82)
+      .setScrollFactor(0)
+      .setDepth(4500)
+      .setAlpha(0)
+      .setInteractive();
+    const ruleTop = this.add
+      .rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 78, 280, 2, COLORS.gold, 0.85)
+      .setScrollFactor(0)
+      .setDepth(4501)
+      .setAlpha(0);
+    const ruleBot = this.add
+      .rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 78, 280, 2, COLORS.gold, 0.85)
+      .setScrollFactor(0)
+      .setDepth(4501)
+      .setAlpha(0);
+    const actLabel = this.add
+      .text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 48, `ACT ${meta.roman}`, {
+        fontFamily: "Cinzel, Georgia",
+        fontSize: "22px",
+        color: "#e8c96a",
+        stroke: "#1a1210",
+        strokeThickness: 5,
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(4502)
+      .setAlpha(0);
+    const title = this.add
+      .text(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 4, meta.title.toUpperCase(), {
+        fontFamily: "Cinzel, Georgia",
+        fontSize: "48px",
+        color: "#f0e6d2",
+        stroke: "#1a1210",
+        strokeThickness: 8,
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(4502)
+      .setAlpha(0)
+      .setScale(0.92);
+    const blurb = this.add
+      .text(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 58, meta.blurb, {
+        fontFamily: "Georgia",
+        fontSize: "18px",
+        color: "#c4b49a",
+        stroke: "#1a1210",
+        strokeThickness: 4,
+        align: "center",
+        wordWrap: { width: 520 },
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(4502)
+      .setAlpha(0);
+    const hint = this.add
+      .text(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 118, "Continue  ·  Space / E", {
+        fontFamily: "Georgia",
+        fontSize: "14px",
+        color: "#9a8a78",
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(4502)
+      .setAlpha(0);
+
+    this.actCardWrap = [dim, ruleTop, ruleBot, actLabel, title, blurb, hint];
+    dim.on("pointerdown", () => this.dismissActCard());
+
+    this.tweens.add({ targets: dim, alpha: 0.82, duration: 320 });
+    this.tweens.add({ targets: [ruleTop, ruleBot, actLabel], alpha: 1, duration: 420, delay: 120 });
+    this.tweens.add({ targets: title, alpha: 1, scale: 1, duration: 480, delay: 200, ease: "Back.easeOut" });
+    this.tweens.add({ targets: [blurb, hint], alpha: 1, duration: 400, delay: 360 });
+  }
+
+  private dismissActCard(silent = false): void {
+    if (!this.actCardOpen && this.actCardWrap.length === 0) return;
+    const act = this.actCardAct;
+    this.actCardOpen = false;
+    this.actCardAct = null;
+    this.actCardWrap.forEach((o) => o.destroy());
+    this.actCardWrap = [];
+    if (!silent) {
+      this.lock(false);
+      gameState.paused = false;
+      gameState.inMenu = false;
+      if (act != null) bus.emit("act-card-done", act);
+      this.flushActCard();
+    }
+  }
 
   private addAttackButton(): void {
     const x = GAME_WIDTH - 96;
@@ -2728,7 +4099,7 @@ export class UIScene extends Phaser.Scene {
       .setScrollFactor(0)
       .setDepth(161);
     this.add
-      .text(x, y + 16, "or G", {
+      .text(x, y + 16, `or ${prettyKey(mergedKeybinds().heavy)}`, {
         fontFamily: "Georgia",
         fontSize: "12px",
         color: "#d4a84b",

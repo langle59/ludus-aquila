@@ -2,6 +2,7 @@ import type { ObjectiveId, SaveData, SettingsData, TunicColor, WeaponId } from "
 import { DEFAULT_KEYBINDS } from "../types";
 import { ACTIVE_SLOT_KEY, SAVE_KEY, SAVE_SLOT_COUNT, SETTINGS_KEY, TILE_SIZE, saveSlotKey } from "../config";
 import { getHouse } from "../data/houses";
+import { emptyChamber, emptySchool, ensureSchoolCosmetics, mergeChamber, mergeSchool } from "../data/school";
 
 export type SaveSlotId = 1 | 2 | 3;
 
@@ -28,6 +29,15 @@ export function xpForLevel(level: number): number {
   return 40 + level * 35;
 }
 
+function migrateKeybinds(parsed?: Partial<Record<string, string>>): SettingsData["keybinds"] {
+  const next = { ...DEFAULT_KEYBINDS, ...(parsed ?? {}) };
+  if ((parsed?.heavy ?? "G") === "G" && (parsed?.parry ?? "F") === "F") {
+    next.heavy = "F";
+    next.parry = "G";
+  }
+  return next;
+}
+
 export function createNewSave(playerName: string, tunic: TunicColor, playerHouse: string | null = null): SaveData {
   const stats = defaultStats();
   return {
@@ -36,6 +46,9 @@ export function createNewSave(playerName: string, tunic: TunicColor, playerHouse
     playerHouse,
     tournamentWins: 0,
     freedomWon: false,
+    lanistaUnlocked: false,
+    school: emptySchool(),
+    chamber: emptyChamber(),
     nightKind: null,
     nightOpponent: null,
     nightWins: 0,
@@ -49,7 +62,7 @@ export function createNewSave(playerName: string, tunic: TunicColor, playerHouse
     statPoints: 0,
     denarii: 12,
     reputation: "Unknown",
-    equippedWeapon: "gladius",
+    equippedWeapon: null,
     unlockedWeapons: ["gladius"],
     defeatedOpponents: [],
     defeatedHouses: [],
@@ -114,6 +127,9 @@ class GameState {
   inDialogue = false;
   inMenu = false;
   pendingArenaOpponent: string | null = null;
+  pendingSchoolBout: { npcId: string; opponentId: string } | null = null;
+  /** One free school injury rest per ludus visit. */
+  schoolFreeRestAvailable = true;
   pendingNight = false;
   pendingForcedWeapon: WeaponId | null = null;
   pendingFeast = false;
@@ -136,8 +152,9 @@ class GameState {
           ...defaultSettings,
           ...parsed,
           musicMuted: Boolean(parsed.musicMuted),
-          keybinds: { ...DEFAULT_KEYBINDS, ...(parsed.keybinds ?? {}) },
+          keybinds: migrateKeybinds(parsed.keybinds),
         };
+        if (parsed.keybinds?.heavy === "G" && parsed.keybinds?.parry === "F") this.persistSettings();
       }
     } catch {
       this.settings = { ...defaultSettings };
@@ -218,14 +235,15 @@ class GameState {
   }
 
   private progressLabel(s: Partial<SaveData>): string {
-    if (s.freedomWon) return "The Free Man";
+    if (s.lanistaUnlocked) return "Act III — Lanista of Aquila";
+    if (s.freedomWon) return "Act III — The School";
     const obj = String(s.currentObjective ?? "");
-    if (obj.startsWith("tournament") || obj === "free") return "The Rudis";
+    if (obj.startsWith("tournament") || obj === "free" || obj === "take_school") return "Act II — The Rudis";
     const n = s.defeatedHouses?.length ?? 0;
-    if (n === 1) return "1 house fallen";
-    if (n > 1) return `${n} houses fallen`;
-    if (s.tutorialComplete) return "The circuit";
-    return "The yard";
+    if (n === 1) return "Act II — 1 house fallen";
+    if (n > 1) return `Act II — ${n} houses fallen`;
+    if (s.tutorialComplete) return "Act II — The Circuit";
+    return "Act I — The Yard";
   }
 
   hasSave(): boolean {
@@ -237,6 +255,7 @@ class GameState {
     this.inDialogue = false;
     this.inMenu = false;
     this.pendingArenaOpponent = null;
+    this.pendingSchoolBout = null;
     this.pendingNight = false;
     this.pendingForcedWeapon = null;
     this.pendingFeast = false;
@@ -325,6 +344,9 @@ class GameState {
     this.save.playerHouse = parsed.playerHouse && getHouse(parsed.playerHouse) ? parsed.playerHouse : null;
     this.save.tournamentWins = parsed.tournamentWins ?? 0;
     this.save.freedomWon = parsed.freedomWon ?? false;
+    this.save.lanistaUnlocked = parsed.lanistaUnlocked ?? false;
+    this.save.school = mergeSchool(parsed.school);
+    this.save.chamber = mergeChamber(parsed.chamber);
     this.save.nightKind = parsed.nightKind === "weapon" || parsed.nightKind === "exhibition" ? parsed.nightKind : null;
     this.save.nightOpponent = parsed.nightOpponent ?? null;
     this.save.nightWins = parsed.nightWins ?? 0;
@@ -336,9 +358,15 @@ class GameState {
       "equip_gladius",
       "attack_dummy",
       "learn_stamina",
+      "learn_heavy",
       "learn_dodge",
       "learn_block",
+      "learn_parry",
       "spar_friend",
+      "bout_titus",
+      "bout_rufus",
+      "bout_brom",
+      "bout_aelia",
       "return_lanista",
       "first_arena",
       "defeat_rival",
@@ -347,17 +375,43 @@ class GameState {
       "tournament_2",
       "tournament_3",
       "free",
+      "take_school",
+      "school",
     ];
     if (!known.includes(legacyObj as SaveData["currentObjective"])) {
       if (legacyObj === "after_wolf" && this.save.freedomWon) this.save.currentObjective = "free";
       else if (String(legacyObj).startsWith("tournament")) this.save.currentObjective = "tournament_1";
       else this.save.currentObjective = this.save.tutorialComplete ? "defeat_rival" : this.save.currentObjective;
     }
+    if (legacyObj === "spar_friend") this.save.currentObjective = "bout_titus";
+    if (!this.save.tutorialComplete && (legacyObj === "return_lanista" || legacyObj === "spar_friend")) {
+      const flags = this.save.tutorialFlags;
+      if (!flags.boutTitus) this.save.currentObjective = "bout_titus";
+      else if (!flags.boutRufus) this.save.currentObjective = "bout_rufus";
+      else if (!flags.boutBrom) this.save.currentObjective = "bout_brom";
+      else if (!flags.boutAelia) this.save.currentObjective = "bout_aelia";
+      else this.save.currentObjective = "return_lanista";
+    }
     if (!this.save.ownedCosmetics.includes("cape-none")) this.save.ownedCosmetics.push("cape-none");
     if (!this.save.ownedCosmetics.includes("scar-none")) this.save.ownedCosmetics.push("scar-none");
     if (this.save.freedomWon && !this.save.ownedCosmetics.includes("title-freeman")) {
       this.save.ownedCosmetics.push("title-freeman");
       this.save.title = "freeman";
+    }
+    if (this.save.tutorialComplete && !this.save.ownedCosmetics.includes("title-aquila")) {
+      this.save.ownedCosmetics.push("title-aquila");
+    }
+    if (!this.save.tutorialComplete && !this.save.tutorialFlags.equippedWeapon) {
+      this.save.equippedWeapon = null;
+    } else if (!this.save.equippedWeapon) {
+      this.save.equippedWeapon = "gladius";
+    }
+    if (!this.save.unlockedWeapons.includes("gladius")) this.save.unlockedWeapons.push("gladius");
+    ensureSchoolCosmetics();
+    if (this.save.lanistaUnlocked && (this.save.currentObjective === "free" || this.save.currentObjective === "take_school")) {
+      this.save.currentObjective = "school";
+    } else if (this.save.freedomWon && !this.save.lanistaUnlocked && this.save.currentObjective === "free") {
+      this.save.currentObjective = "take_school";
     }
     this.save.health = this.save.stats.maxHealth;
     this.save.stamina = this.save.stats.maxStamina;

@@ -8,6 +8,7 @@ import {
   rivalHouses,
 } from "../systems/progression";
 import { palAnimalName, palBrought, palNextHint, palTier, palTitle, palUnlocked } from "./pal";
+import { allSchoolGlory, getSchoolRecord } from "./school";
 import { ensureNight, nightEditorLine } from "../systems/nights";
 
 type LineFn = () => string[];
@@ -29,6 +30,28 @@ function afterAnyWin(): boolean {
 
 function tutorialDone(): boolean {
   return gameState.save.tutorialComplete;
+}
+
+function boutHint(): string | null {
+  const id = gameState.save.currentObjective;
+  if (id === "bout_titus") return "Titus";
+  if (id === "bout_rufus") return "Rufus";
+  if (id === "bout_brom") return "Brom";
+  if (id === "bout_aelia") return "Aelia";
+  return null;
+}
+
+function yardBoutLines(selfName: string): string[] | null {
+  if (tutorialDone()) return null;
+  const need = boutHint();
+  if (!need) {
+    if (gameState.save.currentObjective === "return_lanista") {
+      return [`"Go back to Marcellus. The yard already named you."`];
+    }
+    return [`"Dummy first. Then the four of us. Marcellus is watching."`];
+  }
+  if (need !== selfName) return [`"Not me. ${need} first."`];
+  return [`"Walk up. Click SPAR. Drop me. Yield does not count."`];
 }
 
 function houseCloth(): string {
@@ -66,6 +89,40 @@ export const DIALOGUE: Record<string, LineFn> = {
       return [
         `"You limp. Rest in Quarters for a few denarii, or drink unguent."`,
         `"I will not send a broken man to the sand."`,
+      ];
+    }
+    if (s.freedomWon && !s.lanistaUnlocked) {
+      return [
+        `"The rudis is yours. The yard is still my voice."`,
+        `"The book of the school is not. Titus, Brom, Aelia, Rufus — they need a man who has stood on the sand and come back."`,
+        `"Take the loft above quarters. Send them from the south gate. Watch. Their scars are not yours."`,
+      ];
+    }
+    if (s.lanistaUnlocked && (s.storyFlags.act3Complete || allSchoolGlory())) {
+      return [
+        `"Teacher of the Sand. The four have names the stands know."`,
+        `"You showed them in the yard. You watched them climb. That is the book, finished."`,
+        `"Other houses still keep men in chains. That work is not this gate. Not yet. But this yard is yours."`,
+      ];
+    }
+    if (s.lanistaUnlocked) {
+      const night = ensureNight();
+      if (night?.kind === "weapon") {
+        return [
+          `"The book is yours. The editor still pays."`,
+          `"${nightEditorLine(night)} You fight with the ${night.weaponName}. Or send a student from the School tab."`,
+        ];
+      }
+      if (night) {
+        return [
+          `"The book is yours. The editor still wants a name on the sand."`,
+          `"${nightEditorLine(night)} Fight it yourself, or send one of the four."`,
+        ];
+      }
+      return [
+        `"The loft is open. East of the yard — four lockers."`,
+        `"Teach in order: Titus, then Brom, then Aelia, then Rufus. Each needs more lessons and spars than the last."`,
+        `"Each has three bouts — Prospect, Contender, Pride. SPAR for Training. Teach for Lessons. Coach them from the stands."`,
       ];
     }
     if (s.freedomWon) {
@@ -173,22 +230,32 @@ export const DIALOGUE: Record<string, LineFn> = {
       const cloth = houseCloth();
       return [
         `"You are ${s.playerName}. ${cloth} cloth. This yard will try to eat you."`,
-        `"Armory. Dummy. Spar. Then you may see the sand."`,
+        `"WASD. Armory west. Dummy in the yard. Learn the steel — light, heavy, dodge, block, parry."`,
+        `"Then drop Titus, Rufus, Brom, and Aelia. One by one. Then I will name a champion."`,
       ];
     }
     if (s.currentObjective === "return_lanista") {
       return [
-        `"You have the shape of a fighter. Barely."`,
-        `"The south gate is open. Come back standing, or do not come back proud."`,
+        `"The four are down. The yard has a name for you."`,
+        `"Champion of the ${houseCloth()}. The other houses wait. The south gate is open."`,
+      ];
+    }
+    const need = boutHint();
+    if (need) {
+      return [
+        `"${need} first. In the yard. Drop them. Yield is not a name."`,
+        `"Titus, then Rufus, then Brom, then Aelia. Then come back."`,
       ];
     }
     return [
-      `"Armory west. Dummy in the yard. Spar Titus or Rufus."`,
-      `"When you can do those, come back to me."`,
+      `"Armory west. Dummy in the yard. Learn the keys. Then the four."`,
+      `"When the dummy has taught you, Titus is first."`,
     ];
   },
 
   titus: () => {
+    const bout = yardBoutLines("Titus");
+    if (bout) return bout;
     const home = consumeWelcome("titus");
     if (home) return [`"You came back. ${home} cloth on the other side of the sand, and you still standing. That is how a wall is built."`];
     if (gameState.pendingFeast) {
@@ -199,6 +266,18 @@ export const DIALOGUE: Record<string, LineFn> = {
     }
     if (gameState.save.injured) {
       return [`"You limp. Rest in Quarters, or drink the vial. A wall with a crack still falls."`];
+    }
+    if (gameState.save.lanistaUnlocked) {
+      if (getSchoolRecord("titus").glory) {
+        return [
+          `"Done. The stands know my name."`,
+          `"Brom is next. I will still spar if you want the wall sharp."`,
+        ];
+      }
+      return [
+        `"My locker is east of the yard. Teach me a full lesson — not one drop."`,
+        `"When Ready, book my three bouts. Prospect, Contender, Pride."`,
+      ];
     }
     if (gameState.save.freedomWon) {
       return [`"Free. Still here. The shield does not care about wood or steel. Keep it high."`];
@@ -233,12 +312,26 @@ export const DIALOGUE: Record<string, LineFn> = {
   },
 
   rufus: () => {
+    const bout = yardBoutLines("Rufus");
+    if (bout) return bout;
     const home = consumeWelcome("rufus");
     if (home) return [`"You beat ${home} and you still look surprised. Yard. You and me. Unless you are scared of a friend."`];
     if (gameState.pendingFeast) {
       return [
         `"You beat the ${feastLast()}. Drink before I take the table."`,
         `"If the beer is gone I will laugh. If you sit I might not."`,
+      ];
+    }
+    if (gameState.save.lanistaUnlocked) {
+      if (getSchoolRecord("rufus").glory) {
+        return [
+          `"Done. I got clear. The table can wait."`,
+          `"Spar if you want. I am not going back to the dice until you say."`,
+        ];
+      }
+      return [
+        `"Locker east of the yard. Teach me to get clear — full lesson."`,
+        `"Book my three bouts when Ready. Prospect, Contender, Pride."`,
       ];
     }
     if (gameState.save.freedomWon) {
@@ -272,12 +365,26 @@ export const DIALOGUE: Record<string, LineFn> = {
   },
 
   brom: () => {
+    const bout = yardBoutLines("Brom");
+    if (bout) return bout;
     const home = consumeWelcome("brom");
     if (home) return [`"Ha! ${home} fell. Come eat. Even an oak is proud today."`];
     if (gameState.pendingFeast) {
       return [
         `"Ha! The ${feastLast()} fell. Sit. Even an oak is proud today."`,
         `"The beer is honest. The wine is a liar. Drink both."`,
+      ];
+    }
+    if (gameState.save.lanistaUnlocked) {
+      if (getSchoolRecord("brom").glory) {
+        return [
+          `"Ha! Done. The stands roared for an oak."`,
+          `"Aelia next. I will still spar if you want weight."`,
+        ];
+      }
+      return [
+        `"Ha! My locker. Teach power — heavies, then weather the flurry."`,
+        `"When Ready, book my three bouts. Prospect, Contender, Pride."`,
       ];
     }
     if (gameState.save.freedomWon) {
@@ -308,12 +415,26 @@ export const DIALOGUE: Record<string, LineFn> = {
   },
 
   aelia: () => {
+    const bout = yardBoutLines("Aelia");
+    if (bout) return bout;
     const home = consumeWelcome("aelia");
     if (home) return [`"${home} was a problem of range or weight. You answered it. That is the whole craft."`];
     if (gameState.pendingFeast) {
       return [
         `"The ${feastLast()} crowded you. You made space. Sit."`,
         `"A cup is not a spear. Drink anyway."`,
+      ];
+    }
+    if (gameState.save.lanistaUnlocked) {
+      if (getSchoolRecord("aelia").glory) {
+        return [
+          `"Done. The measure was clean."`,
+          `"Rufus is next. Spar if you want the feet sharp."`,
+        ];
+      }
+      return [
+        `"My locker. Teach footwork — clean lights, then finish."`,
+        `"Book my three bouts from the locker when Ready."`,
       ];
     }
     if (gameState.save.freedomWon) {
@@ -367,10 +488,16 @@ export const OBJECTIVE_TEXT: Record<ObjectiveId, string> = {
   equip_gladius: "Walk to the armory and equip the gladius.",
   attack_dummy: "Attack the training dummy in the yard.",
   learn_stamina: "Watch your stamina. Attack until it dips, then let it return.",
-  learn_dodge: "Press Shift to dodge.",
-  learn_block: "Hold Q to block.",
-  spar_friend: "Walk up to Titus or Rufus in the yard, then click SPAR.",
-  return_lanista: "Return to Marcellus when you are ready.",
+  learn_heavy: "Heavy attack on the dummy.",
+  learn_dodge: "Dodge.",
+  learn_block: "Block.",
+  learn_parry: "Parry.",
+  spar_friend: "Defeat Titus in the yard.",
+  bout_titus: "Defeat Titus in the yard. Yield does not count.",
+  bout_rufus: "Defeat Rufus in the yard.",
+  bout_brom: "Defeat Brom in the yard.",
+  bout_aelia: "Defeat Aelia in the yard.",
+  return_lanista: "Return to Marcellus. He will name a champion.",
   first_arena: "Enter the south gate and fight your first rival.",
   defeat_rival: "Defeat the next fighter at the south gate.",
   next_house: "The next house is open. Speak with Marcellus, then take the south gate.",
@@ -378,10 +505,12 @@ export const OBJECTIVE_TEXT: Record<ObjectiveId, string> = {
   tournament_2: "The Rudis continues. Defeat Balbus, the Beam.",
   tournament_3: "The last bout. Defeat Malleolus for the rudis.",
   free: "The rudis is yours. Train. The editor still pays at the south gate.",
+  take_school: "The rudis is yours. Speak with Marcellus about the school.",
+  school: "The school is yours. Check lockers east of the yard. Teach, then book their circuit.",
 };
 
 export const AREA_HINTS: Record<string, string> = {
-  dummy: "Training dummy — light attack (Space) or heavy (G).",
+  dummy: "Training dummy — light and heavy attacks.",
   rack: "Weapon rack — press E to open the armory.",
   shop: "Quarters — press E for cloth, dye, and unguent.",
   pal: "The roost. Straw, water, and a perch. Press E.",
@@ -392,4 +521,5 @@ export const AREA_HINTS: Record<string, string> = {
   wine: "Wine in the mug. Press E.",
   beer: "Beer in the mug. Press E.",
   altar: "The lararium. Press E to pray.",
+  chamber: "Your chamber. Press E to furnish the loft.",
 };
