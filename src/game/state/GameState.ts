@@ -119,6 +119,7 @@ export const defaultSettings: SettingsData = {
   screenShake: true,
   fullscreen: false,
   showMinimap: true,
+  minimapMinimized: false,
   keybinds: { ...DEFAULT_KEYBINDS },
 };
 
@@ -167,6 +168,7 @@ class GameState {
           ...defaultSettings,
           ...parsed,
           musicMuted: Boolean(parsed.musicMuted),
+          minimapMinimized: Boolean(parsed.minimapMinimized),
           keybinds: migrateKeybinds(parsed.keybinds),
         };
         if (parsed.keybinds?.heavy === "G" && parsed.keybinds?.parry === "F") this.persistSettings();

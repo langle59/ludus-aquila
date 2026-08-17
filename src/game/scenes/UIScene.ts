@@ -226,7 +226,17 @@ export class UIScene extends Phaser.Scene {
   private minimapWrap?: Phaser.GameObjects.Container;
   private minimapGfx?: Phaser.GameObjects.Graphics;
   private minimapLabel?: Phaser.GameObjects.Text;
+  private minimapTab?: Phaser.GameObjects.Container;
   private minimapScene = "none";
+  private lastMinimap: {
+    show: boolean;
+    cols: number;
+    rows: number;
+    playerX: number;
+    playerY: number;
+    area?: string;
+    marks: { x: number; y: number; color: number; kind: string }[];
+  } | null = null;
   private renameValue = "";
   private renameLabel?: Phaser.GameObjects.Text;
   private musicMuteText?: Phaser.GameObjects.Text;
@@ -488,10 +498,7 @@ export class UIScene extends Phaser.Scene {
       if (this.judgmentOpen) return;
       if (this.pausePage === "rename") return;
       if (this.resultPending || gameState.inDialogue || this.overlay) return;
-      gameState.settings.showMinimap = !gameState.settings.showMinimap;
-      gameState.persistSettings();
-      if (!gameState.settings.showMinimap) this.minimapWrap?.setVisible(false);
-      else this.minimapWrap?.setVisible(true);
+      this.toggleMinimapFold();
     });
     this.input.keyboard?.on("keydown-K", () => {
       if (this.judgmentOpen) return;
@@ -3858,8 +3865,58 @@ export class UIScene extends Phaser.Scene {
 
   private onMinimapScene = (scene: string): void => {
     this.minimapScene = scene;
-    if (scene !== "ludus" && scene !== "freedcamp") this.minimapWrap?.setVisible(false);
+    if (scene !== "ludus" && scene !== "freedcamp") {
+      this.minimapWrap?.setVisible(false);
+      this.minimapTab?.setVisible(false);
+    }
   };
+
+  private toggleMinimapFold(): void {
+    gameState.settings.minimapMinimized = !gameState.settings.minimapMinimized;
+    gameState.settings.showMinimap = true;
+    gameState.persistSettings();
+    audio.sfx("ui");
+    if (this.lastMinimap) this.onMinimap(this.lastMinimap);
+    else this.applyMinimapFold();
+  }
+
+  private applyMinimapFold(): void {
+    const onHub = this.minimapScene === "ludus" || this.minimapScene === "freedcamp";
+    const show = onHub && gameState.settings.showMinimap;
+    const mini = gameState.settings.minimapMinimized;
+    this.minimapWrap?.setVisible(Boolean(show && !mini));
+    this.minimapTab?.setVisible(Boolean(show && mini));
+  }
+
+  private ensureMinimapChrome(): void {
+    const w = 168;
+    const h = 126;
+    if (!this.minimapWrap) {
+      this.minimapWrap = this.add.container(16, GAME_HEIGHT - h - 14).setScrollFactor(0).setDepth(140);
+      const bg = this.add.rectangle(w / 2, h / 2, w, h, 0x1a1210, 0.9).setStrokeStyle(2, COLORS.gold);
+      this.minimapGfx = this.add.graphics();
+      this.minimapLabel = this.add
+        .text(8, 6, "MAP", { fontFamily: "Cinzel, Georgia", fontSize: "11px", color: "#d4a84b" })
+        .setOrigin(0, 0);
+      const foldHit = this.add.rectangle(w - 16, 12, 26, 18, 0x2a2018, 0.95).setStrokeStyle(1, COLORS.gold).setInteractive({ useHandCursor: true });
+      const foldMark = this.add.text(w - 16, 12, "–", { fontFamily: "Georgia", fontSize: "16px", color: "#e8dcc8" }).setOrigin(0.5);
+      foldHit.on("pointerdown", () => {
+        if (this.overlay || this.resultPending || gameState.inDialogue) return;
+        this.toggleMinimapFold();
+      });
+      this.minimapWrap.add([bg, this.minimapGfx, this.minimapLabel, foldHit, foldMark]);
+    }
+    if (!this.minimapTab) {
+      this.minimapTab = this.add.container(16, GAME_HEIGHT - 40).setScrollFactor(0).setDepth(140).setVisible(false);
+      const tabBg = this.add.rectangle(46, 14, 92, 28, 0x1a1210, 0.92).setStrokeStyle(2, COLORS.gold).setInteractive({ useHandCursor: true });
+      const tabLabel = this.add.text(46, 14, "MAP  ·  +", { fontFamily: "Cinzel, Georgia", fontSize: "12px", color: "#d4a84b" }).setOrigin(0.5);
+      tabBg.on("pointerdown", () => {
+        if (this.overlay || this.resultPending || gameState.inDialogue) return;
+        this.toggleMinimapFold();
+      });
+      this.minimapTab.add([tabBg, tabLabel]);
+    }
+  }
 
   private onMinimap = (payload: {
     show: boolean;
@@ -3870,29 +3927,29 @@ export class UIScene extends Phaser.Scene {
     area?: string;
     marks: { x: number; y: number; color: number; kind: string }[];
   }): void => {
+    this.lastMinimap = payload;
     if (
       (this.minimapScene !== "ludus" && this.minimapScene !== "freedcamp") ||
       !gameState.settings.showMinimap ||
       !payload.show
     ) {
       this.minimapWrap?.setVisible(false);
+      this.minimapTab?.setVisible(false);
       return;
     }
+    this.ensureMinimapChrome();
+    if (gameState.settings.minimapMinimized) {
+      this.minimapWrap?.setVisible(false);
+      this.minimapTab?.setVisible(true);
+      return;
+    }
+    this.minimapTab?.setVisible(false);
     const w = 168;
     const h = 126;
-    const areaText = `${(payload.area ?? "Ludus").toUpperCase()}  ·  M`;
-    if (!this.minimapWrap) {
-      this.minimapWrap = this.add.container(16, GAME_HEIGHT - h - 14).setScrollFactor(0).setDepth(140);
-      const bg = this.add.rectangle(w / 2, h / 2, w, h, 0x1a1210, 0.9).setStrokeStyle(2, COLORS.gold);
-      this.minimapGfx = this.add.graphics();
-      this.minimapLabel = this.add
-        .text(w / 2, 8, areaText, { fontFamily: "Cinzel, Georgia", fontSize: "11px", color: "#d4a84b" })
-        .setOrigin(0.5, 0);
-      this.minimapWrap.add([bg, this.minimapGfx, this.minimapLabel]);
-    } else {
-      this.minimapLabel?.setText(areaText);
-    }
-    this.minimapWrap.setVisible(true);
+    const areaText = (payload.area ?? "Ludus").toUpperCase();
+    this.minimapLabel?.setText(areaText);
+    this.minimapWrap?.setPosition(16, GAME_HEIGHT - h - 14);
+    this.minimapWrap?.setVisible(true);
     const g = this.minimapGfx!;
     g.clear();
     const pad = 16;

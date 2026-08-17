@@ -50,7 +50,7 @@ export function controlsHelpText(): string {
     "Tab — Equipment",
     "K — Skill Tree",
     "C — Customize / Shop (looks, and unguent vials)",
-    "M — Minimap (ludus)",
+    "M — Minimize / restore map",
     "Esc — Pause",
     "Mute music — title screen or pause Settings",
   ].join("\n");

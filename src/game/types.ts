@@ -373,6 +373,7 @@ export interface SettingsData {
   screenShake: boolean;
   fullscreen: boolean;
   showMinimap: boolean;
+  minimapMinimized: boolean;
   keybinds: Record<CombatBindAction, string>;
 }
 

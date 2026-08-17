@@ -56,6 +56,6 @@ export const CONTROLS_TEXT = [
   "Tab — Equipment",
   "K — Skill Tree",
   "C — Customize / Shop (looks, and unguent vials)",
-  "M — Minimap (ludus)",
+  "M — Minimize / restore map",
   "Esc — Pause",
 ].join("\n");
