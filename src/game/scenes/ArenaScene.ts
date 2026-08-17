@@ -20,7 +20,7 @@ import { palBrought, palCombatStats, palKind } from "../data/pal";
 import { CombatInput } from "../systems/input";
 import { arenaWeapon, clearNightEntry } from "../systems/nights";
 import { getNpc } from "../data/gladiators";
-import { schoolCombatStats } from "../data/school";
+import { schoolCombatStats, schoolStudentAiStyle } from "../data/school";
 
 type Spectator = {
   img: Phaser.GameObjects.Image;
@@ -154,7 +154,7 @@ export class ArenaScene extends Phaser.Scene {
         style: bodyStyleFor(npc.id),
       });
       attachHpBar(this, this.player, npc.name);
-      this.studentAi = new CombatAI(this.player, npc.aiStyle);
+      this.studentAi = new CombatAI(this.player, schoolStudentAiStyle(npc.id));
     } else {
       this.player = new Fighter(this, built.spawns.player.x, built.spawns.player.y, {
         key: "player-arena",

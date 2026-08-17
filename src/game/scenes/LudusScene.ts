@@ -1721,7 +1721,10 @@ export class LudusScene extends Phaser.Scene {
     if (this.combat.justPressed("heavy")) this.doAttack("heavy");
     if (this.combat.justPressed("interact")) this.tryInteract();
     if (this.combat.justPressed("dodge")) {
-      if (this.player.tryDodge()) markTutorial("dodged");
+      if (this.player.tryDodge()) {
+        markTutorial("dodged");
+        if (this.sparring?.coaching) this.noteLesson({ type: "player_dodge" });
+      }
     }
     if (this.combat.justPressed("special")) this.player.trySpecial();
     if (this.combat.justPressed("parry")) {
@@ -1819,8 +1822,7 @@ export class LudusScene extends Phaser.Scene {
       if (this.sparring.enemy.hitboxActive) {
         resolveHits(this.sparring.enemy, [this.player], (_t, kind) => {
           if (!this.sparring?.coaching) return;
-      if (kind === "block") this.noteLesson({ type: "player_block" });
-          else if (kind === "perfect" || (kind === "miss" && this.player.combat === "dodge")) this.noteLesson({ type: "player_dodge" });
+          if (kind === "block") this.noteLesson({ type: "player_block" });
           else if (kind === "hit") this.noteLesson({ type: "player_hurt" });
         });
       }

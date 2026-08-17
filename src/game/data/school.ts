@@ -1,4 +1,4 @@
-import type { FighterStats, SchoolNpcId, SchoolRecord } from "../types";
+import type { AiStyle, FighterStats, SchoolNpcId, SchoolRecord } from "../types";
 import { gameState } from "../state/GameState";
 import { bus } from "../systems/bus";
 import { getNpc } from "./gladiators";
@@ -263,28 +263,86 @@ export function meterBar(filled: number, max: number): string {
 
 export type SchoolMatchup = "Fair" | "Hard" | "Deadly";
 
+/** Extra lessons / training past this student's pride gate. Caps keep farmed lessons from stacking forever. */
+export function schoolPrepOverflow(id: string): { lessonExtra: number; trainExtra: number; score: number } {
+  const rec = getSchoolRecord(id);
+  const need = schoolReadyNeeds(id);
+  const lessonExtra = Math.max(0, Math.min(4, (rec.lessons ?? 0) - need.prideLessons));
+  const trainExtra = Math.max(0, rec.training - need.prideTraining);
+  return { lessonExtra, trainExtra, score: lessonExtra + trainExtra };
+}
+
+/** Taught students stop turtling once they have overflow prep. */
+export function schoolStudentAiStyle(id: string): AiStyle {
+  const overflow = schoolPrepOverflow(id).score;
+  if (overflow >= 4) return "elite";
+  if (overflow >= 2) return "aggressive";
+  return getNpc(id).aiStyle;
+}
+
+function schoolPowerScore(s: Pick<FighterStats, "maxHealth" | "attack" | "defense" | "agility">): number {
+  return s.maxHealth + s.attack * 10 + s.defense * 8 + s.agility * 4;
+}
+
+function schoolAiWeight(style: AiStyle): number {
+  switch (style) {
+    case "champion":
+      return 1.12;
+    case "elite":
+      return 1.1;
+    case "aggressive":
+      return 1.04;
+    case "spear":
+      return 1.03;
+    case "heavy":
+      return 1.02;
+    case "defensive":
+      return 0.95;
+    default:
+      return 1;
+  }
+}
+
 export function schoolMatchupHint(npcId: string, opponentId: string): SchoolMatchup {
   const s = schoolCombatStats(npcId);
   const f = getRival(opponentId)?.fighter.stats;
   if (!f) return "Hard";
-  const student = s.maxHealth + s.attack * 10 + s.defense * 8 + s.agility * 4;
-  const foe = f.maxHealth + f.attack * 10 + f.defense * 8 + f.agility * 4;
-  const d = student - foe;
+  const d = schoolPowerScore(s) - schoolPowerScore(f);
   if (d >= -30) return "Fair";
   if (d >= -100) return "Hard";
   return "Deadly";
 }
 
+/** Estimate of an AI-vs-AI school bout. Not a roll — the fight still plays. Never 0 or 100. */
+export function schoolWinChance(npcId: string, opponentId: string): number {
+  const s = schoolCombatStats(npcId);
+  const found = getRival(opponentId)?.fighter;
+  if (!found) return 50;
+  const student = schoolPowerScore(s) * schoolAiWeight(schoolStudentAiStyle(npcId));
+  const foe = schoolPowerScore(found.stats) * schoolAiWeight(found.aiStyle);
+  const ratio = student / Math.max(1, foe);
+  const raw = 1 / (1 + Math.exp(-4.2 * (ratio - 1)));
+  const hurt = getSchoolRecord(npcId).injured ? 8 : 0;
+  return Math.max(20, Math.min(85, Math.round(raw * 100) - hurt));
+}
+
+export function schoolWinChanceColor(pct: number): string {
+  if (pct >= 70) return "#8ecf6a";
+  if (pct >= 50) return "#e8c96a";
+  return "#c07060";
+}
+
 export function schoolPowerCompare(
   npcId: string,
   opponentId: string,
-): { student: Pick<FighterStats, "maxHealth" | "attack">; foe: Pick<FighterStats, "maxHealth" | "attack">; match: SchoolMatchup } {
+): { student: Pick<FighterStats, "maxHealth" | "attack">; foe: Pick<FighterStats, "maxHealth" | "attack">; match: SchoolMatchup; chance: number } {
   const s = schoolCombatStats(npcId);
   const f = getRival(opponentId)?.fighter.stats ?? { maxHealth: 100, attack: 10, defense: 6, agility: 6, maxStamina: 80 };
   return {
     student: { maxHealth: Math.round(s.maxHealth), attack: Math.round(s.attack) },
     foe: { maxHealth: Math.round(f.maxHealth), attack: Math.round(f.attack) },
     match: schoolMatchupHint(npcId, opponentId),
+    chance: schoolWinChance(npcId, opponentId),
   };
 }
 
@@ -331,24 +389,25 @@ export function schoolBoutLocked(npcId: string, rungIndex: number): { locked: bo
   return { locked: false, reason: "" };
 }
 
-/** Buffed so a taught student can contest mid champs. */
+/** Buffed so a taught student can contest mid champs. Overflow lessons/training sit on top of the old caps. */
 export function schoolCombatStats(id: string): FighterStats {
   const npc = getNpc(id);
   const rec = getSchoolRecord(id);
   const train = Math.min(6, rec.training);
   const spec = Math.min(3, rec.specialty ?? 0);
   const wins = Math.min(12, rec.wins);
+  const { lessonExtra, trainExtra } = schoolPrepOverflow(id);
   const hp = Math.min(100, train * 10 + wins * 8 + (id === "brom" ? spec * 8 : train * 2) + (id === "titus" ? spec * 4 : 0));
   const atk = Math.min(14, train * 1.4 + wins * 1.1 + (id === "brom" ? spec * 1.2 : 0));
   const def = Math.min(12, train * 0.9 + (id === "titus" ? spec * 1.8 : train * 0.2));
   const agi = Math.min(10, Math.floor(train / 2) + (id === "aelia" || id === "rufus" ? spec * 1.5 : 0));
   const stam = train * 4 + (id === "rufus" ? spec * 5 : 0);
   return {
-    maxHealth: npc.stats.maxHealth + hp - (rec.injured ? 8 : 0),
-    maxStamina: npc.stats.maxStamina + stam,
-    attack: npc.stats.attack + atk,
-    defense: npc.stats.defense + def,
-    agility: npc.stats.agility + agi,
+    maxHealth: npc.stats.maxHealth + hp + lessonExtra * 8 + trainExtra * 6 - (rec.injured ? 8 : 0),
+    maxStamina: npc.stats.maxStamina + stam + lessonExtra * 3 + trainExtra * 2,
+    attack: npc.stats.attack + atk + lessonExtra * 0.55 + trainExtra * 0.45,
+    defense: npc.stats.defense + def + lessonExtra * 0.4 + trainExtra * 0.3,
+    agility: npc.stats.agility + agi + Math.floor(trainExtra / 2),
   };
 }
 

@@ -1,5 +1,6 @@
 import type { SchoolNpcId } from "../types";
 import { COACHING_LESSONS } from "../data/school";
+import { mergedKeybinds, prettyKey } from "./input";
 
 export type LessonEvent =
   | { type: "player_light" }
@@ -26,6 +27,7 @@ export interface LessonRuntime {
 }
 
 export function lessonBeats(id: SchoolNpcId): LessonBeatDef[] {
+  const dodge = prettyKey(mergedKeybinds().dodge);
   switch (id) {
     case "titus":
       return [
@@ -42,12 +44,12 @@ export function lessonBeats(id: SchoolNpcId): LessonBeatDef[] {
     case "aelia":
       return [
         { id: "lights", prompt: "Land 3 lights without taking a hit", need: 3, resetOnHurt: true },
-        { id: "dodge", prompt: "Dodge once", need: 1 },
+        { id: "dodge", prompt: `Dodge once (${dodge})`, need: 1 },
         { id: "finish", prompt: "Finish with a light or heavy", need: 1 },
       ];
     case "rufus":
       return [
-        { id: "dodges", prompt: "Dodge their steel ×2", need: 2 },
+        { id: "dodges", prompt: `Dodge ×2 (${dodge})`, need: 2 },
         { id: "counter", prompt: "Counter with a light", need: 1 },
         { id: "finish", prompt: "Finish with a light or heavy", need: 1 },
       ];

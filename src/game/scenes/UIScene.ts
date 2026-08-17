@@ -22,8 +22,9 @@ import {
   schoolReadyForUndercard,
   schoolReadyForChampion,
   schoolReadinessLabel,
-  schoolMatchupHint,
   schoolPowerCompare,
+  schoolWinChance,
+  schoolWinChanceColor,
   schoolNextFoeId,
   schoolReadyChecklist,
   schoolGloryCount,
@@ -3163,7 +3164,7 @@ export class UIScene extends Phaser.Scene {
     const studentRec = getSchoolRecord(student.id);
     const circuit = getStudentCircuit(student.id);
     const foes = circuit?.fighters ?? [];
-    const c = this.box(640, 600, "THE SCHOOL");
+    const c = this.box(640, 620, "THE SCHOOL");
     c.add(
       this.add
         .text(0, -250, student.name, {
@@ -3189,14 +3190,13 @@ export class UIScene extends Phaser.Scene {
       c.add(this.add.text(0, -40, "No school path for this student.", { fontFamily: "Georgia", fontSize: "16px", color: "#c4b49a" }).setOrigin(0.5));
     }
     foes.forEach((f, i) => {
-      const y = -155 + i * 88;
+      const y = -168 + i * 98;
       const cleared = studentRec.rung > i || studentRec.glory;
       const gate = schoolBoutLocked(student.id, i);
       const exhibition = studentRec.glory;
       const locked = exhibition ? false : gate.locked;
-      const match = schoolMatchupHint(student.id, f.id);
       const compare = schoolPowerCompare(student.id, f.id);
-      const matchColor = match === "Fair" ? "#8ecf6a" : match === "Hard" ? "#e8c96a" : "#c07060";
+      const chanceColor = locked ? "#6a5a4a" : schoolWinChanceColor(compare.chance);
       const step = schoolCircuitRungLabel(i);
       c.add(
         this.add
@@ -3209,17 +3209,17 @@ export class UIScene extends Phaser.Scene {
       );
       c.add(
         this.add
-          .text(0, y + 18, `HP ${compare.foe.maxHealth} / ATK ${compare.foe.attack}  ·  ${match}`, {
+          .text(0, y + 16, `Them HP ${compare.foe.maxHealth} / ATK ${compare.foe.attack}`, {
             fontFamily: "Georgia",
             fontSize: "12px",
-            color: locked ? "#6a5a4a" : matchColor,
+            color: locked ? "#6a5a4a" : "#b8a890",
           })
           .setOrigin(0.5),
       );
       if (locked) {
         c.add(
           this.add
-            .text(0, y + 36, gate.reason, {
+            .text(0, y + 34, gate.reason, {
               fontFamily: "Georgia",
               fontSize: "12px",
               color: "#6a5a4a",
@@ -3227,9 +3227,18 @@ export class UIScene extends Phaser.Scene {
             .setOrigin(0.5),
         );
       } else if (cleared && !exhibition) {
-        c.add(this.add.text(0, y + 36, "Cleared", { fontFamily: "Georgia", fontSize: "12px", color: "#8ecf6a" }).setOrigin(0.5));
+        c.add(this.add.text(0, y + 34, "Cleared", { fontFamily: "Georgia", fontSize: "12px", color: "#8ecf6a" }).setOrigin(0.5));
       } else {
-        this.addBtn(c, 0, y + 42, exhibition ? "Exhibition" : i === 2 ? "Send — pride" : "Send", () => {
+        c.add(
+          this.add
+            .text(0, y + 34, `~${compare.chance}% to win  ·  ${compare.match}`, {
+              fontFamily: "Georgia",
+              fontSize: "13px",
+              color: chanceColor,
+            })
+            .setOrigin(0.5),
+        );
+        this.addBtn(c, 0, y + 58, exhibition ? "Exhibition" : i === 2 ? "Send — pride" : "Send", () => {
           gameState.pendingSchoolBout = { npcId: student.id, opponentId: f.id };
           gameState.pendingArenaOpponent = f.id;
           this.gateHouse = null;
@@ -3245,7 +3254,17 @@ export class UIScene extends Phaser.Scene {
       ensureNight();
       const night = currentNight();
       if (night && schoolReadyForUndercard(student.id)) {
-        this.addBtn(c, 0, 195, "Send to night", () => {
+        const nightChance = schoolWinChance(student.id, night.opponentId);
+        c.add(
+          this.add
+            .text(0, 168, `Night  ·  ~${nightChance}% to win`, {
+              fontFamily: "Georgia",
+              fontSize: "12px",
+              color: schoolWinChanceColor(nightChance),
+            })
+            .setOrigin(0.5),
+        );
+        this.addBtn(c, 0, 198, "Send to night", () => {
           gameState.pendingSchoolBout = { npcId: student.id, opponentId: night.opponentId };
           const r = enterNight();
           if (r !== "ok") {
@@ -3262,12 +3281,12 @@ export class UIScene extends Phaser.Scene {
       }
     }
 
-    this.addBtn(c, -120, 250, "Students", () => {
+    this.addBtn(c, -120, 262, "Students", () => {
       this.schoolNpc = null;
       this.schoolHouse = null;
       this.openGate();
     }, 180);
-    this.addBtn(c, 120, 250, "Stay at the ludus", () => {
+    this.addBtn(c, 120, 262, "Stay at the ludus", () => {
       this.schoolNpc = null;
       this.schoolHouse = null;
       this.closeOverlay();
@@ -3376,7 +3395,7 @@ export class UIScene extends Phaser.Scene {
       const step = schoolCircuitRungLabel(Math.min(2, rec.rung));
       c.add(
         this.add
-          .text(0, 45, foe ? `Next: ${step} · ${foe.name}` : "Next school foe", {
+          .text(0, 38, foe ? `Next: ${step} · ${foe.name}` : "Next school foe", {
             fontFamily: "Georgia",
             fontSize: "14px",
             color: "#e8c96a",
@@ -3385,10 +3404,19 @@ export class UIScene extends Phaser.Scene {
       );
       c.add(
         this.add
-          .text(0, 68, `Them HP ${rival.foe.maxHealth} / ATK ${rival.foe.attack}  ·  ${rival.match}`, {
+          .text(0, 58, `Them HP ${rival.foe.maxHealth} / ATK ${rival.foe.attack}  ·  ${rival.match}`, {
             fontFamily: "Georgia",
             fontSize: "13px",
-            color: rival.match === "Fair" ? "#8ecf6a" : rival.match === "Hard" ? "#e8c96a" : "#c07060",
+            color: "#b8a890",
+          })
+          .setOrigin(0.5),
+      );
+      c.add(
+        this.add
+          .text(0, 78, `~${rival.chance}% to win  ·  more lessons and training raise this`, {
+            fontFamily: "Georgia",
+            fontSize: "13px",
+            color: schoolWinChanceColor(rival.chance),
           })
           .setOrigin(0.5),
       );
@@ -3403,11 +3431,11 @@ export class UIScene extends Phaser.Scene {
         this.openLocker(id);
       }, 220);
     } else if (unlocked) {
-      this.addBtn(c, -140, 145, "Teach", () => {
+      this.addBtn(c, -140, 155, "Teach", () => {
         this.closeOverlay();
         bus.emit("teach-start", id);
       }, 160);
-      this.addBtn(c, 140, 145, "Book fight", () => {
+      this.addBtn(c, 140, 155, "Book fight", () => {
         this.gateTab = "school";
         this.schoolNpc = id;
         this.schoolHouse = null;
