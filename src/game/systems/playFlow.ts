@@ -4,6 +4,7 @@ import { act4Unlocked, advanceFarmAfterRaid } from "../data/camp";
 import { tryVolunteerForager } from "../data/volunteers";
 import { bus } from "./bus";
 import { TILE_SIZE } from "../config";
+import { freedCampTentArrival } from "../maps/maps";
 
 function halt(plugin: Phaser.Scenes.ScenePlugin, key: string): void {
   if (plugin.isActive(key) || plugin.isSleeping(key) || plugin.isPaused(key)) plugin.stop(key);
@@ -132,7 +133,7 @@ export function enterRaid(from: Phaser.Scene): void {
 }
 
 /** Return from raid to Freed Camp. Farm advances only after a death or a cleared room. */
-export function returnFromRaid(game: Phaser.Game, opts?: { death?: boolean }): void {
+export function returnFromRaid(game: Phaser.Game, opts?: { death?: boolean; tentHouseId?: string }): void {
   gameState.paused = false;
   gameState.inMenu = false;
   gameState.inDialogue = false;
@@ -151,7 +152,12 @@ export function returnFromRaid(game: Phaser.Game, opts?: { death?: boolean }): v
   gameState.raidTempHpBonus = 0;
   gameState.raidClearedRoomThisOuting = false;
   gameState.restoreVitals();
-  gameState.save.position.scene = "freedcamp";
+  const tent = opts?.tentHouseId ? freedCampTentArrival(opts.tentHouseId) : null;
+  if (tent) {
+    gameState.save.position = { x: tent.x, y: tent.y, scene: "freedcamp" };
+  } else {
+    gameState.save.position.scene = "freedcamp";
+  }
   gameState.persist();
 
   const run = (): void => {

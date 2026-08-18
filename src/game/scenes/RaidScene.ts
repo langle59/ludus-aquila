@@ -1029,7 +1029,7 @@ export class RaidScene extends Phaser.Scene {
             gameState.save.currentObjective = this.objectiveAfterFree();
             gameState.persist();
           }
-          returnFromRaid(this.game, { death: false });
+          returnFromRaid(this.game, { death: false, tentHouseId: this.houseId });
         });
         const freeFlag = liberationFlag(this.houseId);
         const chainFlag = liberationChainFlag(this.houseId);

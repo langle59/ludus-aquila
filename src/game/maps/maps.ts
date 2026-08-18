@@ -796,6 +796,26 @@ export function freedCampAreaName(tx: number, ty: number): string {
   return "Clearing";
 }
 
+/** Nine house pads on the east ridge — tent sits on the pad, arrival is one tile south. */
+const FREED_CAMP_PADS: { id: string; ox: number; oy: number }[] = [
+  { id: "serpens", ox: 18, oy: 2 },
+  { id: "lupus", ox: 23, oy: 2 },
+  { id: "aper", ox: 28, oy: 2 },
+  { id: "taurus", ox: 18, oy: 7 },
+  { id: "tigris", ox: 23, oy: 7 },
+  { id: "leo", ox: 28, oy: 7 },
+  { id: "ursus", ox: 18, oy: 12 },
+  { id: "rhinoceros", ox: 23, oy: 12 },
+  { id: "elephas", ox: 28, oy: 12 },
+];
+
+/** World position in front of a freed house tent (south of the pad, clear of refugees). */
+export function freedCampTentArrival(houseId: string): { x: number; y: number } | null {
+  const pad = FREED_CAMP_PADS.find((p) => p.id === houseId);
+  if (!pad) return null;
+  return cell(pad.ox + 1, pad.oy + 4);
+}
+
 /** Hub after Act 3 — hidden forest clearing, tents, farm, stables. */
 export function buildFreedCamp(): BuiltMap {
   const cols = FREED_CAMP_META.cols;
@@ -885,35 +905,13 @@ export function buildFreedCamp(): BuiltMap {
   spawns.wardrobe = cell(6, 11);
 
   // Nine tent clearings (3×3) — east
-  const padOrigins = [
-    [18, 2],
-    [23, 2],
-    [28, 2],
-    [18, 7],
-    [23, 7],
-    [28, 7],
-    [18, 12],
-    [23, 12],
-    [28, 12],
-  ];
-  const houseIds = [
-    "serpens",
-    "lupus",
-    "aper",
-    "taurus",
-    "tigris",
-    "leo",
-    "ursus",
-    "rhinoceros",
-    "elephas",
-  ];
-  padOrigins.forEach(([ox, oy], i) => {
-    addRect(tiles, solids, "tile-sand-earth", ox, oy, ox + 3, oy + 3);
-    const cx = ox + 1;
-    const cy = oy + 1;
-    props.push({ kind: "house_pad", ...cell(cx, cy), id: houseIds[i] });
-    spawns[`pad_${houseIds[i]}`] = cell(cx, cy);
-  });
+  for (const pad of FREED_CAMP_PADS) {
+    addRect(tiles, solids, "tile-sand-earth", pad.ox, pad.oy, pad.ox + 3, pad.oy + 3);
+    const cx = pad.ox + 1;
+    const cy = pad.oy + 1;
+    props.push({ kind: "house_pad", ...cell(cx, cy), id: pad.id });
+    spawns[`pad_${pad.id}`] = cell(cx, cy);
+  }
 
   // Crop plots — SW beds (four plots)
   addRect(tiles, solids, "tile-dirt", 4, 16, 15, 21);

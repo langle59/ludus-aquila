@@ -343,12 +343,8 @@ export class FreedCampScene extends Phaser.Scene {
       if (!spawn) continue;
       gameState.save.storyFlags[liberationArriveFlag(id)] = true;
       gameState.persist();
-      gameState.paused = true;
-      this.cameras.main.stopFollow();
-      let shown = false;
-      this.cameras.main.pan(spawn.x, spawn.y, 720, "Sine.easeInOut", false, (_cam, progress) => {
-        if (progress < 1 || shown) return;
-        shown = true;
+      const alreadyNear = Phaser.Math.Distance.Between(this.player.x, this.player.y, spawn.x, spawn.y) < 140;
+      const showCaption = (): void => {
         const cap = this.add
           .text(spawn.x, spawn.y - 86, "Their tent is raised.", {
             fontFamily: "Georgia",
@@ -361,7 +357,7 @@ export class FreedCampScene extends Phaser.Scene {
           .setDepth(9000)
           .setAlpha(0);
         this.tweens.add({ targets: cap, alpha: 1, y: spawn.y - 94, duration: 280 });
-        this.time.delayedCall(1700, () => {
+        this.time.delayedCall(alreadyNear ? 1400 : 1700, () => {
           this.tweens.add({
             targets: cap,
             alpha: 0,
@@ -371,6 +367,18 @@ export class FreedCampScene extends Phaser.Scene {
           this.cameras.main.startFollow(this.player, true, 0.12, 0.12);
           gameState.paused = false;
         });
+      };
+      if (alreadyNear) {
+        showCaption();
+        return;
+      }
+      gameState.paused = true;
+      this.cameras.main.stopFollow();
+      let shown = false;
+      this.cameras.main.pan(spawn.x, spawn.y, 720, "Sine.easeInOut", false, (_cam, progress) => {
+        if (progress < 1 || shown) return;
+        shown = true;
+        showCaption();
       });
       return;
     }
