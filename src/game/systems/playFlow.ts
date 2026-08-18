@@ -153,11 +153,13 @@ export function returnFromRaid(game: Phaser.Game, opts?: { death?: boolean; tent
   gameState.raidClearedRoomThisOuting = false;
   gameState.restoreVitals();
   const tent = opts?.tentHouseId ? freedCampTentArrival(opts.tentHouseId) : null;
-  if (tent) {
-    gameState.save.position = { x: tent.x, y: tent.y, scene: "freedcamp" };
-  } else {
-    gameState.save.position.scene = "freedcamp";
-  }
+  gameState.save.position = tent
+    ? { x: tent.x, y: tent.y, scene: "freedcamp" }
+    : {
+        x: 9 * TILE_SIZE + TILE_SIZE / 2,
+        y: 11 * TILE_SIZE + TILE_SIZE / 2,
+        scene: "freedcamp",
+      };
   gameState.persist();
 
   const run = (): void => {
@@ -176,10 +178,10 @@ export function returnFromRaid(game: Phaser.Game, opts?: { death?: boolean; tent
       /* ignore */
     }
     try {
-      sm.run("FreedCampScene");
+      sm.start("FreedCampScene");
     } catch {
       try {
-        sm.start("FreedCampScene");
+        sm.run("FreedCampScene");
       } catch {
         /* ignore */
       }

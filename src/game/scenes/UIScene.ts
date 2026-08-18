@@ -59,7 +59,7 @@ import {
 import { getNpc, HOUSE_GLADIATORS } from "../data/gladiators";
 import { generateHouseName } from "../data/names";
 import { ACTION_LABELS, controlsHelpText, eventToKeyName, mergedKeybinds, prettyKey, trySetBind, type CombatAction } from "../systems/input";
-import { enterMenu, returnFromArena } from "../systems/playFlow";
+import { enterFreedCamp, enterMenu, returnFromArena } from "../systems/playFlow";
 import {
   camp,
   buyNextPlot,
@@ -865,17 +865,25 @@ export class UIScene extends Phaser.Scene {
       this.resultAutoTimer = null;
     }
 
+    const fromRaid =
+      this.scene.isActive("RaidScene") || gameState.save.position.scene === "raid";
     this.forceUnlockUi();
     bus.emit("result-closed");
 
-    // If leave() didn't bring us home (and this isn't a tournament chain), force it
+    // Arena fights fall back to the ludus. Raids must land in the freed camp —
+    // never force returnLudus or the camp start gets overwritten.
     window.setTimeout(() => {
       this.resultClosing = false;
       const next = gameState.pendingArenaOpponent;
       const tourneyChain = Boolean(next) && isTournamentId(next!) && !gameState.save.freedomWon;
       if (tourneyChain) return;
+      if (fromRaid) {
+        if (!this.scene.isActive("FreedCampScene")) enterFreedCamp(this);
+        return;
+      }
+      if (this.scene.isActive("FreedCampScene")) return;
       if (!this.scene.isActive("LudusScene")) this.returnLudus();
-    }, 200);
+    }, 280);
   }
 
   private onLudusResumed = (): void => {
