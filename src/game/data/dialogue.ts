@@ -13,6 +13,13 @@ import { ensureNight, nightEditorLine } from "../systems/nights";
 
 type LineFn = () => string[];
 
+/** Spoken once after taking the school — first-time lanista walkthrough. */
+export const SCHOOL_TAKE_LINES = [
+  `"East of the yard. Four lockers. Start with Titus."`,
+  `"Open his locker. Teach a full lesson in the ring — SPAR adds Training, Teach adds Lessons."`,
+  `"When he is Ready, south gate, School tab. Send him. You watch from the stands. You do not fight."`,
+];
+
 function beaten(): number {
   return gameState.save.defeatedHouses.length;
 }
@@ -118,6 +125,14 @@ export const DIALOGUE: Record<string, LineFn> = {
         return [
           `"The book is yours. The editor still wants a name on the sand."`,
           `"${nightEditorLine(night)} Fight it yourself, or send one of the four."`,
+        ];
+      }
+      const rec = getSchoolRecord("titus");
+      if (!rec.glory && rec.wins === 0 && rec.losses === 0) {
+        return [
+          `"East of the yard — four lockers. Start with Titus."`,
+          `"Open his locker. Teach a full lesson in the ring. SPAR adds Training."`,
+          `"When he is Ready, south gate, School tab. Send him. You watch. You do not fight."`,
         ];
       }
       return [
@@ -276,8 +291,8 @@ export const DIALOGUE: Record<string, LineFn> = {
         ];
       }
       return [
-        `"My locker is east of the yard. Teach me a full lesson — not one drop."`,
-        `"When Ready, book my three bouts. Prospect, Contender, Pride."`,
+        `"My locker is east of the yard. Open it. Teach me a full lesson — not one drop."`,
+        `"SPAR if you want Training. When Ready, south gate, School tab — book my three bouts. You watch."`,
       ];
     }
     if (gameState.save.freedomWon) {

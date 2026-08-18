@@ -635,33 +635,49 @@ function dressPit(
   cols: number,
   rows: number,
 ): void {
+  const banner = houseId === "rudis" ? "tile-banner-red" : houseBannerTex(houseId);
+  const sideBannerStrip = (x: number, y0: number, y1: number): void => {
+    for (let ty = y0; ty <= y1; ty += 2) addRect(tiles, solids, banner, x, ty, x, ty);
+  };
+  sideBannerStrip(2, 4, rows - 5);
+  sideBannerStrip(cols - 3, 4, rows - 5);
+
   if (houseId === "serpens") {
     overlayRing(tiles, "tile-mosaic", 8, 7, 23, 14);
+    overlayRing(tiles, "tile-mosaic", 10, 9, 21, 12);
     props.push({ kind: "pit-ring", ...cell(4, 8) });
     props.push({ kind: "pit-ring", ...cell(27, 8) });
     props.push({ kind: "pit-ring", ...cell(4, 13) });
     props.push({ kind: "pit-ring", ...cell(27, 13) });
+    props.push({ kind: "brazier", ...cell(5, 5) });
+    props.push({ kind: "brazier", ...cell(26, 5) });
     return;
   }
   if (houseId === "lupus") {
     addRect(tiles, solids, "tile-sand-earth", 6, 4, 7, 5);
     addRect(tiles, solids, "tile-sand-earth", 24, 16, 25, 17);
     addRect(tiles, solids, "tile-sand-earth", 10, 16, 11, 17);
+    addRect(tiles, solids, "tile-dirt", 14, 10, 17, 13);
     props.push({ kind: "pit-skull", ...cell(8, 3) });
     props.push({ kind: "pit-skull", ...cell(23, 3) });
     props.push({ kind: "pit-skull", ...cell(8, 18) });
     props.push({ kind: "pit-skull", ...cell(23, 18) });
     props.push({ kind: "hay", ...cell(4, 3) });
     props.push({ kind: "hay", ...cell(27, 18) });
+    props.push({ kind: "lamp", ...cell(5, 10) });
+    props.push({ kind: "lamp", ...cell(26, 10) });
     return;
   }
   if (houseId === "aper") {
     addRect(tiles, solids, "tile-dirt", 5, 8, 8, 10);
     addRect(tiles, solids, "tile-dirt", 23, 11, 26, 13);
+    addRect(tiles, solids, "tile-sand-mud", 13, 9, 18, 12);
     props.push({ kind: "pit-tusk", ...cell(3, 8) });
     props.push({ kind: "pit-tusk", ...cell(3, 13) });
     props.push({ kind: "pit-tusk", ...cell(28, 8) });
     props.push({ kind: "pit-tusk", ...cell(28, 13) });
+    props.push({ kind: "brazier", ...cell(6, 6) });
+    props.push({ kind: "brazier", ...cell(25, 15) });
     return;
   }
   if (houseId === "taurus") {
@@ -669,51 +685,69 @@ function dressPit(
       addRect(tiles, solids, "tile-sand-stripe", 12, ty, 13, ty);
       addRect(tiles, solids, "tile-sand-stripe", 18, ty, 19, ty);
     }
+    addRect(tiles, solids, "tile-sand-stone", 14, 9, 17, 12);
     props.push({ kind: "pit-horn", ...cell(3, 6) });
     props.push({ kind: "pit-horn", ...cell(3, 15) });
     props.push({ kind: "pit-horn", ...cell(28, 6) });
     props.push({ kind: "pit-horn", ...cell(28, 15) });
+    props.push({ kind: "brazier", ...cell(5, 11) });
+    props.push({ kind: "brazier", ...cell(26, 11) });
     return;
   }
   if (houseId === "tigris") {
     for (let ty = 5; ty <= 16; ty += 3) addRect(tiles, solids, "tile-sand-stripe", 4, ty, 27, ty);
+    addRect(tiles, solids, "tile-sand-mud", 12, 8, 19, 13);
     props.push({ kind: "vine", ...cell(3, 7) });
     props.push({ kind: "vine", ...cell(3, 14) });
     props.push({ kind: "vine", ...cell(28, 7) });
     props.push({ kind: "vine", ...cell(28, 14) });
+    props.push({ kind: "lamp", ...cell(8, 5) });
+    props.push({ kind: "lamp", ...cell(23, 16) });
     return;
   }
   if (houseId === "leo") {
     addRect(tiles, solids, "tile-mosaic", 12, 8, 19, 13);
+    overlayRing(tiles, "tile-mosaic", 11, 7, 20, 14);
     props.push({ kind: "brazier", ...cell(3, 3) });
     props.push({ kind: "brazier", ...cell(28, 3) });
     props.push({ kind: "brazier", ...cell(3, 18) });
     props.push({ kind: "brazier", ...cell(28, 18) });
+    props.push({ kind: "lamp", ...cell(10, 6) });
+    props.push({ kind: "lamp", ...cell(21, 15) });
     return;
   }
   if (houseId === "ursus") {
     addRect(tiles, solids, "tile-sand-mud", 14, 9, 17, 12);
+    addRect(tiles, solids, "tile-sand-earth", 10, 7, 21, 14);
     props.push({ kind: "pit-log", ...cell(8, 3) });
     props.push({ kind: "pit-log", ...cell(23, 3) });
     props.push({ kind: "pit-log", ...cell(8, 18) });
     props.push({ kind: "pit-log", ...cell(23, 18) });
+    props.push({ kind: "brazier", ...cell(6, 10) });
+    props.push({ kind: "brazier", ...cell(25, 10) });
     return;
   }
   if (houseId === "rhinoceros") {
     addRect(tiles, solids, "tile-stone", 3, 3, 5, 18);
     addRect(tiles, solids, "tile-stone", 26, 3, 28, 18);
+    addRect(tiles, solids, "tile-sand-stone", 13, 9, 18, 12);
     props.push({ kind: "pit-horn", ...cell(3, 7) });
     props.push({ kind: "pit-horn", ...cell(3, 14) });
     props.push({ kind: "pit-horn", ...cell(28, 7) });
     props.push({ kind: "pit-horn", ...cell(28, 14) });
+    props.push({ kind: "lamp", ...cell(7, 8) });
+    props.push({ kind: "lamp", ...cell(24, 13) });
     return;
   }
   if (houseId === "elephas") {
     addRect(tiles, solids, "tile-mosaic", 10, 7, 21, 14);
+    overlayRing(tiles, "tile-mosaic", 11, 8, 20, 13);
     props.push({ kind: "pit-ivory", ...cell(16, 3) });
     props.push({ kind: "pit-ivory", ...cell(16, 18) });
     props.push({ kind: "pit-ivory", ...cell(3, 10) });
     props.push({ kind: "pit-ivory", ...cell(28, 10) });
+    props.push({ kind: "brazier", ...cell(8, 6) });
+    props.push({ kind: "brazier", ...cell(23, 15) });
     return;
   }
   props.push({ kind: "lamp", ...cell(3, 3) });

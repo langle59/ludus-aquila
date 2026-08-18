@@ -22,7 +22,7 @@ const VARIANT_BASES = new Set([
 
 function variantTex(scene: Phaser.Scene, tex: string, x: number, y: number): string {
   if (!VARIANT_BASES.has(tex)) return tex;
-  const n = ((x * 13 + y * 31) >>> 0) % 4;
+  const n = ((x * 13 + y * 31) >>> 0) % 6;
   if (n === 0) return tex;
   const key = `${tex}-${n}`;
   return scene.textures.exists(key) ? key : tex;
@@ -223,10 +223,38 @@ function paintDecor(scene: Phaser.Scene, built: BuiltMap, mood: "ludus" | "arena
     for (const t of ludusWallTorches(walls)) {
       placeTorch(scene, t.x * TILE_SIZE + 16, t.y * TILE_SIZE + 10);
     }
+    placeHangBanners(scene, built, COLORS.crimson);
   } else {
     for (const t of arenaWallTorches(built.cols, built.rows)) {
       placeTorch(scene, t.x * TILE_SIZE + 16, t.y * TILE_SIZE + 8, built.torchTint);
     }
+    if (mood === "arena") placeHangBanners(scene, built, built.torchTint ?? COLORS.crimson);
+  }
+}
+
+function placeHangBanners(scene: Phaser.Scene, built: BuiltMap, tint: number): void {
+  let n = 0;
+  for (const t of built.tiles) {
+    if (!t.tex.startsWith("tile-banner") && t.tex !== "tile-wall") continue;
+    const tx = t.x / TILE_SIZE;
+    const ty = t.y / TILE_SIZE;
+    if (ty > 2 && t.tex !== "tile-banner-red" && !t.tex.startsWith("tile-banner")) continue;
+    if (((tx * 7 + ty * 13) >>> 0) % 5 !== 0) continue;
+    if (n >= 14) break;
+    n += 1;
+    const hang = scene.add
+      .image(t.x + TILE_SIZE / 2, t.y + 6, "prop-hang-banner")
+      .setOrigin(0.5, 0)
+      .setDepth(t.y + 18)
+      .setTint(tint);
+    scene.tweens.add({
+      targets: hang,
+      angle: n % 2 ? 3 : -3,
+      duration: 1400 + n * 70,
+      yoyo: true,
+      repeat: -1,
+      ease: "Sine.easeInOut",
+    });
   }
 }
 
@@ -242,6 +270,25 @@ function placeTorch(scene: Phaser.Scene, x: number, y: number, tint?: number): v
     yoyo: true,
     repeat: -1,
   });
+  addFloorPool(scene, x, y + 10, tint);
+}
+
+function addFloorPool(scene: Phaser.Scene, x: number, y: number, tint?: number, scale = 2.15): void {
+  const pool = scene.add
+    .image(x, y, "fx-glow")
+    .setDepth(2)
+    .setAlpha(0.22)
+    .setScale(scale)
+    .setBlendMode(Phaser.BlendModes.ADD);
+  if (tint) pool.setTint(tint);
+  scene.tweens.add({
+    targets: pool,
+    alpha: { from: 0.14, to: 0.28 },
+    scale: { from: scale * 0.92, to: scale * 1.08 },
+    duration: 520 + Math.random() * 180,
+    yoyo: true,
+    repeat: -1,
+  });
 }
 
 export function animateBrazier(scene: Phaser.Scene, x: number, y: number): void {
@@ -254,6 +301,7 @@ export function animateBrazier(scene: Phaser.Scene, x: number, y: number): void 
     yoyo: true,
     repeat: -1,
   });
+  addFloorPool(scene, x, y + 8, 0xffc070, 2.4);
   for (let i = 0; i < 3; i++) {
     const mote = scene.add.image(x + (i - 1) * 5, y - 8, "fx-mote").setDepth(y + 5).setTint(0xffc070).setAlpha(0.7);
     scene.tweens.add({
@@ -286,6 +334,7 @@ export function placeLamp(scene: Phaser.Scene, x: number, y: number, night = fal
     yoyo: true,
     repeat: -1,
   });
+  addFloorPool(scene, x, y + 6, night ? 0xffb060 : 0xffe08a, night ? 2.3 : 1.7);
 }
 
 export function paintAtmosphere(scene: Phaser.Scene, built: BuiltMap, mood: "ludus" | "arena" | "freedcamp" | "raid"): void {
@@ -293,50 +342,84 @@ export function paintAtmosphere(scene: Phaser.Scene, built: BuiltMap, mood: "lud
   const h = built.rows * TILE_SIZE;
   const night = mood === "raid";
 
-  const washColor = night ? 0x243858 : mood === "arena" ? 0xc45a1a : mood === "freedcamp" ? 0x3a6a48 : 0xd4a84b;
-  const washAlpha = night ? 0.14 : mood === "arena" ? 0.08 : mood === "freedcamp" ? 0.1 : 0.06;
+  const washColor = night
+    ? 0x243858
+    : mood === "arena"
+      ? built.torchTint ?? 0xc45a1a
+      : mood === "freedcamp"
+        ? 0x3a6a48
+        : 0xd4a84b;
+  const washAlpha = night ? 0.16 : mood === "arena" ? 0.12 : mood === "freedcamp" ? 0.1 : 0.07;
   const wash = scene.add.rectangle(w / 2, h / 2, w, h, washColor, washAlpha);
   wash.setDepth(4);
-  // Soft ADD tint — MULTIPLY made dark tunics vanish on sand
   wash.setBlendMode(Phaser.BlendModes.ADD);
 
   if (night) {
-    const cool = scene.add.rectangle(w / 2, h / 2, w, h, 0x0a1830, 0.16).setDepth(4.5);
-    void cool;
+    scene.add.rectangle(w / 2, h / 2, w, h, 0x0a1830, 0.18).setDepth(4.5);
+    for (let i = 0; i < 3; i++) {
+      const sx = w * (0.22 + i * 0.28);
+      scene.add
+        .image(sx, h * 0.18, "fx-shaft")
+        .setDepth(5)
+        .setAlpha(0.18)
+        .setScale(1.4 + i * 0.15, 1.6)
+        .setBlendMode(Phaser.BlendModes.ADD)
+        .setAngle(-6 + i * 5);
+    }
   }
 
-  const vg = scene.add.graphics().setScrollFactor(0).setDepth(2500);
-  const edge = night ? 0x040810 : mood === "freedcamp" ? 0x0a1810 : 0x1a1008;
-  vg.fillStyle(edge, night ? 0.7 : mood === "freedcamp" ? 0.62 : 0.55);
-  vg.fillRect(0, 0, GAME_WIDTH, night ? 36 : 28);
-  vg.fillRect(0, GAME_HEIGHT - (night ? 30 : 22), GAME_WIDTH, night ? 30 : 22);
-  vg.fillRect(0, 0, night ? 24 : 18, GAME_HEIGHT);
-  vg.fillRect(GAME_WIDTH - (night ? 24 : 18), 0, night ? 24 : 18, GAME_HEIGHT);
-  vg.fillStyle(edge, night ? 0.3 : 0.22);
-  vg.fillRect(0, 0, GAME_WIDTH, night ? 64 : 56);
-  vg.fillRect(0, GAME_HEIGHT - (night ? 56 : 48), GAME_WIDTH, night ? 56 : 48);
+  const vg = scene.add
+    .image(GAME_WIDTH / 2, GAME_HEIGHT / 2, "fx-vignette")
+    .setScrollFactor(0)
+    .setDepth(2500)
+    .setDisplaySize(GAME_WIDTH, GAME_HEIGHT)
+    .setAlpha(night ? 1 : mood === "freedcamp" ? 0.85 : 0.78);
+  if (night) vg.setTint(0x6a88b0);
+  else if (mood === "freedcamp") vg.setTint(0x3a6a48);
+  else if (mood === "arena") vg.setTint(built.torchTint ?? 0xc45a1a);
 
-  const motes = night ? 12 : 28;
+  const motes = night ? 14 : mood === "arena" ? 22 : 32;
   for (let i = 0; i < motes; i++) {
     const m = scene.add
       .image(Math.random() * w, Math.random() * h, "fx-mote")
       .setDepth(6)
-      .setAlpha(night ? 0.06 + Math.random() * 0.1 : 0.15 + Math.random() * 0.25)
-      .setScale(0.6 + Math.random() * 0.8);
+      .setAlpha(night ? 0.07 + Math.random() * 0.12 : 0.16 + Math.random() * 0.28)
+      .setScale(0.5 + Math.random() * 1.1);
     if (mood === "freedcamp") m.setTint(0xa8d090);
     if (night) m.setTint(0x6a8ab0);
+    if (mood === "arena") m.setTint(0xffe08a);
     scene.tweens.add({
       targets: m,
-      y: m.y - (40 + Math.random() * 80),
-      x: m.x + Phaser.Math.Between(-24, 24),
+      y: m.y - (40 + Math.random() * 90),
+      x: m.x + Phaser.Math.Between(-28, 28),
       alpha: 0,
-      duration: 5000 + Math.random() * 4000,
+      duration: 4800 + Math.random() * 4200,
       repeat: -1,
       onRepeat: () => {
         m.setPosition(Math.random() * w, Math.random() * h);
-        m.setAlpha(night ? 0.06 + Math.random() * 0.1 : 0.2 + Math.random() * 0.25);
+        m.setAlpha(night ? 0.07 + Math.random() * 0.12 : 0.18 + Math.random() * 0.28);
       },
     });
+  }
+
+  if (mood === "arena") {
+    for (let i = 0; i < 4; i++) {
+      const haze = scene.add
+        .image(w * (0.2 + i * 0.2), h * 0.45, "fx-glow")
+        .setDepth(5)
+        .setAlpha(0.08)
+        .setScale(3.4, 1.15)
+        .setBlendMode(Phaser.BlendModes.ADD)
+        .setTint(0xffc070);
+      scene.tweens.add({
+        targets: haze,
+        y: haze.y - 18,
+        alpha: { from: 0.05, to: 0.12 },
+        duration: 2200 + i * 180,
+        yoyo: true,
+        repeat: -1,
+      });
+    }
   }
 
   if (night) scene.cameras.main.fadeIn(900, 4, 8, 16);
@@ -369,9 +452,37 @@ export const PANEL_STYLE: Phaser.Types.GameObjects.Text.TextStyle = {
   color: "#e8dcc8",
 };
 
-export function panel(scene: Phaser.Scene, x: number, y: number, w: number, h: number): Phaser.GameObjects.Rectangle {
-  const r = scene.add.rectangle(x, y, w, h, COLORS.uiPanel, 0.94).setStrokeStyle(3, COLORS.gold).setScrollFactor(0).setDepth(5000);
-  return r;
+export function panel(scene: Phaser.Scene, x: number, y: number, w: number, h: number): Phaser.GameObjects.GameObject {
+  if (typeof (scene.add as Phaser.GameObjects.GameObjectFactory & { nineslice?: Function }).nineslice === "function") {
+    return scene.add.nineslice(x, y, "ui-panel", undefined, w, h, 16, 16, 16, 16).setScrollFactor(0).setDepth(5000);
+  }
+  return scene.add.rectangle(x, y, w, h, COLORS.uiPanel, 0.94).setStrokeStyle(3, COLORS.gold).setScrollFactor(0).setDepth(5000);
+}
+
+export function animateCampFire(scene: Phaser.Scene, x: number, y: number): void {
+  scene.add.image(x, y + 4, "prop-brazier").setDepth(y).setScale(1.25);
+  const glow = scene.add.image(x, y - 12, "fx-glow").setDepth(y + 6).setAlpha(0.7).setScale(1.6).setBlendMode(Phaser.BlendModes.ADD);
+  scene.tweens.add({
+    targets: glow,
+    alpha: { from: 0.45, to: 0.9 },
+    scale: { from: 1.35, to: 1.9 },
+    duration: 340 + Math.random() * 120,
+    yoyo: true,
+    repeat: -1,
+  });
+  addFloorPool(scene, x, y + 10, 0xff8a30, 3.2);
+  for (let i = 0; i < 5; i++) {
+    const mote = scene.add.image(x + (i - 2) * 4, y - 10, "fx-mote").setDepth(y + 7).setTint(0xffc070).setAlpha(0.8);
+    scene.tweens.add({
+      targets: mote,
+      y: y - 36 - i * 5,
+      x: x + Phaser.Math.Between(-10, 10),
+      alpha: 0,
+      duration: 800 + i * 140,
+      repeat: -1,
+      delay: i * 90,
+    });
+  }
 }
 
 export function animateFountain(scene: Phaser.Scene, x: number, y: number): void {
@@ -411,4 +522,92 @@ export function animateTrough(scene: Phaser.Scene, x: number, y: number): void {
       });
     },
   });
+}
+
+export type ChampionFireRing = {
+  cx: number;
+  cy: number;
+  rx: number;
+  ry: number;
+};
+
+export function spawnChampionFireRing(
+  scene: Phaser.Scene,
+  sand: { x0: number; y0: number; x1: number; y1: number },
+): ChampionFireRing {
+  const cx = (sand.x0 + sand.x1) / 2;
+  const cy = (sand.y0 + sand.y1) / 2;
+  const rx = Math.max(80, (sand.x1 - sand.x0) / 2 - 28);
+  const ry = Math.max(64, (sand.y1 - sand.y0) / 2 - 28);
+  const g = scene.add.graphics().setDepth(3);
+  g.lineStyle(10, 0x6a1808, 0.85);
+  g.strokeEllipse(cx, cy, rx * 2, ry * 2);
+  g.lineStyle(6, 0xc42810, 0.9);
+  g.strokeEllipse(cx, cy, rx * 2, ry * 2);
+  g.lineStyle(3, 0xff7a20, 0.7);
+  g.strokeEllipse(cx, cy, rx * 2, ry * 2);
+  const count = 28;
+  for (let i = 0; i < count; i++) {
+    const a = (i / count) * Math.PI * 2;
+    const x = cx + Math.cos(a) * rx;
+    const y = cy + Math.sin(a) * ry;
+    addFloorPool(scene, x, y + 4, 0xff5018, 2.4);
+    const glow = scene.add
+      .image(x, y - 10, "fx-glow")
+      .setDepth(y + 2)
+      .setAlpha(0.85)
+      .setScale(1.35)
+      .setTint(0xff6020)
+      .setBlendMode(Phaser.BlendModes.ADD);
+    scene.tweens.add({
+      targets: glow,
+      alpha: { from: 0.55, to: 1 },
+      scale: { from: 1.15, to: 1.7 },
+      duration: 240 + Math.random() * 160,
+      yoyo: true,
+      repeat: -1,
+    });
+    const flame = scene.add
+      .image(x, y - 8, "fx-flame")
+      .setOrigin(0.5, 1)
+      .setDepth(y + 4)
+      .setScale(1.15 + Math.random() * 0.25);
+    scene.tweens.add({
+      targets: flame,
+      scaleX: { from: 0.95, to: 1.25 },
+      scaleY: { from: 1.05, to: 1.55 },
+      duration: 180 + Math.random() * 120,
+      yoyo: true,
+      repeat: -1,
+    });
+    for (let m = 0; m < 3; m++) {
+      const mote = scene.add
+        .image(x + (m - 1) * 5, y - 10, "fx-mote")
+        .setDepth(y + 5)
+        .setTint(m === 1 ? 0xfff0a8 : 0xff7030)
+        .setAlpha(0.95)
+        .setScale(1.4);
+      scene.tweens.add({
+        targets: mote,
+        y: y - 32 - m * 8,
+        x: x + Phaser.Math.Between(-8, 8),
+        alpha: 0,
+        duration: 480 + m * 120 + Math.random() * 100,
+        repeat: -1,
+        delay: i * 16 + m * 70,
+        onRepeat: () => {
+          mote.x = x + (m - 1) * 5;
+          mote.y = y - 10;
+          mote.setAlpha(0.95);
+        },
+      });
+    }
+  }
+  return { cx, cy, rx: rx - 22, ry: ry - 18 };
+}
+
+export function outsideFireRing(x: number, y: number, ring: ChampionFireRing): boolean {
+  const nx = (x - ring.cx) / ring.rx;
+  const ny = (y - ring.cy) / ring.ry;
+  return nx * nx + ny * ny > 1;
 }

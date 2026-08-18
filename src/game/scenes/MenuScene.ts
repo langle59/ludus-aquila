@@ -17,7 +17,7 @@ export class MenuScene extends Phaser.Scene {
   create(): void {
     this.cameras.main.setBackgroundColor(COLORS.uiDark);
     const g = this.add.graphics();
-    g.fillGradientStyle(0x241410, 0x241410, 0x6a3a22, 0x8a4a28, 1, 1, 1, 1);
+    g.fillGradientStyle(0x1a100c, 0x1a100c, 0x5a2e18, 0x7a3a20, 1, 1, 1, 1);
     g.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
     g.fillStyle(0x3a2a1c, 1);
     g.fillRect(0, 520, GAME_WIDTH, 200);
@@ -28,18 +28,39 @@ export class MenuScene extends Phaser.Scene {
       g.fillRect(x, y, 30, 14);
     }
 
+    this.add.rectangle(GAME_WIDTH / 2, 360, GAME_WIDTH, GAME_HEIGHT, 0xd4a84b, 0.06).setBlendMode(Phaser.BlendModes.ADD);
     this.add.rectangle(GAME_WIDTH / 2, 560, GAME_WIDTH, 80, 0x000000, 0.25);
 
     for (let i = 0; i < 6; i++) {
       const x = 70 + i * 226;
-      this.add.image(x, 430, "prop-column").setScale(1.4).setAlpha(0.9);
+      this.add.image(x, 448, "prop-column").setScale(1.35).setAlpha(0.95).setOrigin(0.5, 1);
+      const torch = this.add.image(x, 360, "fx-glow").setScale(1.6).setAlpha(0.4).setBlendMode(Phaser.BlendModes.ADD);
+      const pool = this.add.image(x, 430, "fx-glow").setScale(2.4).setAlpha(0.18).setBlendMode(Phaser.BlendModes.ADD);
+      this.tweens.add({
+        targets: torch,
+        alpha: { from: 0.28, to: 0.55 },
+        scale: { from: 1.45, to: 1.85 },
+        duration: 420 + i * 60,
+        yoyo: true,
+        repeat: -1,
+        ease: "Sine.easeInOut",
+      });
+      this.tweens.add({
+        targets: pool,
+        alpha: { from: 0.12, to: 0.24 },
+        scale: { from: 2.2, to: 2.6 },
+        duration: 680 + i * 40,
+        yoyo: true,
+        repeat: -1,
+        ease: "Sine.easeInOut",
+      });
     }
 
     for (let i = 0; i < 10; i++) {
-      const b = this.add.image(80 + i * 120, 40, "menu-banner").setOrigin(0.5, 0);
+      const b = this.add.image(80 + i * 120, 28, "menu-banner").setOrigin(0.5, 0);
       this.tweens.add({
         targets: b,
-        angle: i % 2 ? 2.5 : -2.5,
+        angle: i % 2 ? 2.8 : -2.8,
         duration: 1600 + i * 80,
         yoyo: true,
         repeat: -1,
@@ -47,8 +68,33 @@ export class MenuScene extends Phaser.Scene {
       });
     }
 
-    this.add.image(GAME_WIDTH / 2, 118, "menu-eagle").setScale(1.15);
-    this.add.image(GAME_WIDTH / 2, 118, "fx-glow").setScale(3.2).setAlpha(0.35).setBlendMode(Phaser.BlendModes.ADD);
+    this.add.image(GAME_WIDTH / 2, 118, "fx-glow").setScale(4.2).setAlpha(0.42).setBlendMode(Phaser.BlendModes.ADD);
+    this.add.image(GAME_WIDTH / 2, 118, "menu-eagle").setScale(1.22);
+    this.add
+      .image(GAME_WIDTH / 2, GAME_HEIGHT / 2, "fx-vignette")
+      .setDisplaySize(GAME_WIDTH, GAME_HEIGHT)
+      .setAlpha(0.72)
+      .setDepth(2);
+
+    for (let i = 0; i < 18; i++) {
+      const m = this.add
+        .image(Math.random() * GAME_WIDTH, 80 + Math.random() * 420, "fx-mote")
+        .setAlpha(0.2 + Math.random() * 0.3)
+        .setScale(0.6 + Math.random())
+        .setDepth(3)
+        .setTint(0xffe08a);
+      this.tweens.add({
+        targets: m,
+        y: m.y - 50,
+        alpha: 0,
+        duration: 4200 + Math.random() * 2800,
+        repeat: -1,
+        onRepeat: () => {
+          m.setPosition(Math.random() * GAME_WIDTH, 120 + Math.random() * 380);
+          m.setAlpha(0.22 + Math.random() * 0.28);
+        },
+      });
+    }
 
     this.add
       .text(GAME_WIDTH / 2, 210, "LUDUS AQUILA", {

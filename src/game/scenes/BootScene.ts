@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import { generatePlaceholderAssets } from "../systems/assets";
+import { preloadBeastSheets } from "../systems/beastAnim";
 import { gameState } from "../state/GameState";
 import { audio } from "../systems/audio";
 import { skipTutorial } from "../systems/objectives";
@@ -24,6 +25,7 @@ export class BootScene extends Phaser.Scene {
     this.load.image("axe-src", "weapons/axe.png");
     this.load.image("hammer-src", "weapons/hammer.png");
     this.load.image("tent-src", "tents/tent.png");
+    preloadBeastSheets(this);
     this.load.on("loaderror", () => {
       /* missing beast/tent PNGs fall back to canvas art */
     });
@@ -32,6 +34,11 @@ export class BootScene extends Phaser.Scene {
   create(): void {
     generatePlaceholderAssets(this);
     gameState.loadSettings();
+    const params = new URLSearchParams(window.location.search);
+    const s2 = gameState.peekSlot(2);
+    if (params.get("seed2") === "1" || !s2 || s2.playerName === "Tutor") {
+      gameState.seedAct3TestSlot(2, { playerName: "Tutor", pledgedHouse: "lupus", palBeastKind: "eagle" });
+    }
     audio.startMusic();
     const debug = new URLSearchParams(window.location.search).get("debug") === "1";
     this.registry.set("debug", debug);

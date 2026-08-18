@@ -3,7 +3,7 @@ import { TILE_SIZE, HUD_CAM_PAD } from "../config";
 import { gameState } from "../state/GameState";
 import { bus } from "../systems/bus";
 import { audio } from "../systems/audio";
-import { paintMap, animateBrazier, placeLamp } from "../systems/worldRender";
+import { paintMap, animateBrazier, animateCampFire, placeLamp } from "../systems/worldRender";
 import { buildFreedCamp, freedCampAreaName } from "../maps/maps";
 import { Fighter } from "../entities/Fighter";
 import { NpcActor, WorldProp } from "../entities/World";
@@ -198,8 +198,7 @@ export class FreedCampScene extends Phaser.Scene {
         this.physics.add.collider(this.player, b);
         animateBrazier(this, p.x, p.y);
       } else if (p.kind === "camp_fire") {
-        this.add.circle(p.x, p.y, 18, 0xc45a1a, 0.55).setDepth(p.y);
-        this.add.circle(p.x, p.y - 6, 10, 0xe8c96a, 0.7).setDepth(p.y + 1);
+        animateCampFire(this, p.x, p.y);
         this.interactables.push({ kind: "fire", x: p.x, y: p.y });
       } else if (p.kind === "cooking_pot") {
         this.potPos = { x: p.x, y: p.y };

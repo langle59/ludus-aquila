@@ -8,7 +8,7 @@ import { SHOP_ITEMS, shopUnlocked } from "../data/shop";
 import { grantPalPoint, grantPalXp, palAnimalName, palBrought, palTier, palTitle, palUnlocked } from "../data/pal";
 import { applyPrayerStats, prayerDodgeIframes, prayerMoveSpeed, clearPrayer } from "../data/patrons";
 import { recordWeaponWin } from "../data/weapons";
-import { allSchoolGlory, bumpSchoolTraining, chamberSlotFromId, isSchoolNpc, schoolGloryCount, schoolNextId, SCHOOL_IDS } from "../data/school";
+import { allSchoolGlory, bumpSchoolTraining, chamberSlotFromId, isSchoolNpc, markSchoolTut, schoolGloryCount, schoolNextId, SCHOOL_IDS } from "../data/school";
 import { getSchoolCircuitFighter } from "../data/schoolCircuit";
 import { getNpc } from "../data/gladiators";
 import { bus } from "./bus";
@@ -484,6 +484,7 @@ export function applySparReward(npcId: string, playerWon: boolean): { xp: number
   if (gameState.save.lanistaUnlocked && isSchoolNpc(npcId)) {
     const rec = gameState.save.school[npcId];
     bus.emit("toast", `${getNpc(npcId).name}: Training ${rec.training}/6 (spar adds training)`);
+    if (npcId === "titus") markSchoolTut("schoolTutSparred");
   }
   return { xp, denarii };
 }

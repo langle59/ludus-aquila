@@ -1,8 +1,9 @@
-import type { ObjectiveId, SaveData, SettingsData, TunicColor, WeaponId } from "../types";
+import type { ObjectiveId, SaveData, SettingsData, TunicColor, WeaponId, BeastKind } from "../types";
 import { DEFAULT_KEYBINDS } from "../types";
 import { ACTIVE_SLOT_KEY, SAVE_KEY, SAVE_SLOT_COUNT, SETTINGS_KEY, TILE_SIZE, saveSlotKey } from "../config";
-import { getHouse } from "../data/houses";
+import { getHouse, houseCreateTunics, sortedHouses } from "../data/houses";
 import { emptyChamber, emptySchool, ensureSchoolCosmetics, mergeChamber, mergeSchool } from "../data/school";
+import { CHAMBER_STARTERS, furnishedChamber } from "../data/chamber";
 import { emptyCamp, mergeCamp } from "../data/camp";
 import type { CompanionId } from "../types";
 
@@ -28,7 +29,7 @@ export function defaultStats() {
 }
 
 export function xpForLevel(level: number): number {
-  return 40 + level * 35;
+  return 90 + level * 55;
 }
 
 function migrateKeybinds(parsed?: Partial<Record<string, string>>): SettingsData["keybinds"] {
@@ -238,7 +239,7 @@ class GameState {
         slot,
         playerName: parsed.playerName,
         houseId: parsed.playerHouse ?? null,
-        houseName: house?.name ?? "Unpledged",
+        houseName: house?.name ?? "House Aquila",
         level: parsed.level ?? 1,
         progress: this.progressLabel(parsed),
       };
@@ -317,6 +318,70 @@ class GameState {
     this.pendingFeast = false;
   }
 
+  /** Dev/test save: Act III on a pledged rival house, optional pal beast override. */
+  seedAct3TestSlot(
+    slot: SaveSlotId,
+    opts?: { playerName?: string; pledgedHouse?: string | null; palBeastKind?: BeastKind },
+  ): void {
+    const pledged = opts?.pledgedHouse === undefined ? "lupus" : opts.pledgedHouse;
+    const name = opts?.playerName ?? "Tutor";
+    const house = pledged ? getHouse(pledged) : undefined;
+    const tunic = house ? (houseCreateTunics(pledged!)[0] ?? "crimson") : "crimson";
+    const save = createNewSave(name, tunic, pledged);
+    const rivals = sortedHouses().filter((h) => !pledged || h.id !== pledged);
+
+    save.tutorialComplete = true;
+    save.tutorialFlags = {
+      metLanista: true,
+      equippedWeapon: true,
+      hitDummy: true,
+      staminaDip: true,
+      hitHeavy: true,
+      dodged: true,
+      blocked: true,
+      parried: true,
+      boutTitus: true,
+      boutRufus: true,
+      boutBrom: true,
+      boutAelia: true,
+      sparred: true,
+      readyForArena: true,
+    };
+    save.equippedWeapon = "gladius";
+    save.defeatedHouses = rivals.map((h) => h.id);
+    save.defeatedOpponents = rivals.flatMap((h) => h.fighters.map((f) => f.id));
+    save.tournamentWins = 3;
+    save.freedomWon = true;
+    save.lanistaUnlocked = true;
+    save.currentObjective = "school";
+    save.level = 14;
+    save.xp = 0;
+    save.xpToNext = xpForLevel(14);
+    save.denarii = 420;
+    save.health = save.stats.maxHealth;
+    save.stamina = save.stats.maxStamina;
+    save.statPoints = 4;
+    save.reputation = "Champion";
+    save.unlockedWeapons = ["gladius", "spear", "dual_blades", "securis", "trident_net", "malleus"];
+    save.palUnlocked = true;
+    save.palBrought = true;
+    if (opts?.palBeastKind) save.palBeastKind = opts.palBeastKind;
+    save.palName = opts?.palBeastKind === "eagle" ? "Aquila" : house?.animalName ?? "Pal";
+    save.palPoints = 2;
+    save.storyFlags = {
+      actIntro2: true,
+      actIntro3: true,
+      schoolTutDone: true,
+    };
+    save.title = "lanista";
+    for (const id of ["title-aquila", "title-lanista", "title-freeman", ...CHAMBER_STARTERS]) {
+      if (!save.ownedCosmetics.includes(id)) save.ownedCosmetics.push(id);
+    }
+    save.chamber = furnishedChamber();
+
+    localStorage.setItem(saveSlotKey(slot), JSON.stringify(save));
+  }
+
   startNew(name: string, tunic: TunicColor, playerHouse: string | null = null): void {
     this.resetSession();
     this.save = createNewSave(name.trim() || "Gladiator", tunic, playerHouse);
@@ -367,6 +432,7 @@ class GameState {
     this.save.palUnlocked = parsed.palUnlocked ?? this.save.defeatedHouses.length >= 1;
     this.save.palBrought = parsed.palBrought ?? true;
     this.save.palName = parsed.palName ?? "";
+    this.save.palBeastKind = parsed.palBeastKind;
     this.save.palTint = parsed.palTint === "ivory" || parsed.palTint === "night" || parsed.palTint === "house" ? parsed.palTint : "house";
     this.save.palTraining = Math.max(0, Math.min(3, parsed.palTraining ?? 0));
     this.save.unlockedPalSkills = parsed.unlockedPalSkills ?? [];

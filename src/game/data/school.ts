@@ -422,10 +422,35 @@ export function grantLanista(): boolean {
   }
   s.chamber = furnishedChamber();
   if (s.freedomWon) s.currentObjective = "school";
+  s.storyFlags.schoolTutStarted = true;
   gameState.persist();
   bus.emit("cosmetics-changed");
   bus.emit("lanista-unlocked");
   return true;
+}
+
+export type SchoolTutStep = "locker" | "teach" | "spar" | "send" | "done";
+
+export function schoolTutStep(): SchoolTutStep {
+  const s = gameState.save;
+  const rec = getSchoolRecord("titus");
+  if (!s.lanistaUnlocked || s.storyFlags.act3Complete || s.storyFlags.schoolTutDone || rec.glory || rec.wins > 0 || rec.losses > 0) {
+    return "done";
+  }
+  if (!s.storyFlags.schoolTutLocker && rec.lessons <= 0 && rec.training <= 0) return "locker";
+  if (rec.lessons <= 0 && !s.storyFlags.schoolTutTaught) return "teach";
+  if (!s.storyFlags.schoolTutSparred && rec.training < 1 && !schoolReadyForUndercard("titus")) return "spar";
+  return "send";
+}
+
+export function markSchoolTut(flag: "schoolTutLocker" | "schoolTutTaught" | "schoolTutSparred" | "schoolTutDone"): void {
+  const s = gameState.save;
+  if (!s.lanistaUnlocked) return;
+  if (s.storyFlags.schoolTutDone || s.storyFlags[flag]) return;
+  if (schoolTutStep() === "done" && flag !== "schoolTutDone") return;
+  s.storyFlags[flag] = true;
+  if (flag === "schoolTutDone") s.storyFlags.schoolTutDone = true;
+  gameState.persist();
 }
 
 export function bumpSchoolTraining(npcId: string): void {
@@ -448,6 +473,7 @@ export function applyCoachingLesson(npcId: string): { message: string; training:
   bumpSchoolSpecialty(npcId);
   const rec = gameState.save.school[npcId];
   rec.lessons = (rec.lessons ?? 0) + 1;
+  if (npcId === "titus") markSchoolTut("schoolTutTaught");
   gameState.persist();
   const npc = getNpc(npcId);
   const focus = SCHOOL_FOCUS[npcId];

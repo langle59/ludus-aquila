@@ -1,6 +1,6 @@
 import { Fighter } from "../entities/Fighter";
 import { COLORS } from "../config";
-import type { WeaponId } from "../types";
+import type { WeaponId, AttackKind } from "../types";
 import { getWeapon, isHeavyWeapon, weaponMove } from "../data/weapons";
 import { audio } from "./audio";
 import { gameState } from "../state/GameState";
@@ -49,13 +49,13 @@ export function resolveHits(attacker: Fighter, targets: CombatTarget[], onHit?: 
     if (result === "miss") continue;
     attacker.hitboxActive = attacker.attackKind === "special" && w.id === "dual_blades";
     if (result === "perfect") {
-      burst(attacker.scene, t.x, t.y, 0xffe08a);
+      burst(attacker.scene, t.x, t.y, 0xffe08a, false, hitAngle(attacker), w.id);
       floatNumber(attacker.scene, t.x, t.y - 18, "PERFECT", "#ffe08a");
       onHit?.(t, result);
       continue;
     }
     if (result === "parry") {
-      burst(attacker.scene, t.x, t.y, 0xc9d8e8);
+      burst(attacker.scene, t.x, t.y, 0xc9d8e8, false, hitAngle(attacker), w.id);
       floatNumber(attacker.scene, t.x, t.y - 18, "PARRY", "#c9d8e8");
       attacker.stagger(560);
       attacker.hitboxActive = false;
@@ -64,9 +64,11 @@ export function resolveHits(attacker: Fighter, targets: CombatTarget[], onHit?: 
     }
     if (attacker.team === "player") attacker.consumeHitBonus();
     audio.sfx(result === "block" ? "block" : "hit");
-    const tint = result === "block" ? 0x88aacc : 0xe8dcc8;
     const heavyFeel = attacker.attackKind !== "light";
-    burst(attacker.scene, t.x, t.y, tint, result === "hit" && heavyFeel);
+    const tint = result === "block" ? 0x88aacc : weaponHitTint(w.id, attacker.attackKind);
+    const angle = hitAngle(attacker);
+    burst(attacker.scene, t.x, t.y, tint, result === "hit" && heavyFeel, angle, w.id, attacker.attackKind === "special");
+    if (result === "hit" && heavyFeel) sandKick(attacker.scene, t.x, t.y + 8, angle);
     const shown = Math.max(1, Math.round(t.lastDamage));
     floatNumber(attacker.scene, t.x + Phaser.Math.Between(-8, 8), t.y - 22, String(shown), result === "block" ? "#7ab8e8" : "#e07060");
     if (result === "hit") {
@@ -95,34 +97,108 @@ function distToSegment(px: number, py: number, ax: number, ay: number, bx: numbe
   return Phaser.Math.Distance.Between(px, py, ax + abx * t, ay + aby * t);
 }
 
-export function burst(scene: Phaser.Scene, x: number, y: number, tint: number, heavy = false): void {
-  const count = heavy ? 18 : 14;
-  for (let i = 0; i < count; i++) {
-    const p = scene.add.image(x, y, "spark").setTint(tint).setDepth(3000).setScale(0.8 + Math.random() * 0.8);
+function hitAngle(attacker: Fighter): number {
+  return Phaser.Math.RadToDeg(Math.atan2(attacker.facing.y, attacker.facing.x));
+}
+
+export function weaponHitTint(id: WeaponId, kind: AttackKind): number {
+  const base: Record<WeaponId, number> = {
+    gladius: 0xc8d0e8,
+    spear: 0x9ab8d8,
+    dual_blades: 0xffe08a,
+    securis: 0xff8844,
+    malleus: 0xb8b0d0,
+    trident_net: 0x88ddaa,
+  };
+  const c = base[id];
+  if (kind === "special") return Phaser.Display.Color.GetColor(
+    Math.min(255, ((c >> 16) & 255) + 40),
+    Math.min(255, ((c >> 8) & 255) + 40),
+    Math.min(255, (c & 255) + 40),
+  );
+  if (kind === "heavy") return Phaser.Display.Color.GetColor(
+    Math.min(255, ((c >> 16) & 255) + 24),
+    Math.min(255, ((c >> 8) & 255) + 24),
+    Math.min(255, (c & 255) + 24),
+  );
+  return c;
+}
+
+export function sandKick(scene: Phaser.Scene, x: number, y: number, angleDeg: number): void {
+  const rad = Phaser.Math.DegToRad(angleDeg);
+  const fx = Math.cos(rad);
+  const fy = Math.sin(rad);
+  for (let i = 0; i < 5; i++) {
+    const p = scene.add
+      .image(x + Phaser.Math.Between(-10, 10), y, "fx-dust")
+      .setDepth(2997)
+      .setAlpha(0.65)
+      .setScale(0.7 + Math.random() * 0.6)
+      .setTint(0xc4a36b);
     scene.tweens.add({
       targets: p,
-      x: x + Phaser.Math.Between(heavy ? -34 : -26, heavy ? 34 : 26),
-      y: y + Phaser.Math.Between(heavy ? -34 : -26, heavy ? 34 : 26),
+      x: p.x + fx * Phaser.Math.Between(16, 36) + Phaser.Math.Between(-6, 6),
+      y: p.y + fy * Phaser.Math.Between(8, 22) - Phaser.Math.Between(4, 14),
       alpha: 0,
-      scale: 0.15,
-      duration: heavy ? 320 : 260,
+      scale: 1.4,
+      duration: 340 + i * 40,
       onComplete: () => p.destroy(),
     });
   }
-  const ring = scene.add.image(x, y, "fx-ring").setTint(tint).setAlpha(0.7).setScale(heavy ? 0.45 : 0.38).setDepth(2998);
+}
+
+export function burst(
+  scene: Phaser.Scene,
+  x: number,
+  y: number,
+  tint: number,
+  heavy = false,
+  angleDeg = 0,
+  _weaponId?: WeaponId,
+  special = false,
+): void {
+  const count = special ? 22 : heavy ? 20 : 14;
+  const rad = Phaser.Math.DegToRad(angleDeg);
+  const fx = Math.cos(rad);
+  const fy = Math.sin(rad);
+  for (let i = 0; i < count; i++) {
+    const spread = heavy || special ? 34 : 26;
+    const along = Phaser.Math.Between(-spread, spread);
+    const aside = Phaser.Math.Between(-spread * 0.6, spread * 0.6);
+    const p = scene.add.image(x, y, "spark").setTint(tint).setDepth(3000).setScale(0.8 + Math.random() * 0.8);
+    scene.tweens.add({
+      targets: p,
+      x: x + fx * along - fy * aside,
+      y: y + fy * along + fx * aside,
+      alpha: 0,
+      scale: 0.15,
+      duration: special ? 360 : heavy ? 320 : 260,
+      onComplete: () => p.destroy(),
+    });
+  }
+  const ring = scene.add.image(x, y, "fx-ring").setTint(tint).setAlpha(heavy || special ? 0.85 : 0.7).setScale(heavy || special ? 0.5 : 0.38).setDepth(2998);
   scene.tweens.add({
     targets: ring,
     alpha: 0,
-    scale: heavy ? 1.25 : 1.05,
-    duration: heavy ? 220 : 180,
+    scale: heavy || special ? 1.35 : 1.05,
+    duration: special ? 260 : heavy ? 220 : 180,
     onComplete: () => ring.destroy(),
   });
-  const streak = scene.add.image(x, y, "fx-slash").setTint(tint).setAlpha(0.8).setScale(heavy ? 0.6 : 0.5).setDepth(2999).setAngle(Phaser.Math.Between(0, 180));
+  const slashAng = angleDeg + (heavy ? 55 : 35) * (Math.random() > 0.5 ? 1 : -1);
+  const streak = scene.add
+    .image(x, y, "fx-slash")
+    .setTint(tint)
+    .setAlpha(heavy || special ? 0.95 : 0.8)
+    .setScale(heavy || special ? 0.72 : special ? 0.65 : 0.5)
+    .setDepth(2999)
+    .setAngle(slashAng);
   scene.tweens.add({
     targets: streak,
     alpha: 0,
-    scale: heavy ? 1.05 : 0.9,
-    duration: 170,
+    scale: heavy || special ? 1.15 : 0.9,
+    x: x + fx * (heavy ? 18 : 10),
+    y: y + fy * (heavy ? 18 : 10),
+    duration: special ? 200 : 170,
     onComplete: () => streak.destroy(),
   });
 }

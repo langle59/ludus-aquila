@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import { COLORS } from "../config";
+import { prepareBeastSheets, registerBeastAnims } from "./beastAnim";
 
 export type BodyStyle = "gladiator" | "lanista" | "aelia" | "heavy" | "champion" | "fox";
 
@@ -272,6 +273,8 @@ export function generatePlaceholderAssets(scene: Phaser.Scene): void {
   makeCrowd(scene);
   makeThrowables(scene);
   makeBeasts(scene);
+  prepareBeastSheets(scene);
+  registerBeastAnims(scene);
   makeWeaponTextures(scene);
   makeDecor(scene);
   makeMenuArt(scene);
@@ -286,7 +289,7 @@ function makeFloorFamily(
   light: number,
   kind: "packed" | "sand" | "dirt" | "flag" | "plank",
 ): void {
-  for (let v = 0; v < 4; v++) {
+  for (let v = 0; v < 6; v++) {
     const name = v === 0 ? key : `${key}-${v}`;
     canvasTex(scene, name, 32, 32, (ctx) => {
       const rand = rng(key.length * 97 + v * 131 + 17);
@@ -301,22 +304,31 @@ function makeFloorFamily(
 }
 
 function drawEarth(ctx: Ctx, rand: () => number, base: number, dark: number, light: number, kind: string): void {
-  speckles(ctx, 32, 32, rand, dark, kind === "sand" ? 48 : 36, 0.4);
-  speckles(ctx, 32, 32, rand, light, 22, 0.3);
-  if (kind === "sand") {
-    for (let i = 0; i < 3; i++) {
+  speckles(ctx, 32, 32, rand, dark, kind === "sand" ? 56 : kind === "packed" ? 40 : 36, 0.4);
+  speckles(ctx, 32, 32, rand, light, kind === "sand" ? 28 : 22, 0.3);
+  if (kind === "sand" || kind === "packed") {
+    for (let i = 0; i < (kind === "sand" ? 5 : 3); i++) {
       const x = Math.floor(rand() * 22) + 2;
       const y = Math.floor(rand() * 22) + 4;
-      px(ctx, x, y, 6 + Math.floor(rand() * 6), 1, shade(base, -0.08), 0.35);
+      px(ctx, x, y, 6 + Math.floor(rand() * 8), 1, shade(base, -0.1), 0.38);
     }
   }
   if (kind === "dirt") {
-    for (let i = 0; i < 2; i++) {
-      px(ctx, Math.floor(rand() * 24), Math.floor(rand() * 24), 3, 2, 0x5a3e22, 0.35);
+    for (let i = 0; i < 3; i++) {
+      px(ctx, Math.floor(rand() * 24), Math.floor(rand() * 24), 3, 2, 0x5a3e22, 0.4);
     }
   }
-  if (rand() > 0.55) {
-    px(ctx, 4 + Math.floor(rand() * 20), 6 + Math.floor(rand() * 16), 2, 1, 0x6a5a40, 0.4);
+  if (rand() > 0.42) {
+    px(ctx, 4 + Math.floor(rand() * 20), 6 + Math.floor(rand() * 16), 2, 1, 0x6a5a40, 0.45);
+  }
+  if (rand() > 0.62) {
+    const cx = 6 + Math.floor(rand() * 18);
+    const cy = 8 + Math.floor(rand() * 16);
+    px(ctx, cx, cy, 5, 3, shade(dark, -0.1), 0.32);
+    px(ctx, cx + 1, cy + 1, 3, 1, shade(base, -0.18), 0.4);
+  }
+  if (kind === "packed" && rand() > 0.5) {
+    px(ctx, Math.floor(rand() * 20) + 4, Math.floor(rand() * 20) + 6, 8, 1, shade(light, 0.08), 0.22);
   }
 }
 
@@ -389,11 +401,12 @@ function makeBanner(scene: Phaser.Scene, key: string, color: number): void {
     px(ctx, 0, 10, 32, 1, 0x4a443c, 0.8);
     px(ctx, 14, 0, 4, 32, 0x4a3a2c);
     px(ctx, 15, 0, 2, 32, 0x6a5238);
-    px(ctx, 18, 3, 12, 3, color);
-    px(ctx, 18, 6, 13, 8, shade(color, -0.08));
-    px(ctx, 18, 14, 10, 4, shade(color, -0.18));
-    px(ctx, 18, 18, 6, 3, shade(color, -0.28));
-    px(ctx, 19, 7, 8, 2, shade(color, 0.2), 0.5);
+    px(ctx, 18, 2, 13, 4, color);
+    px(ctx, 18, 6, 14, 10, shade(color, -0.08));
+    px(ctx, 18, 16, 12, 6, shade(color, -0.18));
+    px(ctx, 18, 22, 8, 5, shade(color, -0.3));
+    px(ctx, 19, 7, 9, 3, shade(color, 0.22), 0.5);
+    px(ctx, 20, 18, 6, 2, shade(color, 0.12), 0.35);
     circ(ctx, 16, 2, 2, COLORS.gold);
   });
 }
@@ -556,14 +569,14 @@ function makeCrate(scene: Phaser.Scene): void {
 }
 
 function makeShadow(scene: Phaser.Scene): void {
-  canvasTex(scene, "char-shadow", 36, 16, (ctx) => {
-    ctx.fillStyle = css(0x000000, 0.32);
+  canvasTex(scene, "char-shadow", 40, 18, (ctx) => {
+    ctx.fillStyle = css(0x000000, 0.42);
     ctx.beginPath();
-    ctx.ellipse(18, 8, 16, 6, 0, 0, Math.PI * 2);
+    ctx.ellipse(20, 9, 18, 7, 0, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = css(0x000000, 0.18);
+    ctx.fillStyle = css(0x000000, 0.22);
     ctx.beginPath();
-    ctx.ellipse(18, 8, 10, 4, 0, 0, Math.PI * 2);
+    ctx.ellipse(20, 9, 11, 4.5, 0, 0, Math.PI * 2);
     ctx.fill();
   });
 }
@@ -607,6 +620,12 @@ function makeParticles(scene: Phaser.Scene): void {
   canvasTex(scene, "fx-mote", 4, 4, (ctx) => {
     circ(ctx, 2, 2, 1.5, 0xe8dcc8, 0.7);
   });
+  canvasTex(scene, "fx-flame", 18, 28, (ctx) => {
+    fillPoly(ctx, [[9, 1], [3, 16], [9, 26], [15, 16]], 0xb82810);
+    fillPoly(ctx, [[9, 4], [5, 16], [9, 24], [13, 16]], 0xe85818);
+    fillPoly(ctx, [[9, 8], [7, 17], [9, 22], [11, 17]], 0xffc040);
+    px(ctx, 8, 12, 2, 4, 0xfff0a8);
+  });
   canvasTex(scene, "fx-glow", 64, 64, (ctx) => {
     const g = ctx.createRadialGradient(32, 32, 2, 32, 32, 30);
     g.addColorStop(0, css(0xffc070, 0.55));
@@ -615,14 +634,47 @@ function makeParticles(scene: Phaser.Scene): void {
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, 64, 64);
   });
+  canvasTex(scene, "fx-vignette", 320, 180, (ctx) => {
+    const g = ctx.createRadialGradient(160, 90, 48, 160, 90, 168);
+    g.addColorStop(0, css(0x1a1008, 0));
+    g.addColorStop(0.48, css(0x1a1008, 0));
+    g.addColorStop(0.78, css(0x120c08, 0.28));
+    g.addColorStop(1, css(0x0a0604, 0.78));
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 320, 180);
+  });
+  canvasTex(scene, "fx-shaft", 28, 96, (ctx) => {
+    const g = ctx.createLinearGradient(14, 0, 14, 96);
+    g.addColorStop(0, css(0xa8c4e0, 0.22));
+    g.addColorStop(0.45, css(0x6a88b0, 0.1));
+    g.addColorStop(1, css(0x6a88b0, 0));
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.moveTo(8, 0);
+    ctx.lineTo(20, 0);
+    ctx.lineTo(24, 96);
+    ctx.lineTo(4, 96);
+    ctx.closePath();
+    ctx.fill();
+  });
 }
 
 function makeUiPanel(scene: Phaser.Scene): void {
-  canvasTex(scene, "ui-panel", 64, 64, (ctx) => {
-    px(ctx, 0, 0, 64, 64, 0x1a1210, 0.92);
+  canvasTex(scene, "ui-panel", 96, 96, (ctx) => {
+    px(ctx, 0, 0, 96, 96, 0x2a1c16);
+    px(ctx, 6, 6, 84, 84, 0x221610);
+    px(ctx, 8, 8, 80, 2, shade(0x2a1c16, 0.12), 0.5);
     ctx.strokeStyle = css(COLORS.gold);
     ctx.lineWidth = 3;
-    ctx.strokeRect(2, 2, 60, 60);
+    ctx.strokeRect(3, 3, 90, 90);
+    ctx.strokeStyle = css(0x8a6a3a, 0.7);
+    ctx.lineWidth = 1;
+    ctx.strokeRect(9, 9, 78, 78);
+    circ(ctx, 11, 11, 2.4, COLORS.gold);
+    circ(ctx, 85, 11, 2.4, COLORS.gold);
+    circ(ctx, 11, 85, 2.4, COLORS.gold);
+    circ(ctx, 85, 85, 2.4, COLORS.gold);
+    px(ctx, 10, 10, 76, 1, shade(COLORS.gold, 0.25), 0.28);
   });
 }
 
@@ -1047,91 +1099,112 @@ function makeBeasts(scene: Phaser.Scene): void {
   });
     scene.textures.get("beast-wolf")?.setFilter(Phaser.Textures.FilterMode.NEAREST);
   }
-  if (!stampKeyedSprite(scene, "lion-src", "beast-lion", 48)) {
+  if (!stampKeyedSprite(scene, "lion-src", "beast-lion", 72)) {
     canvasTex(scene, "beast-lion", 96, 52, (ctx) => {
       const fur = COLORS.lionGold;
       const dark = 0x6a4a10;
       oval(ctx, 40, 30, 28, 14, fur);
       oval(ctx, 72, 22, 14, 12, fur);
-      oval(ctx, 72, 22, 18, 16, shade(fur, -0.15), 0.7);
-      circ(ctx, 86, 22, 6, shade(fur, 0.1));
-      px(ctx, 90, 20, 8, 4, shade(fur, -0.2));
-      circ(ctx, 80, 20, 2, 0x1c1410);
-      oval(ctx, 18, 42, 5, 10, dark);
-      oval(ctx, 32, 44, 5, 10, dark);
-      oval(ctx, 50, 42, 5, 10, dark);
-      oval(ctx, 64, 44, 5, 10, dark);
+      fillPoly(ctx, [[80, 8], [78, 24], [84, 22]], 0xe8dcc8);
+      fillPoly(ctx, [[96, 8], [90, 24], [100, 22]], 0xe8dcc8);
+      circ(ctx, 98, 24, 2.6, 0x1c1410);
+      px(ctx, 100, 28, 8, 4, dark);
     });
     scene.textures.get("beast-lion")?.setFilter(Phaser.Textures.FilterMode.NEAREST);
   }
-  if (!stampKeyedSprite(scene, "bull-src", "beast-bull", 46)) {
-    canvasTex(scene, "beast-bull", 110, 58, (ctx) => {
+  if (!stampKeyedSprite(scene, "bull-src", "beast-bull", 88)) {
+    canvasTex(scene, "beast-bull", 114, 60, (ctx) => {
       const hide = 0x4a2818;
-      oval(ctx, 48, 34, 34, 16, hide);
-      oval(ctx, 86, 26, 16, 12, hide);
-      px(ctx, 92, 8, 4, 16, 0xe8dcc8);
-      px(ctx, 78, 8, 4, 16, 0xe8dcc8);
-      circ(ctx, 96, 24, 3, 0x1c1410);
-      oval(ctx, 22, 46, 6, 12, 0x2a1810);
-      oval(ctx, 40, 48, 6, 12, 0x2a1810);
-      oval(ctx, 62, 46, 6, 12, 0x2a1810);
-      oval(ctx, 80, 48, 6, 12, 0x2a1810);
+      const dark = 0x2a1810;
+      const hi = shade(hide, 0.18);
+      oval(ctx, 22, 48, 7, 12, dark);
+      oval(ctx, 42, 50, 7, 12, dark);
+      oval(ctx, 64, 48, 7, 12, dark);
+      oval(ctx, 82, 50, 7, 12, dark);
+      oval(ctx, 50, 34, 36, 16, hide);
+      oval(ctx, 50, 40, 26, 8, dark, 0.4);
+      oval(ctx, 88, 26, 18, 13, hide);
+      oval(ctx, 88, 22, 10, 6, hi, 0.3);
+      fillPoly(ctx, [[80, 8], [78, 24], [84, 22]], 0xe8dcc8);
+      fillPoly(ctx, [[96, 8], [90, 24], [100, 22]], 0xe8dcc8);
+      fillPoly(ctx, [[80, 8], [78, 20], [82, 20]], shade(0xe8dcc8, 0.2));
+      fillPoly(ctx, [[96, 8], [92, 20], [98, 20]], shade(0xe8dcc8, 0.2));
+      circ(ctx, 98, 24, 2.6, 0x1c1410);
+      px(ctx, 100, 28, 8, 4, dark);
     });
     scene.textures.get("beast-bull")?.setFilter(Phaser.Textures.FilterMode.NEAREST);
   }
-  if (!stampKeyedSprite(scene, "boar-src", "beast-boar", 64)) {
-    canvasTex(scene, "beast-boar", 88, 48, (ctx) => {
+  if (!stampKeyedSprite(scene, "boar-src", "beast-boar", 72)) {
+    canvasTex(scene, "beast-boar", 92, 50, (ctx) => {
       const hide = COLORS.boarHide;
-      oval(ctx, 40, 28, 26, 14, hide);
-      oval(ctx, 70, 24, 12, 10, hide);
-      px(ctx, 78, 22, 10, 3, 0xe8dcc8);
-      px(ctx, 78, 28, 10, 3, 0xe8dcc8);
-      circ(ctx, 74, 22, 2, 0x1c1410);
-      oval(ctx, 18, 38, 5, 10, 0x2a1c14);
-      oval(ctx, 32, 40, 5, 10, 0x2a1c14);
-      oval(ctx, 50, 38, 5, 10, 0x2a1c14);
-      oval(ctx, 64, 40, 5, 10, 0x2a1c14);
+      const dark = shade(hide, -0.3);
+      const bristle = shade(hide, 0.12);
+      oval(ctx, 18, 40, 6, 10, dark);
+      oval(ctx, 32, 42, 6, 10, dark);
+      oval(ctx, 50, 40, 6, 10, dark);
+      oval(ctx, 64, 42, 6, 10, dark);
+      oval(ctx, 42, 28, 28, 14, hide);
+      oval(ctx, 42, 32, 20, 7, dark, 0.35);
+      oval(ctx, 70, 24, 14, 11, hide);
+      for (let i = 0; i < 5; i++) px(ctx, 28 + i * 6, 16, 3, 6, bristle, 0.7);
+      px(ctx, 78, 22, 12, 3, 0xe8dcc8);
+      px(ctx, 78, 28, 12, 3, 0xe8dcc8);
+      px(ctx, 86, 22, 4, 3, shade(0xe8dcc8, 0.2));
+      circ(ctx, 76, 22, 2.2, 0x1c1410);
+      oval(ctx, 62, 16, 4, 5, dark);
     });
     scene.textures.get("beast-boar")?.setFilter(Phaser.Textures.FilterMode.NEAREST);
   }
   if (!stampKeyedSprite(scene, "rhino-src", "beast-rhino", 110)) {
-    canvasTex(scene, "beast-rhino", 110, 52, (ctx) => {
+    canvasTex(scene, "beast-rhino", 114, 56, (ctx) => {
       const hide = COLORS.rhinoHide;
       const dark = shade(hide, -0.28);
       const horn = 0xc4a070;
-      oval(ctx, 48, 34, 34, 16, hide);
-      oval(ctx, 86, 28, 16, 12, hide);
-      fillPoly(ctx, [[92, 22], [110, 18], [96, 28]], horn);
-      fillPoly(ctx, [[94, 20], [108, 18], [96, 26]], shade(horn, 0.18));
-      circ(ctx, 96, 26, 2.4, 0x1c1410);
-      oval(ctx, 22, 46, 6, 12, dark);
-      oval(ctx, 40, 48, 6, 12, dark);
-      oval(ctx, 62, 46, 6, 12, dark);
-      oval(ctx, 80, 48, 6, 12, dark);
+      oval(ctx, 22, 46, 7, 12, dark);
+      oval(ctx, 42, 48, 7, 12, dark);
+      oval(ctx, 64, 46, 7, 12, dark);
+      oval(ctx, 82, 48, 7, 12, dark);
+      oval(ctx, 50, 34, 36, 16, hide);
+      oval(ctx, 50, 38, 26, 8, dark, 0.3);
+      oval(ctx, 88, 28, 18, 13, hide);
+      oval(ctx, 88, 24, 10, 6, shade(hide, 0.15), 0.35);
+      fillPoly(ctx, [[92, 20], [114, 12], [98, 28]], 0x6a4a28);
+      fillPoly(ctx, [[94, 20], [112, 14], [98, 26]], horn);
+      fillPoly(ctx, [[96, 18], [108, 14], [98, 22]], shade(horn, 0.25));
+      fillPoly(ctx, [[90, 26], [100, 24], [94, 30]], horn);
+      circ(ctx, 98, 26, 2.6, 0x1c1410);
+      oval(ctx, 18, 30, 7, 5, hide);
     });
     scene.textures.get("beast-rhino")?.setFilter(Phaser.Textures.FilterMode.NEAREST);
   }
   if (!stampKeyedSprite(scene, "elephant-src", "beast-elephant", 124)) {
-    canvasTex(scene, "beast-elephant", 124, 72, (ctx) => {
+    canvasTex(scene, "beast-elephant", 128, 76, (ctx) => {
       const hide = COLORS.elephantGrey;
       const dark = shade(hide, -0.22);
+      const hi = shade(hide, 0.16);
       const ear = 0xd48aa0;
       const tusk = 0xf4ead8;
-      oval(ctx, 52, 40, 38, 18, hide);
-      oval(ctx, 92, 32, 18, 14, hide);
-      oval(ctx, 78, 18, 14, 12, hide);
-      oval(ctx, 78, 18, 10, 8, ear);
-      px(ctx, 100, 36, 16, 3, tusk);
-      px(ctx, 100, 42, 14, 3, tusk);
-      circ(ctx, 102, 28, 2.2, 0x1c1410);
-      oval(ctx, 24, 54, 7, 14, dark);
-      oval(ctx, 44, 56, 7, 14, dark);
-      oval(ctx, 70, 54, 7, 14, dark);
-      oval(ctx, 90, 56, 7, 14, dark);
+      oval(ctx, 24, 56, 8, 16, dark);
+      oval(ctx, 46, 58, 8, 16, dark);
+      oval(ctx, 72, 56, 8, 16, dark);
+      oval(ctx, 94, 58, 8, 16, dark);
+      oval(ctx, 54, 42, 40, 18, hide);
+      oval(ctx, 54, 48, 30, 10, dark, 0.3);
+      oval(ctx, 96, 32, 20, 16, hide);
+      oval(ctx, 80, 16, 16, 14, hide);
+      oval(ctx, 80, 16, 12, 10, ear);
+      oval(ctx, 80, 16, 7, 6, shade(ear, -0.15));
+      oval(ctx, 96, 28, 8, 4, hi, 0.35);
+      px(ctx, 104, 36, 18, 4, tusk);
+      px(ctx, 104, 44, 16, 4, tusk);
+      px(ctx, 116, 36, 6, 3, shade(tusk, 0.2));
+      circ(ctx, 106, 28, 2.4, 0x1c1410);
+      fillPoly(ctx, [[108, 30], [122, 48], [110, 34]], hide);
+      fillPoly(ctx, [[110, 32], [120, 46], [112, 34]], dark);
     });
     scene.textures.get("beast-elephant")?.setFilter(Phaser.Textures.FilterMode.NEAREST);
   }
-  if (!stampKeyedSprite(scene, "tiger-src", "beast-tiger", 96)) {
+  if (!stampKeyedSprite(scene, "tiger-src", "beast-tiger", 72)) {
     canvasTex(scene, "beast-tiger", 92, 48, (ctx) => {
       const fur = COLORS.tigerOrange;
       const dark = 0x8a3a0c;
@@ -1207,45 +1280,49 @@ function makeBeasts(scene: Phaser.Scene): void {
 }
 
 function makeWeaponTextures(scene: Phaser.Scene): void {
-  canvasTex(scene, "wep-gladius", 46, 16, (ctx) => {
-    px(ctx, 0, 5, 9, 6, 0x6b4a28);
-    px(ctx, 1, 6, 7, 2, 0x8a6a44);
-    px(ctx, 7, 3, 5, 10, COLORS.gold);
-    px(ctx, 8, 4, 3, 8, shade(COLORS.gold, 0.25));
-    px(ctx, 12, 5, 24, 6, 0xe8e4d4);
-    px(ctx, 12, 6, 22, 2, 0xffffff, 0.45);
+  canvasTex(scene, "wep-gladius", 48, 18, (ctx) => {
+    px(ctx, 0, 6, 10, 6, 0x5a3818);
+    px(ctx, 1, 7, 8, 2, 0x8a6a44);
+    px(ctx, 8, 3, 6, 12, COLORS.gold);
+    px(ctx, 9, 4, 4, 10, shade(COLORS.gold, 0.28));
+    px(ctx, 13, 5, 26, 8, 0xe8e4d4);
+    px(ctx, 13, 6, 24, 2, 0xffffff, 0.55);
+    px(ctx, 13, 11, 22, 1, 0x9aa0a8, 0.45);
     ctx.fillStyle = css(0xe8e4d4);
     ctx.beginPath();
-    ctx.moveTo(36, 4);
-    ctx.lineTo(46, 8);
-    ctx.lineTo(36, 12);
+    ctx.moveTo(38, 4);
+    ctx.lineTo(48, 9);
+    ctx.lineTo(38, 14);
     ctx.fill();
+    px(ctx, 40, 8, 5, 2, 0xffffff, 0.4);
   });
-  canvasTex(scene, "wep-spear", 56, 14, (ctx) => {
+  canvasTex(scene, "wep-spear", 58, 14, (ctx) => {
     px(ctx, 0, 5, 38, 4, 0x6b4a28);
     px(ctx, 0, 6, 38, 1, 0x8a6a44);
-    px(ctx, 10, 4, 3, 6, COLORS.gold);
+    px(ctx, 10, 3, 4, 8, COLORS.gold);
+    px(ctx, 11, 4, 2, 6, shade(COLORS.gold, 0.25));
     ctx.fillStyle = css(0xe8e4d4);
     ctx.beginPath();
     ctx.moveTo(36, 1);
-    ctx.lineTo(56, 7);
+    ctx.lineTo(58, 7);
     ctx.lineTo(36, 13);
     ctx.fill();
-    ctx.fillStyle = css(0xc9c4b4);
+    ctx.fillStyle = css(0xffffff, 0.45);
     ctx.beginPath();
     ctx.moveTo(40, 4);
-    ctx.lineTo(52, 7);
-    ctx.lineTo(40, 10);
+    ctx.lineTo(54, 7);
+    ctx.lineTo(40, 8);
     ctx.fill();
   });
-  canvasTex(scene, "wep-blade", 32, 14, (ctx) => {
-    px(ctx, 0, 4, 7, 6, 0x4a3018);
-    px(ctx, 6, 4, 16, 6, 0xf0ece0);
-    px(ctx, 7, 5, 12, 2, 0xffffff, 0.45);
+  canvasTex(scene, "wep-blade", 34, 14, (ctx) => {
+    px(ctx, 0, 4, 8, 6, 0x4a3018);
+    px(ctx, 1, 5, 6, 2, 0x6a4a28);
+    px(ctx, 7, 4, 16, 6, 0xf0ece0);
+    px(ctx, 8, 5, 14, 2, 0xffffff, 0.5);
     ctx.fillStyle = css(0xf0ece0);
     ctx.beginPath();
     ctx.moveTo(22, 3);
-    ctx.lineTo(32, 7);
+    ctx.lineTo(34, 7);
     ctx.lineTo(22, 11);
     ctx.fill();
   });
@@ -1394,12 +1471,17 @@ function makeWeaponTextures(scene: Phaser.Scene): void {
     px(ctx, 24, 6, 14, 4, 0xc9c4b4, 0.7);
     px(ctx, 38, 2, 4, 18, 0x4a4a52);
   });
-  canvasTex(scene, "wep-trident", 50, 20, (ctx) => {
+  canvasTex(scene, "wep-trident", 52, 20, (ctx) => {
     px(ctx, 0, 8, 28, 4, 0x5a3a18);
-    px(ctx, 26, 2, 4, 16, 0xc9c4b4);
-    px(ctx, 30, 0, 16, 3, 0xc9c4b4);
-    px(ctx, 30, 8, 18, 4, 0xe8e4d4);
-    px(ctx, 30, 17, 16, 3, 0xc9c4b4);
+    px(ctx, 0, 9, 28, 1, 0x8a6a44);
+    px(ctx, 26, 2, 5, 16, 0xc9c4b4);
+    px(ctx, 27, 3, 2, 14, 0xffffff, 0.35);
+    px(ctx, 30, 0, 18, 3, 0xc9c4b4);
+    px(ctx, 30, 8, 20, 4, 0xe8e4d4);
+    px(ctx, 30, 17, 18, 3, 0xc9c4b4);
+    px(ctx, 44, 0, 8, 3, 0xffffff, 0.4);
+    px(ctx, 46, 8, 6, 4, 0xffffff, 0.45);
+    px(ctx, 44, 17, 8, 3, 0xffffff, 0.4);
   });
   canvasTex(scene, "fx-slash", 64, 64, (ctx) => {
     ctx.strokeStyle = css(0xfff4c8, 0.95);
@@ -1433,15 +1515,27 @@ function makeWeaponTextures(scene: Phaser.Scene): void {
 }
 
 function makeDecor(scene: Phaser.Scene): void {
-  canvasTex(scene, "prop-column", 36, 72, (ctx) => {
-    px(ctx, 4, 62, 28, 10, 0x5a544c);
-    px(ctx, 8, 10, 20, 54, 0x9a9488);
-    px(ctx, 10, 10, 6, 54, 0xc4bcb0, 0.45);
-    px(ctx, 24, 10, 3, 54, 0x6a6458, 0.4);
-    px(ctx, 2, 4, 32, 10, 0xc4bcb0);
-    px(ctx, 4, 6, 28, 3, 0xe8e0d4, 0.5);
-    px(ctx, 6, 0, 24, 6, COLORS.gold, 0.85);
-    px(ctx, 8, 1, 20, 2, shade(COLORS.gold, 0.3), 0.5);
+  canvasTex(scene, "prop-column", 40, 92, (ctx) => {
+    px(ctx, 4, 80, 32, 12, 0x5a544c);
+    px(ctx, 6, 82, 28, 4, 0x3a342c, 0.45);
+    px(ctx, 10, 12, 20, 70, 0x9a9488);
+    px(ctx, 12, 12, 6, 70, 0xc4bcb0, 0.5);
+    px(ctx, 26, 12, 3, 70, 0x6a6458, 0.45);
+    px(ctx, 2, 6, 36, 12, 0xc4bcb0);
+    px(ctx, 4, 8, 32, 3, 0xe8e0d4, 0.5);
+    px(ctx, 6, 0, 28, 8, COLORS.gold, 0.9);
+    px(ctx, 8, 2, 24, 2, shade(COLORS.gold, 0.3), 0.55);
+    px(ctx, 14, 22, 3, 3, COLORS.gold, 0.55);
+    px(ctx, 14, 48, 3, 3, COLORS.gold, 0.4);
+  });
+  canvasTex(scene, "prop-hang-banner", 22, 56, (ctx) => {
+    px(ctx, 9, 0, 4, 8, 0x4a3a2c);
+    circ(ctx, 11, 4, 2.5, COLORS.gold);
+    px(ctx, 2, 8, 18, 36, COLORS.crimson);
+    px(ctx, 3, 10, 14, 8, shade(COLORS.crimson, 0.18), 0.45);
+    px(ctx, 3, 44, 16, 8, shade(COLORS.crimson, -0.2));
+    px(ctx, 5, 52, 12, 4, shade(COLORS.crimson, -0.35));
+    px(ctx, 8, 20, 6, 2, shade(COLORS.gold, 0.1), 0.4);
   });
   canvasTex(scene, "prop-statue-base", 28, 18, (ctx) => {
     px(ctx, 2, 8, 24, 10, 0x5a5448);
@@ -2381,22 +2475,24 @@ function makeTrophySkeletons(scene: Phaser.Scene): void {
     boneJaw(ctx, 10, 22, 12);
   });
   canvasTex(scene, "trophy-skel-lion", 40, 36, (ctx) => {
-    // Mane ruff of bone plates
     for (const [x, y, r] of [
-      [8, 10, 4],
-      [32, 10, 4],
-      [6, 18, 4],
-      [34, 18, 4],
-      [12, 6, 3],
-      [28, 6, 3],
-      [20, 4, 4],
-      [10, 24, 3],
-      [30, 24, 3],
+      [6, 8, 3],
+      [34, 8, 3],
+      [4, 14, 3],
+      [36, 14, 3],
+      [10, 4, 2],
+      [30, 4, 2],
+      [20, 2, 3],
+      [8, 20, 2],
+      [32, 20, 2],
+      [14, 10, 2],
+      [26, 10, 2],
     ] as const) {
       circ(ctx, x, y, r, BONE_D);
       circ(ctx, x, y, r - 1, BONE_S, 0.35);
     }
     boneSkull(ctx, 20, 16, 10, 9);
+    fillPoly(ctx, [[14, 18], [4, 20], [14, 22], [18, 19]], BONE);
     boneJaw(ctx, 20, 24, 12);
   });
   canvasTex(scene, "trophy-skel-bull", 40, 36, (ctx) => {
@@ -2587,42 +2683,54 @@ function drawHanging(ctx: Ctx, color: number): void {
 }
 
 function makeMenuArt(scene: Phaser.Scene): void {
-  canvasTex(scene, "menu-eagle", 120, 96, (ctx) => {
-    ctx.fillStyle = css(COLORS.gold);
-    ctx.beginPath();
-    ctx.moveTo(60, 12);
-    ctx.lineTo(88, 40);
-    ctx.lineTo(78, 42);
-    ctx.lineTo(96, 70);
-    ctx.lineTo(68, 52);
-    ctx.lineTo(60, 86);
-    ctx.lineTo(52, 52);
-    ctx.lineTo(24, 70);
-    ctx.lineTo(42, 42);
-    ctx.lineTo(32, 40);
-    ctx.closePath();
-    ctx.fill();
-    circ(ctx, 60, 22, 8, COLORS.gold);
-    circ(ctx, 63, 20, 2, 0x1a1210);
-    px(ctx, 66, 18, 8, 3, 0xe8dcc8);
-    px(ctx, 56, 28, 8, 10, shade(COLORS.gold, -0.2));
+  canvasTex(scene, "menu-eagle", 128, 108, (ctx) => {
+    const gold = COLORS.gold;
+    const hi = shade(gold, 0.28);
+    const lo = shade(gold, -0.28);
+    const ink = 0x1a1210;
+    fillPoly(ctx, [[64, 8], [92, 38], [82, 40], [108, 78], [72, 56], [64, 98], [56, 56], [20, 78], [46, 40], [36, 38]], gold);
+    fillPoly(ctx, [[64, 14], [84, 38], [76, 40], [96, 68], [70, 52], [64, 86], [58, 52], [32, 68], [52, 40], [44, 38]], hi, 0.55);
+    fillPoly(ctx, [[50, 42], [64, 86], [78, 42], [64, 52]], lo, 0.45);
+    circ(ctx, 64, 24, 10, gold);
+    circ(ctx, 64, 24, 8, hi);
+    circ(ctx, 67, 22, 2.4, ink);
+    circ(ctx, 68, 21, 0.9, 0xe8dcc8);
+    fillPoly(ctx, [[70, 20], [88, 16], [78, 24]], 0xe8dcc8);
+    fillPoly(ctx, [[70, 20], [86, 17], [76, 23]], gold);
+    px(ctx, 58, 30, 10, 8, lo);
+    px(ctx, 60, 32, 6, 3, hi, 0.5);
+    fillPoly(ctx, [[40, 44], [22, 70], [48, 52]], lo);
+    fillPoly(ctx, [[88, 44], [106, 70], [80, 52]], lo);
+    fillPoly(ctx, [[28, 52], [18, 64], [34, 56]], hi, 0.4);
+    fillPoly(ctx, [[100, 52], [110, 64], [94, 56]], hi, 0.4);
   });
-  canvasTex(scene, "menu-banner", 28, 80, (ctx) => {
-    px(ctx, 12, 0, 4, 80, 0x4a3a2c);
-    px(ctx, 16, 8, 12, 36, COLORS.crimson);
-    px(ctx, 16, 12, 10, 8, shade(COLORS.crimson, 0.15), 0.5);
-    px(ctx, 16, 44, 8, 8, shade(COLORS.crimson, -0.2));
+  canvasTex(scene, "menu-banner", 28, 88, (ctx) => {
+    px(ctx, 12, 0, 4, 88, 0x4a3a2c);
+    px(ctx, 13, 0, 2, 88, 0x6a5238);
+    px(ctx, 16, 8, 12, 42, COLORS.crimson);
+    px(ctx, 16, 12, 10, 10, shade(COLORS.crimson, 0.18), 0.5);
+    px(ctx, 16, 50, 10, 10, shade(COLORS.crimson, -0.18));
+    px(ctx, 16, 60, 7, 8, shade(COLORS.crimson, -0.3));
     circ(ctx, 14, 4, 3, COLORS.gold);
+    circ(ctx, 14, 4, 1.4, shade(COLORS.gold, 0.3));
   });
 }
 
 function makeHudFrames(scene: Phaser.Scene): void {
-  canvasTex(scene, "ui-bar-wood", 200, 44, (ctx) => {
-    px(ctx, 0, 0, 200, 44, 0x2a1c16, 0.92);
-    ctx.strokeStyle = css(COLORS.gold, 0.85);
+  canvasTex(scene, "ui-bar-wood", 220, 108, (ctx) => {
+    px(ctx, 0, 0, 220, 108, 0x2a1c16, 0.94);
+    px(ctx, 4, 4, 212, 100, 0x1c1410, 0.55);
+    ctx.strokeStyle = css(COLORS.gold, 0.9);
     ctx.lineWidth = 2;
-    ctx.strokeRect(1, 1, 198, 42);
-    px(ctx, 4, 4, 192, 1, shade(COLORS.gold, 0.2), 0.25);
+    ctx.strokeRect(1, 1, 218, 106);
+    ctx.strokeStyle = css(0x8a6a3a, 0.55);
+    ctx.lineWidth = 1;
+    ctx.strokeRect(5, 5, 210, 98);
+    circ(ctx, 8, 8, 2, COLORS.gold);
+    circ(ctx, 212, 8, 2, COLORS.gold);
+    circ(ctx, 8, 100, 2, COLORS.gold);
+    circ(ctx, 212, 100, 2, COLORS.gold);
+    px(ctx, 8, 6, 204, 1, shade(COLORS.gold, 0.2), 0.28);
   });
 }
 
@@ -3059,11 +3167,13 @@ function drawBody(ctx: Ctx, w: number, h: number, tunic: number, accent: number,
 
   px(ctx, cx - 7 * s * wide, S(42, h), 5 * s, 12 * s, 0x3a2a18);
   px(ctx, cx + 2 * s * wide, S(42, h), 5 * s, 12 * s, 0x3a2a18);
+  px(ctx, cx - 6.4 * s * wide, S(42, h), 1.4 * s, 10 * s, shade(0x3a2a18, 0.18), 0.5);
   px(ctx, cx - 7 * s * wide, S(51, h), 5 * s, 3 * s, LEATHER);
   px(ctx, cx + 2 * s * wide, S(51, h), 5 * s, 3 * s, LEATHER);
 
   px(ctx, cx - 6 * s * wide, S(34, h), 4 * s, 10 * s, skin);
   px(ctx, cx + 2 * s * wide, S(34, h), 4 * s, 10 * s, skin);
+  px(ctx, cx - 5.4 * s * wide, S(34, h), 1.4 * s, 8 * s, shade(skin, 0.22), 0.4);
 
   for (let i = 0; i < 5; i++) {
     const x = cx - 8 * s * wide + i * 3.4 * s * wide;
@@ -3073,16 +3183,18 @@ function drawBody(ctx: Ctx, w: number, h: number, tunic: number, accent: number,
   const tw = 18 * s * wide;
 
   if (cape) {
-    px(ctx, cx - tw / 2 - 5 * s, S(18, h), 7 * s, 28 * s, shade(cape, -0.12));
-    px(ctx, cx + tw / 2 - 2 * s, S(18, h), 7 * s, 28 * s, shade(cape, 0.06));
-    px(ctx, cx - tw / 2 - 4 * s, S(18, h), 5 * s, 3 * s, shade(cape, 0.18));
-    px(ctx, cx + tw / 2 - 1 * s, S(18, h), 5 * s, 3 * s, shade(cape, 0.22));
+    px(ctx, cx - tw / 2 - 6 * s, S(18, h), 8 * s, 30 * s, shade(cape, -0.18));
+    px(ctx, cx + tw / 2 - 2 * s, S(18, h), 8 * s, 30 * s, shade(cape, 0.08));
+    px(ctx, cx - tw / 2 - 5 * s, S(18, h), 5 * s, 4 * s, shade(cape, 0.22));
+    px(ctx, cx + tw / 2 - 1 * s, S(18, h), 5 * s, 4 * s, shade(cape, 0.26));
+    px(ctx, cx - tw / 2 - 5 * s, S(22, h), 2 * s, 20 * s, shade(cape, 0.28), 0.35);
   }
 
   px(ctx, cx - tw / 2, S(18, h), tw, 18 * s, tunic);
-  px(ctx, cx - tw / 2, S(18, h), tw, 5 * s, shade(tunic, 0.16));
-  px(ctx, cx - tw / 2 + 2 * s, S(22, h), 4 * s, 10 * s, shade(tunic, 0.22), 0.45);
-  px(ctx, cx + tw / 2 - 3 * s, S(20, h), 2 * s, 14 * s, shade(tunic, -0.2), 0.45);
+  px(ctx, cx - tw / 2, S(18, h), tw, 5 * s, shade(tunic, 0.2));
+  px(ctx, cx - tw / 2 + 2 * s, S(22, h), 5 * s, 12 * s, shade(tunic, 0.28), 0.5);
+  px(ctx, cx + tw / 2 - 3 * s, S(20, h), 2.4 * s, 14 * s, shade(tunic, -0.22), 0.5);
+  px(ctx, cx - tw / 2 + tw * 0.35, S(24, h), 2 * s, 10 * s, shade(tunic, -0.12), 0.35);
 
   px(ctx, cx - tw / 2, S(32, h), tw, 3 * s, accent);
   px(ctx, cx - tw / 2, S(32, h), tw, 1 * s, shade(accent, 0.3), 0.5);
@@ -3120,10 +3232,12 @@ function drawBody(ctx: Ctx, w: number, h: number, tunic: number, accent: number,
   } else {
     const helm = style === "champion" ? mix(METAL, accent, 0.15) : METAL;
     px(ctx, cx - 8 * s, S(6, h), 16 * s, 10 * s, helm);
-    px(ctx, cx - 8 * s, S(6, h), 16 * s, 3 * s, shade(helm, 0.2));
-    px(ctx, cx - 2 * s, S(10, h), 4 * s, 7 * s, shade(helm, -0.25));
+    px(ctx, cx - 8 * s, S(6, h), 16 * s, 3 * s, shade(helm, 0.28));
+    px(ctx, cx - 7 * s, S(8, h), 4 * s, 6 * s, shade(helm, 0.18), 0.45);
+    px(ctx, cx - 2 * s, S(10, h), 4 * s, 7 * s, shade(helm, -0.28));
     px(ctx, cx - 7 * s, S(14, h), 5 * s, 3 * s, shade(helm, -0.1));
     px(ctx, cx + 2 * s, S(14, h), 5 * s, 3 * s, shade(helm, -0.1));
+    px(ctx, cx + 5 * s, S(7, h), 2 * s, 8 * s, shade(helm, -0.22), 0.4);
     drawCrest(ctx, cx, h, s, accent, crest);
     if (style === "heavy") {
       px(ctx, cx - 3 * s, hy + 2 * s, 6 * s, 2 * s, 0x6a4a38, 0.45);

@@ -36,8 +36,10 @@ import {
   SCHOOL_FOCUS,
   SCHOOL_IDS,
   isSchoolNpc,
+  markSchoolTut,
 } from "../data/school";
 import { getStudentCircuit, schoolCircuitRungLabel } from "../data/schoolCircuit";
+import { SCHOOL_TAKE_LINES } from "../data/dialogue";
 import type { SchoolNpcId } from "../types";
 import {
   CHAMBER_ITEMS,
@@ -136,6 +138,7 @@ export class UIScene extends Phaser.Scene {
   private objectiveToggle?: Phaser.GameObjects.Text;
   private objectiveMinimized = false;
   private bossWrap: Phaser.GameObjects.GameObject[] = [];
+  private bossFill?: Phaser.GameObjects.Rectangle;
   private favorWrap: Phaser.GameObjects.GameObject[] = [];
   private favorMarker?: Phaser.GameObjects.Rectangle;
   private favorYouFill?: Phaser.GameObjects.Rectangle;
@@ -295,7 +298,7 @@ export class UIScene extends Phaser.Scene {
   }
 
   create(): void {
-    this.add.image(28, 18, "ui-bar-wood").setOrigin(0, 0).setScrollFactor(0).setDepth(99).setDisplaySize(220, 100);
+    this.add.image(28, 18, "ui-bar-wood").setOrigin(0, 0).setScrollFactor(0).setDepth(99).setDisplaySize(220, 108);
     this.add.image(34, 22, "ui-heart").setOrigin(0, 0).setScrollFactor(0).setDepth(101);
     this.add.rectangle(56, 24, 180, 16, 0x000000, 0.7).setOrigin(0, 0).setScrollFactor(0).setDepth(99);
     this.hpFill = this.add.rectangle(56, 24, 180, 16, COLORS.hp).setOrigin(0, 0).setScrollFactor(0).setDepth(100);
@@ -384,6 +387,7 @@ export class UIScene extends Phaser.Scene {
     bus.on("locker", this.openLocker, this);
     bus.on("result", this.openResult, this);
     bus.on("boss", this.showBoss, this);
+    bus.on("boss-hp", this.onBossHp, this);
     bus.on("boss-hide", this.hideBoss, this);
     bus.on("favor-show", this.showFavor, this);
     bus.on("favor-hide", this.hideFavor, this);
@@ -556,6 +560,7 @@ export class UIScene extends Phaser.Scene {
       bus.off("locker", this.openLocker, this);
       bus.off("result", this.openResult, this);
       bus.off("boss", this.showBoss, this);
+      bus.off("boss-hp", this.onBossHp, this);
       bus.off("boss-hide", this.hideBoss, this);
       bus.off("favor-show", this.showFavor, this);
       bus.off("favor-hide", this.hideFavor, this);
@@ -867,8 +872,7 @@ export class UIScene extends Phaser.Scene {
     window.setTimeout(() => {
       this.resultClosing = false;
       const next = gameState.pendingArenaOpponent;
-      const tourneyChain =
-        Boolean(next) && isTournamentId(next!) && !gameState.save.freedomWon && this.scene.isActive("ArenaScene");
+      const tourneyChain = Boolean(next) && isTournamentId(next!) && !gameState.save.freedomWon;
       if (tourneyChain) return;
       if (!this.scene.isActive("LudusScene")) this.returnLudus();
     }, 200);
@@ -902,7 +906,11 @@ export class UIScene extends Phaser.Scene {
       .setDepth(1999)
       .setInteractive();
     const c = this.add.container(GAME_WIDTH / 2, GAME_HEIGHT / 2).setDepth(2000).setScrollFactor(0);
-    const bg = this.add.rectangle(0, 0, w, h, 0x2a1c16, 0.97).setStrokeStyle(3, COLORS.gold);
+    const factory = this.add as Phaser.GameObjects.GameObjectFactory & { nineslice?: Function };
+    const bg =
+      typeof factory.nineslice === "function"
+        ? factory.nineslice(0, 0, "ui-panel", undefined, w, h, 16, 16, 16, 16)
+        : this.add.rectangle(0, 0, w, h, 0x2a1c16, 0.97).setStrokeStyle(3, COLORS.gold);
     const inner = this.add.rectangle(0, 0, w - 14, h - 14, 0x000000, 0).setStrokeStyle(1, 0x8a6a3a, 0.7);
     const t = this.add.text(0, -h / 2 + 28, title, { fontFamily: "Cinzel, Georgia", fontSize: "26px", color: "#e8c96a" }).setOrigin(0.5);
     c.add([bg, inner, t]);
@@ -1875,6 +1883,12 @@ export class UIScene extends Phaser.Scene {
     this.addBtn(c, 0, 20, "Take the school", () => {
       if (grantLanista()) {
         this.toast("The loft is yours. Title: Lanista of Aquila.");
+        this.closeOverlay();
+        bus.emit("dialogue", {
+          name: "Gaius Marcellus",
+          lines: SCHOOL_TAKE_LINES,
+        });
+        return;
       }
       this.closeOverlay();
     }, 240);
@@ -3246,6 +3260,7 @@ export class UIScene extends Phaser.Scene {
             .setOrigin(0.5),
         );
         this.addBtn(c, 0, y + 58, exhibition ? "Exhibition" : i === 2 ? "Send — pride" : "Send", () => {
+          if (student.id === "titus") markSchoolTut("schoolTutDone");
           gameState.pendingSchoolBout = { npcId: student.id, opponentId: f.id };
           gameState.pendingArenaOpponent = f.id;
           this.gateHouse = null;
@@ -3272,6 +3287,7 @@ export class UIScene extends Phaser.Scene {
             .setOrigin(0.5),
         );
         this.addBtn(c, 0, 198, "Send to night", () => {
+          if (student.id === "titus") markSchoolTut("schoolTutDone");
           gameState.pendingSchoolBout = { npcId: student.id, opponentId: night.opponentId };
           const r = enterNight();
           if (r !== "ok") {
@@ -3302,6 +3318,7 @@ export class UIScene extends Phaser.Scene {
 
   openLocker = (id: unknown): void => {
     if (typeof id !== "string" || !isSchoolNpc(id)) return;
+    if (id === "titus") markSchoolTut("schoolTutLocker");
     const npc = getNpc(id);
     const rec = getSchoolRecord(id);
     const focus = SCHOOL_FOCUS[id as SchoolNpcId];
@@ -3524,11 +3541,15 @@ export class UIScene extends Phaser.Scene {
   private renderDialogue(): void {
     this.dialogueBox?.destroy();
     const c = this.add.container(GAME_WIDTH / 2, GAME_HEIGHT - 110).setDepth(3000).setScrollFactor(0);
-    const bg = this.add.rectangle(0, 0, 920, 148, 0x241810, 0.96).setStrokeStyle(3, COLORS.gold);
+    const bg =
+      typeof (this.add as Phaser.GameObjects.GameObjectFactory & { nineslice?: Function }).nineslice === "function"
+        ? (this.add as Phaser.GameObjects.GameObjectFactory & { nineslice: Function }).nineslice(0, 0, "ui-panel", undefined, 920, 148, 16, 16, 16, 16)
+        : this.add.rectangle(0, 0, 920, 148, 0x241810, 0.96).setStrokeStyle(3, COLORS.gold);
     const inner = this.add.rectangle(0, 0, 904, 132, 0x000000, 0).setStrokeStyle(1, 0x8a6a3a, 0.65);
     const accent = this.add.rectangle(-448, 0, 8, 132, COLORS.crimson, 0.95);
-    const namePlate = this.add.rectangle(-300, -52, 220, 28, 0x1a1210, 0.9).setStrokeStyle(1, COLORS.gold);
-    const name = this.add.text(-300, -52, this.dialogueName, { fontFamily: "Cinzel, Georgia", fontSize: "16px", color: "#e8c96a" }).setOrigin(0.5);
+    const crest = this.add.image(-412, -52, "menu-eagle").setScale(0.22);
+    const namePlate = this.add.rectangle(-280, -52, 200, 28, 0x1a1210, 0.9).setStrokeStyle(1, COLORS.gold);
+    const name = this.add.text(-280, -52, this.dialogueName, { fontFamily: "Cinzel, Georgia", fontSize: "16px", color: "#e8c96a" }).setOrigin(0.5);
     const body = this.add.text(-420, -18, this.dialogueLines[this.dialogueIndex] ?? "", {
       fontFamily: "Georgia",
       fontSize: "20px",
@@ -3536,7 +3557,7 @@ export class UIScene extends Phaser.Scene {
       wordWrap: { width: 820 },
     });
     const hint = this.add.text(430, 52, "Space / E", { fontFamily: "Georgia", fontSize: "13px", color: "#9a8a78" }).setOrigin(1, 0.5);
-    c.add([bg, inner, accent, namePlate, name, body, hint]);
+    c.add([bg, inner, accent, crest, namePlate, name, body, hint]);
     this.dialogueBox = c;
   }
 
@@ -3628,15 +3649,19 @@ export class UIScene extends Phaser.Scene {
     const bg = this.add.rectangle(GAME_WIDTH / 2, 64, 640, 22, 0x1a1210).setScrollFactor(0).setDepth(120);
     const fill = this.add.rectangle(GAME_WIDTH / 2 - 316, 64, 632, 16, COLORS.foxOrange).setOrigin(0, 0.5).setScrollFactor(0).setDepth(121);
     const label = this.add.text(GAME_WIDTH / 2, 42, name, { fontFamily: "Cinzel, Georgia", fontSize: "16px", color: "#e8dcc8" }).setOrigin(0.5).setScrollFactor(0).setDepth(122);
+    this.bossFill = fill;
     this.bossWrap = [bg, fill, label];
-    bus.on("boss-hp", (ratio: number) => {
-      fill.width = 632 * Phaser.Math.Clamp(ratio, 0, 1);
-    });
+  };
+
+  private onBossHp = (ratio: number): void => {
+    if (!this.bossFill) return;
+    this.bossFill.width = 632 * Phaser.Math.Clamp(ratio, 0, 1);
   };
 
   hideBoss = (): void => {
     this.bossWrap.forEach((o) => o.destroy());
     this.bossWrap = [];
+    this.bossFill = undefined;
   };
 
   showFavor = (payload?: { them?: number }): void => {
@@ -4249,22 +4274,41 @@ export class UIScene extends Phaser.Scene {
       .setAlpha(0)
       .setInteractive();
     const ruleTop = this.add
-      .rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 78, 280, 2, COLORS.gold, 0.85)
+      .rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 92, 320, 2, COLORS.gold, 0.85)
       .setScrollFactor(0)
       .setDepth(4501)
       .setAlpha(0);
+    const eagle = this.add
+      .image(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 118, "menu-eagle")
+      .setScrollFactor(0)
+      .setDepth(4502)
+      .setScale(0.55)
+      .setAlpha(0);
     const ruleBot = this.add
-      .rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 78, 280, 2, COLORS.gold, 0.85)
+      .rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 92, 320, 2, COLORS.gold, 0.85)
       .setScrollFactor(0)
       .setDepth(4501)
       .setAlpha(0);
     const actLabel = this.add
-      .text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 48, `ACT ${meta.roman}`, {
+      .text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 58, `ACT ${meta.roman}`, {
         fontFamily: "Cinzel, Georgia",
         fontSize: "22px",
         color: "#e8c96a",
         stroke: "#1a1210",
         strokeThickness: 5,
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(4502)
+      .setAlpha(0);
+    const latin = this.add
+      .text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 28, meta.latin, {
+        fontFamily: "Cinzel, Georgia",
+        fontSize: "16px",
+        color: "#c4a060",
+        fontStyle: "italic",
+        stroke: "#1a1210",
+        strokeThickness: 4,
       })
       .setOrigin(0.5)
       .setScrollFactor(0)
@@ -4308,13 +4352,14 @@ export class UIScene extends Phaser.Scene {
       .setDepth(4502)
       .setAlpha(0);
 
-    this.actCardWrap = [dim, ruleTop, ruleBot, actLabel, title, blurb, hint];
+    this.actCardWrap = [dim, ruleTop, eagle, ruleBot, actLabel, latin, title, blurb, hint];
     dim.on("pointerdown", () => this.dismissActCard());
 
     this.tweens.add({ targets: dim, alpha: 0.82, duration: 320 });
-    this.tweens.add({ targets: [ruleTop, ruleBot, actLabel], alpha: 1, duration: 420, delay: 120 });
-    this.tweens.add({ targets: title, alpha: 1, scale: 1, duration: 480, delay: 200, ease: "Back.easeOut" });
-    this.tweens.add({ targets: [blurb, hint], alpha: 1, duration: 400, delay: 360 });
+    this.tweens.add({ targets: [ruleTop, ruleBot, eagle, actLabel], alpha: 1, duration: 420, delay: 120 });
+    this.tweens.add({ targets: latin, alpha: 0.92, duration: 400, delay: 180 });
+    this.tweens.add({ targets: title, alpha: 1, scale: 1, duration: 480, delay: 240, ease: "Back.easeOut" });
+    this.tweens.add({ targets: [blurb, hint], alpha: 1, duration: 400, delay: 400 });
   }
 
   private dismissActCard(silent = false): void {

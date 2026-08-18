@@ -4,7 +4,7 @@ import { gameState } from "../state/GameState";
 import { getRival } from "../data/houses";
 import { nextUnlockedOpponent } from "./progression";
 import { nightObjective } from "./nights";
-import { allSchoolGlory, schoolGloryCount, SCHOOL_IDS } from "../data/school";
+import { allSchoolGlory, getSchoolRecord, schoolGloryCount, schoolTutStep, SCHOOL_IDS } from "../data/school";
 import { mergedKeybinds, prettyKey } from "./input";
 import { bus } from "./bus";
 import { nextUnlockedRaidHouse, RAID_HOUSE_ORDER, raidHouseShortName } from "../data/raid";
@@ -61,27 +61,31 @@ export type ActId = 1 | 2 | 3 | 4;
 
 export const ACT_META: Record<
   ActId,
-  { roman: string; title: string; blurb: string }
+  { roman: string; title: string; blurb: string; latin: string }
 > = {
   1: {
     roman: "I",
     title: "The Yard",
     blurb: "Learn the steel. Beat the four. Earn Marcellus's name.",
+    latin: "Disce ferrum",
   },
   2: {
     roman: "II",
     title: "The Circuit",
     blurb: "Walk the houses. Win favor. Claim the rudis.",
+    latin: "Per domos",
   },
   3: {
     roman: "III",
     title: "The School",
     blurb: "Lockers. Lessons. Their circuit. Four glories under your hand.",
+    latin: "Liber ludus",
   },
   4: {
     roman: "IV",
     title: "Beyond the Gate",
     blurb: "West to the Freed Camp. Farm. March on Serpens. Free the chained.",
+    latin: "Extra portam",
   },
 };
 
@@ -159,6 +163,11 @@ export function currentObjectiveText(): string {
       }
       return `${prefix}Teacher of the Sand. West gate to the Freed Camp. March on Ludus Serpens.`;
     }
+    const tut = schoolTutStep();
+    if (tut === "locker") return `${prefix}East of the yard — open Titus's locker.`;
+    if (tut === "teach") return `${prefix}At the locker, Teach Titus a full lesson in the ring.`;
+    if (tut === "spar") return `${prefix}SPAR Titus in the yard for Training — or book him when Ready.`;
+    if (tut === "send") return `${prefix}South gate → School → Send Titus. You watch from the stands.`;
     const gloryN = schoolGloryCount();
     const night = nightObjective();
     if (night) return `${prefix}Glory ${gloryN}/${SCHOOL_IDS.length}. ${night}`;

@@ -4,6 +4,14 @@ import type { BeastKind } from "../types";
 import type { HitResult } from "../systems/combat";
 import { burst, floatNumber } from "../systems/combat";
 import { audio } from "../systems/audio";
+import {
+  BEAST_ANIM_CONFIG,
+  beastAnimKey,
+  beastSheetTexKey,
+  hasBeastAnims,
+  pickBeastAnimClip,
+  type BeastAnimClip,
+} from "../systems/beastAnim";
 
 export type { BeastKind };
 
@@ -155,15 +163,15 @@ const PROFILES: Record<BeastKind, BeastProfile> = {
     invulnMs: 170,
     parryStun: 220,
     visScale: 1,
-    shadowScale: 1.35,
-    bodyW: 18,
-    bodyH: 14,
+    shadowScale: 1.3,
+    bodyW: 22,
+    bodyH: 12,
     bodyOx: 4,
     bodyOy: 4,
-    hudY: 34,
-    markY: 28,
-    markR: 8,
-    visY: 12,
+    hudY: 30,
+    markY: 24,
+    markR: 7,
+    visY: 10,
     pressIn: true,
     trick: "roar",
   },
@@ -368,7 +376,14 @@ export class ArenaBeast extends Phaser.Physics.Arcade.Sprite {
 
   private readonly profile: BeastProfile;
   private readonly allyTint?: number;
-  private vis!: Phaser.GameObjects.Image;
+  private vis!: Phaser.GameObjects.Sprite;
+  private readonly animated: boolean;
+  private currentClip: BeastAnimClip | "" = "";
+  private lastAiState: BeastAi = "circle";
+  private preferWalk = false;
+  private walkTimeScale = 1;
+  private lastFootfall = 0;
+  private debugLabel?: Phaser.GameObjects.Text;
   private shadow!: Phaser.GameObjects.Image;
   private nameTag!: Phaser.GameObjects.Text;
   private hpBarBg!: Phaser.GameObjects.Rectangle;
@@ -419,11 +434,20 @@ export class ArenaBeast extends Phaser.Physics.Arcade.Sprite {
     this.setCollideWorldBounds(true);
 
     this.shadow = scene.add.image(x, y + 8, "char-shadow").setDepth(1).setScale(p.shadowScale);
-    this.vis = scene.add.image(x, y, p.tex).setDepth(y).setScale(p.visScale);
+    this.animated = hasBeastAnims(scene, kind);
+    const animCfg = BEAST_ANIM_CONFIG[kind];
+    const tex = this.animated ? beastSheetTexKey(kind, "idle") : p.tex;
+    this.vis = scene.add.sprite(x, y, tex).setDepth(y).setScale(p.visScale);
+    if (this.animated && animCfg) {
+      this.vis.setOrigin(animCfg.originX, animCfg.originY);
+      const idleKey = beastAnimKey(kind, "idle");
+      if (scene.anims.exists(idleKey)) this.vis.play(idleKey);
+      this.currentClip = "idle";
+    }
     if (this.allyTint) this.vis.setTint(this.allyTint);
     const bar = team === "player" ? 0x6aa84f : 0xb33a2b;
     this.hpBarBg = scene.add.rectangle(x, y - p.hudY, 36, 5, 0x1a1210).setStrokeStyle(1, barStroke ?? 0xd4a84b, 0.85).setDepth(2000);
-    this.hpBarFg = scene.add.rectangle(x, y - p.hudY, 36, 5, bar).setDepth(2001);
+    this.hpBarFg = scene.add.rectangle(x - 17, y - p.hudY, 34, 3, bar).setOrigin(0, 0.5).setDepth(2001);
     this.nameTag = scene.add
       .text(x, y - p.hudY - 10, p.label, {
         fontFamily: "Cinzel, Georgia",
@@ -434,6 +458,18 @@ export class ArenaBeast extends Phaser.Physics.Arcade.Sprite {
       })
       .setOrigin(0.5)
       .setDepth(2002);
+    if (this.animated && scene.registry.get("debug")) {
+      this.debugLabel = scene.add
+        .text(x, y - p.hudY - 22, "idle f0", {
+          fontFamily: "monospace",
+          fontSize: "10px",
+          color: "#ffe08a",
+          stroke: "#1a1210",
+          strokeThickness: 3,
+        })
+        .setOrigin(0.5)
+        .setDepth(2003);
+    }
   }
 
   get alive(): boolean {
@@ -621,8 +657,29 @@ export class ArenaBeast extends Phaser.Physics.Arcade.Sprite {
 
   syncVisuals(now: number): void {
     const p = this.profile;
-    const bob = this.alive ? Math.sin(now / (this.kind === "bear" ? 240 : 140)) * (this.kind === "bear" ? 0.7 : 1.2) : 0;
+    const body = this.body as Phaser.Physics.Arcade.Body | null;
+    const speed = body ? Math.hypot(body.velocity.x, body.velocity.y) : 0;
+    const bob =
+      this.alive && !this.animated
+        ? Math.sin(now / (this.kind === "bear" ? 240 : 140)) * (this.kind === "bear" ? 0.7 : 1.2)
+        : this.animated && this.alive && this.kind === "eagle"
+          ? Math.sin(now / 160) * 4
+          : 0;
+
     this.shadow.setPosition(this.x, this.y + (this.kind === "bear" ? 16 : 8));
+    if (this.animated && this.alive) {
+      const telegraph = this.aiState === "telegraph";
+      const lunge = this.aiState === "lunge";
+      const roar = telegraph && (this.kind === "lion" || this.kind === "tiger");
+      const charge = telegraph && (this.kind === "bull" || this.kind === "boar" || this.kind === "rhino");
+      const slam = telegraph && (this.kind === "elephant" || this.kind === "bear");
+      this.shadow.setScale(
+        p.shadowScale * (slam ? 1.26 : roar ? 1.18 : charge ? 1.22 : telegraph ? 1.12 : lunge ? 1.06 : 1),
+      );
+    } else {
+      this.shadow.setScale(p.shadowScale);
+    }
+
     if (this.snareFx) {
       if (now >= this.snaredUntil || !this.alive) {
         this.snareFx.destroy();
@@ -633,42 +690,237 @@ export class ArenaBeast extends Phaser.Physics.Arcade.Sprite {
         this.snareFx.setAlpha(0.55 + 0.4 * Math.sin(now / 90));
       }
     }
+
     this.vis.setPosition(this.x, this.y - p.visY + bob);
+    if (this.animated && this.alive && this.aiState === "lunge" && this.kind !== "eagle") {
+      const fx = this.facing.x || 1;
+      const fy = this.facing.y || 0;
+      const frame = this.vis.anims.currentFrame?.index ?? 0;
+      const lungeT = frame / 3;
+      const chargeBoost =
+        this.kind === "elephant" ? 10 : this.kind === "rhino" || this.kind === "bear" ? 8 : this.kind === "bull" || this.kind === "boar" ? 6 : 0;
+      this.vis.x += fx * (4 + lungeT * 10 + chargeBoost);
+      this.vis.y += fy * (4 + lungeT * 10 + chargeBoost);
+    }
     this.vis.setFlipX(this.facing.x < 0);
     this.vis.setDepth(this.y);
     this.setDepth(this.y);
+
+    if (this.animated) {
+      this.syncAnimatedClip(now, speed);
+    } else {
+      this.syncStaticPose(now);
+    }
+
     if (now < this.flashUntil) this.vis.setTint(0xffffff);
     else if (!this.alive) this.vis.setTint(0x6a4a42);
     else if (this.allyTint) this.vis.setTint(this.allyTint);
     else this.vis.clearTint();
-    if (!this.alive) {
-      this.vis.setAngle(this.kind === "serpent" ? 18 : 90);
-      this.vis.setAlpha(0.5);
-    } else if (this.kind === "eagle") {
-      const dive = this.aiState === "lunge" ? 22 : this.aiState === "telegraph" ? -10 : Math.sin(now / 160) * 8;
-      this.vis.setAngle(this.facing.x < 0 ? dive : -dive);
-    } else if (this.kind === "serpent") {
-      const reared = this.aiState === "telegraph" ? -14 : 0;
-      this.vis.setAngle(reared + Math.sin(now / 150) * 9);
-    } else if (this.kind === "bear" || this.kind === "elephant") {
-      this.vis.setAngle(this.aiState === "telegraph" ? (this.facing.x < 0 ? -8 : 8) : 0);
-    } else if (this.kind === "rhino" && this.aiState === "telegraph") {
-      this.vis.setAngle(this.facing.x < 0 ? -6 : 6);
-    } else {
-      this.vis.setAngle(0);
-    }
 
     const show = this.alive;
     this.hpBarBg.setVisible(show);
     this.hpBarFg.setVisible(show);
     this.nameTag.setVisible(show);
     if (show) {
-      const w = 36 * (this.health / this.maxHealth);
+      const ratio = Phaser.Math.Clamp(this.health / Math.max(1, this.maxHealth), 0, 1);
+      const inner = 34;
       this.hpBarBg.setPosition(this.x, this.y - p.hudY);
-      this.hpBarFg.setPosition(this.x - 18 + w / 2, this.y - p.hudY);
-      this.hpBarFg.width = Math.max(1, w);
+      this.hpBarFg.setPosition(this.x - inner / 2, this.y - p.hudY);
+      this.hpBarFg.width = inner * ratio;
       this.nameTag.setPosition(this.x, this.y - p.hudY - 10);
     }
+  }
+
+  private syncAnimatedClip(now: number, speed: number): void {
+    if (speed > 18) this.preferWalk = true;
+    else if (speed < 8) this.preferWalk = false;
+
+    const clip = pickBeastAnimClip({
+      alive: this.alive,
+      aiState: this.aiState,
+      body: this.body as Phaser.Physics.Arcade.Body,
+      preferWalk: this.preferWalk,
+    });
+    const key = beastAnimKey(this.kind, clip);
+    const stateEntered = this.aiState !== this.lastAiState;
+
+    if (stateEntered) {
+      if (this.aiState === "telegraph") this.puffTelegraphScrape();
+      if (this.aiState === "lunge") this.puffLungeJuice();
+      this.lastAiState = this.aiState;
+    }
+
+    if (this.scene.anims.exists(key)) {
+      const oneShot = clip === "lunge" || clip === "death";
+      const telegraphStart = clip === "telegraph" && stateEntered;
+      if (this.currentClip !== clip || (stateEntered && oneShot) || telegraphStart) {
+        this.vis.play(key, false);
+        this.currentClip = clip;
+      }
+    }
+
+    if (clip === "walk") {
+      const targetTs = Phaser.Math.Clamp(speed / 100, 0.75, 1.25);
+      this.walkTimeScale += (targetTs - this.walkTimeScale) * 0.12;
+      this.vis.anims.timeScale = this.walkTimeScale;
+      const footGap =
+        this.kind === "serpent"
+          ? 280
+          : this.kind === "elephant"
+            ? 380
+            : this.kind === "bear" || this.kind === "rhino"
+              ? 320
+              : this.kind === "bull" || this.kind === "boar"
+                ? 300
+                : 220;
+      if (this.kind !== "eagle" && speed > 14 && now - this.lastFootfall > footGap) {
+        this.lastFootfall = now;
+        this.puffFootfall();
+      }
+    } else {
+      this.vis.anims.timeScale = 1;
+      this.walkTimeScale = 1;
+    }
+
+    if (this.debugLabel) {
+      const frame = this.vis.anims.currentFrame?.index ?? 0;
+      this.debugLabel.setText(`${clip} f${frame}`);
+      this.debugLabel.setPosition(this.x, this.y - this.profile.hudY - 22);
+      this.debugLabel.setVisible(this.alive);
+    }
+
+    if (!this.alive) {
+      this.vis.setAngle(this.kind === "serpent" ? 18 : this.kind === "eagle" ? 90 : 0);
+      this.vis.setAlpha(0.5);
+    } else if (this.kind === "serpent") {
+      const reared = this.aiState === "telegraph" ? -14 : this.aiState === "lunge" ? 8 : 0;
+      const sway = clip === "idle" || clip === "walk" ? Math.sin(now / 150) * 6 : 0;
+      this.vis.setAngle(reared + sway);
+      this.vis.setAlpha(1);
+    } else if (this.kind === "eagle") {
+      const dive = this.aiState === "lunge" ? 22 : this.aiState === "telegraph" ? -10 : Math.sin(now / 160) * 8;
+      this.vis.setAngle(this.facing.x < 0 ? dive : -dive);
+      this.vis.setAlpha(1);
+    } else {
+      this.vis.setAngle(0);
+      this.vis.setAlpha(1);
+    }
+  }
+
+  private puffTelegraphScrape(): void {
+    const dustTint =
+      this.kind === "serpent"
+        ? 0x6aa870
+        : this.kind === "eagle"
+          ? 0xc9d8e8
+          : this.kind === "lion" || this.kind === "tiger"
+            ? 0xc4a070
+            : this.kind === "bull"
+              ? 0xa04038
+              : this.kind === "boar"
+                ? 0x7a5848
+                : this.kind === "bear"
+                  ? 0x6a3e24
+                  : this.kind === "rhino"
+                    ? 0x7a7870
+                    : this.kind === "elephant"
+                      ? 0x9a9890
+                      : 0xa08050;
+    const lift = this.kind === "eagle";
+    for (let i = 0; i < 3; i++) {
+      const p = this.scene.add
+        .image(this.x + Phaser.Math.Between(-10, 10), this.y + (lift ? -6 : 10), "fx-dust")
+        .setDepth(this.y - 1)
+        .setAlpha(lift ? 0.35 : 0.5)
+        .setScale(lift ? 0.35 : 0.45)
+        .setTint(dustTint);
+      this.scene.tweens.add({
+        targets: p,
+        x: p.x + Phaser.Math.Between(-8, 8),
+        y: p.y + (lift ? -6 : 4),
+        alpha: 0,
+        duration: 320,
+        onComplete: () => p.destroy(),
+      });
+    }
+  }
+
+  private puffLungeJuice(): void {
+    const fx = this.facing.x || 1;
+    const fy = this.facing.y || 0;
+    const dustTint =
+      this.kind === "serpent"
+        ? 0x8ecf6a
+        : this.kind === "eagle"
+          ? 0xe8dcc8
+          : this.kind === "bull"
+            ? 0xc46a58
+            : this.kind === "boar"
+              ? 0x8a6858
+              : this.kind === "bear"
+                ? 0x8a5a38
+                : this.kind === "rhino" || this.kind === "elephant"
+                  ? 0xb0a898
+                  : 0xc4a36b;
+    const aerial = this.kind === "eagle";
+    for (let i = 0; i < 4; i++) {
+      const p = this.scene.add
+        .image(this.x + fx * 8, this.y + (aerial ? -4 : 8), "fx-dust")
+        .setDepth(this.y - 1)
+        .setAlpha(aerial ? 0.45 : 0.6)
+        .setScale(aerial ? 0.35 + Math.random() * 0.2 : 0.55 + Math.random() * 0.3)
+        .setTint(dustTint);
+      this.scene.tweens.add({
+        targets: p,
+        x: p.x + fx * Phaser.Math.Between(aerial ? 6 : 12, aerial ? 18 : 28),
+        y: p.y + fy * Phaser.Math.Between(aerial ? 4 : 8, aerial ? 14 : 20) - (aerial ? 8 : 4),
+        alpha: 0,
+        duration: aerial ? 220 : 280,
+        onComplete: () => p.destroy(),
+      });
+    }
+  }
+
+  private syncStaticPose(now: number): void {
+    if (!this.alive) {
+      this.vis.setAngle(this.kind === "serpent" ? 18 : 90);
+      this.vis.setAlpha(0.5);
+    } else if (this.kind === "eagle") {
+      const dive = this.aiState === "lunge" ? 22 : this.aiState === "telegraph" ? -10 : Math.sin(now / 160) * 8;
+      this.vis.setAngle(this.facing.x < 0 ? dive : -dive);
+      this.vis.setAlpha(1);
+    } else if (this.kind === "serpent") {
+      const reared = this.aiState === "telegraph" ? -14 : 0;
+      this.vis.setAngle(reared + Math.sin(now / 150) * 9);
+      this.vis.setAlpha(1);
+    } else if (this.kind === "bear" || this.kind === "elephant") {
+      this.vis.setAngle(this.aiState === "telegraph" ? (this.facing.x < 0 ? -8 : 8) : 0);
+      this.vis.setAlpha(1);
+    } else if (this.kind === "rhino" && this.aiState === "telegraph") {
+      this.vis.setAngle(this.facing.x < 0 ? -6 : 6);
+      this.vis.setAlpha(1);
+    } else {
+      this.vis.setAngle(0);
+      this.vis.setAlpha(1);
+    }
+  }
+
+  private puffFootfall(): void {
+    const dustTint = this.kind === "serpent" ? 0x7a9868 : 0xc4a36b;
+    const p = this.scene.add
+      .image(this.x + Phaser.Math.Between(-6, 6), this.y + 8, "fx-dust")
+      .setDepth(this.y - 1)
+      .setAlpha(this.kind === "serpent" ? 0.35 : 0.45)
+      .setScale(this.kind === "serpent" ? 0.4 + Math.random() * 0.2 : 0.5 + Math.random() * 0.35)
+      .setTint(dustTint);
+    this.scene.tweens.add({
+      targets: p,
+      y: p.y - 4,
+      alpha: 0,
+      scale: 1.1,
+      duration: 260,
+      onComplete: () => p.destroy(),
+    });
   }
 
   destroy(fromScene?: boolean): void {
@@ -677,6 +929,7 @@ export class ArenaBeast extends Phaser.Physics.Arcade.Sprite {
     this.vis?.destroy();
     this.shadow?.destroy();
     this.nameTag?.destroy();
+    this.debugLabel?.destroy();
     this.hpBarBg?.destroy();
     this.hpBarFg?.destroy();
     super.destroy(fromScene);
@@ -757,9 +1010,20 @@ export class ArenaBeast extends Phaser.Physics.Arcade.Sprite {
     this.hpBarBg?.setVisible(false);
     this.hpBarFg?.setVisible(false);
     this.nameTag?.setVisible(false);
-    this.vis.setAngle(this.kind === "serpent" ? 18 : 90);
-    this.vis.setAlpha(0.5);
-    this.vis.setTint(0x6a4a42);
+    if (this.animated) {
+      const deathKey = beastAnimKey(this.kind, "death");
+      if (this.scene.anims.exists(deathKey)) {
+        this.vis.play(deathKey, false);
+        this.currentClip = "death";
+      }
+      this.lastAiState = "circle";
+      this.vis.setAlpha(0.5);
+      this.vis.setTint(0x6a4a42);
+    } else {
+      this.vis.setAngle(this.kind === "serpent" ? 18 : 90);
+      this.vis.setAlpha(0.5);
+      this.vis.setTint(0x6a4a42);
+    }
     const body = this.body as Phaser.Physics.Arcade.Body | undefined;
     if (body) body.enable = false;
   }

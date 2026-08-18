@@ -3,7 +3,7 @@ import { TILE_SIZE, HUD_CAM_PAD, GAME_WIDTH, GAME_HEIGHT } from "../config";
 import { gameState } from "../state/GameState";
 import { bus } from "../systems/bus";
 import { audio } from "../systems/audio";
-import { paintMap, labelMap, animateBrazier, placeLamp } from "../systems/worldRender";
+import { paintMap, labelMap, animateBrazier, placeLamp, spawnChampionFireRing, outsideFireRing, type ChampionFireRing } from "../systems/worldRender";
 import { arenaMetaFor, buildArena } from "../maps/maps";
 import { Fighter, attachHpBar } from "../entities/Fighter";
 import { WorldProp } from "../entities/World";
@@ -38,6 +38,7 @@ type TossKind = "flower" | "fruit" | "cup" | "rock";
 
 const CROWD_MISSIO = 70;
 const CROWD_IUGULA = 40;
+const FIRE_RING_HOUSES = new Set(["leo", "taurus", "tigris", "rhinoceros", "elephas"]);
 
 export class ArenaScene extends Phaser.Scene {
   private player!: Fighter;
@@ -73,6 +74,8 @@ export class ArenaScene extends Phaser.Scene {
   private turtleMs = 0;
   private pressMs = 0;
   private fromNight = false;
+  private fireRing?: ChampionFireRing;
+  private lastFireBurnAt = 0;
 
   constructor() {
     super("ArenaScene");
@@ -86,6 +89,7 @@ export class ArenaScene extends Phaser.Scene {
     this.beast = undefined;
     this.pal = undefined;
     this.spectators = [];
+    this.fireRing = undefined;
     this.watching = false;
     this.schoolNpcId = "";
     this.studentAi = undefined;
@@ -115,6 +119,8 @@ export class ArenaScene extends Phaser.Scene {
     this.turtleMs = 0;
     this.pressMs = 0;
     this.fromNight = gameState.pendingNight;
+    this.fireRing = undefined;
+    this.lastFireBurnAt = 0;
     this.opponentId = gameState.pendingArenaOpponent ?? "serp_1";
     const school = gameState.pendingSchoolBout;
     this.watching = Boolean(school);
@@ -226,6 +232,10 @@ export class ArenaScene extends Phaser.Scene {
       this.physics.add.collider(this.pal, solids);
       this.physics.add.collider(this.pal, this.enemy);
       if (this.beast) this.physics.add.collider(this.pal, this.beast);
+    }
+
+    if (!this.watching && fighter.isChampion && FIRE_RING_HOUSES.has(house.id)) {
+      this.fireRing = spawnChampionFireRing(this, this.sand);
     }
 
     const propTex: Record<string, string> = {
@@ -437,6 +447,33 @@ export class ArenaScene extends Phaser.Scene {
     return kind ?? null;
   }
 
+  private tickFireRing(now: number): void {
+    const ring = this.fireRing;
+    if (!ring || now < this.lastFireBurnAt + 420) return;
+    const fromCenter = (x: number, y: number) => new Phaser.Math.Vector2(ring.cx - x, ring.cy - y);
+    const burnFighter = (f: Fighter | undefined): boolean => {
+      if (!f?.alive || !outsideFireRing(f.x, f.y, ring)) return false;
+      const hit = f.takeDamage(4, fromCenter(f.x, f.y), 42);
+      if (hit === "hit") {
+        floatNumber(this, f.x, f.y - 28, "4", "#ff6a20");
+        burst(this, f.x, f.y, 0xff7a28);
+      }
+      return hit === "hit";
+    };
+    const burnBeast = (b: ArenaBeast | undefined): boolean => {
+      if (!b?.alive || !outsideFireRing(b.x, b.y, ring)) return false;
+      const hit = b.takeDamage(3, fromCenter(b.x, b.y), 36);
+      if (hit === "hit") {
+        floatNumber(this, b.x, b.y - 24, "3", "#ff6a20");
+        burst(this, b.x, b.y, 0xff7a28);
+      }
+      return hit === "hit";
+    };
+    const burned =
+      burnFighter(this.player) || burnFighter(this.enemy) || burnBeast(this.beast) || burnBeast(this.pal);
+    if (burned) this.lastFireBurnAt = now;
+  }
+
   private seatCrowd(worldW: number, worldH: number, houseTint: number): void {
     const north = [
       { y: 16, n: 26, stagger: 0 },
@@ -482,8 +519,8 @@ export class ArenaScene extends Phaser.Scene {
   private swellCrowd(ms = 700, side?: "north" | "south"): void {
     const now = this.time.now;
     this.cheerUntil = Math.max(this.cheerUntil, now + ms);
-    audio.roar(ms >= 1400 ? "big" : ms >= 700 ? "hit" : "chip");
-    const chance = 0.28 + this.favor / 240;
+    audio.roar(ms >= 1800 ? "big" : ms >= 900 ? "hit" : "chip");
+    const chance = 0.28 + this.favor / 220 + (ms >= 1400 ? 0.12 : 0);
     for (const s of this.spectators) {
       if (side && s.side !== side) continue;
       if (Math.random() < chance) s.raisedUntil = now + Phaser.Math.Between(280, 640);
@@ -689,7 +726,14 @@ export class ArenaScene extends Phaser.Scene {
   }
 
   private onFoeHit = (attacker: Fighter, target: { x: number; y: number }, kind: "hit" | "block" | "perfect" | "parry" | "miss"): void => {
-    this.swellCrowd(kind === "hit" ? 820 : 480, attacker === this.player ? "north" : "south");
+    const cheerMs = kind === "hit" ? 920 : kind === "block" ? 520 : 480;
+    this.swellCrowd(cheerMs, attacker === this.player ? "north" : "south");
+    if (kind === "hit") {
+      this.sandStain(target.x, target.y);
+      if (attacker.attackKind === "heavy" || attacker.attackKind === "special") {
+        this.sandStain(target.x + Phaser.Math.Between(-12, 12), target.y + Phaser.Math.Between(-8, 8));
+      }
+    }
     const onYou = target === this.player;
     if (kind === "perfect" || kind === "parry") {
       this.addFavor(onYou ? -2 : 6);
@@ -701,6 +745,8 @@ export class ArenaScene extends Phaser.Scene {
         this.firstBlood = true;
         this.addFavor(12);
         audio.roar("big");
+        this.swellCrowd(1400, "north");
+        this.swellCrowd(1400, "south");
       }
     }
     if (attacker === this.enemy && onYou && kind === "hit") this.addFavor(-8);
@@ -808,6 +854,7 @@ export class ArenaScene extends Phaser.Scene {
     if (this.blockingHeld) this.player.setBlocking(true);
     this.player.regen(delta);
     this.updateHabits(delta);
+    this.tickFireRing(now);
     if (this.enemy.alive) this.ai.update(this.player, now);
     else this.enemy.setVelocity(0, 0);
     const beastPrey = this.beastPrey();
@@ -865,8 +912,18 @@ export class ArenaScene extends Phaser.Scene {
 
     this.cameras.main.stopFollow();
     this.cameras.main.pan((this.player.x + this.enemy.x) / 2, (this.player.y + this.enemy.y) / 2, 280);
+    if (gameState.settings.screenShake) {
+      this.tweens.add({
+        targets: this.cameras.main,
+        zoom: 1.12,
+        duration: 160,
+        ease: "Quad.easeOut",
+        yoyo: true,
+        hold: 80,
+      });
+    }
     this.haltBodies();
-    this.swellCrowd(1800);
+    this.swellCrowd(2200);
 
     this.crowdMissio = this.favor >= CROWD_MISSIO;
     if (this.watching) {
@@ -1147,9 +1204,9 @@ export class ArenaScene extends Phaser.Scene {
     const stain = this.add.image(x, y + 10, "fx-dust").setDepth(2).setAlpha(0.75).setScale(1.5).setTint(dustTint);
     this.tweens.add({
       targets: stain,
-      alpha: 0,
-      scale: 2.3,
-      duration: 1500,
+      alpha: 0.12,
+      scale: 2.4,
+      duration: 10000,
       onComplete: () => stain.destroy(),
     });
     const ring = this.add.image(x, y, "fx-ring").setTint(ringTint).setAlpha(0.6).setScale(0.35).setDepth(3);

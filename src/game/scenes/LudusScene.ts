@@ -1579,7 +1579,7 @@ export class LudusScene extends Phaser.Scene {
         const reward = applyCoachingLesson(npcId);
         bus.emit("result", {
           title: "Lesson learned",
-          body: `You taught the full lesson.\n\n${reward.message}\n\nCheck their locker, then book their circuit from The School.`,
+          body: `You taught the full lesson.\n\n${reward.message}\n\nSPAR for Training, or south gate → School to send them.`,
         });
         audio.sfx("missio");
       } else {

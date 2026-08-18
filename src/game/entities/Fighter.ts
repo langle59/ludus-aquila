@@ -4,6 +4,7 @@ import type { AttackKind, AttackShape, FighterStats, WeaponDef, WeaponId } from 
 import { getWeapon, flurryInterval, isHeavyWeapon, weaponMove } from "../data/weapons";
 import { makeBodyTexture, bodyStyleFor, type BodyStyle } from "../systems/assets";
 import { audio } from "../systems/audio";
+import { sandKick } from "../systems/combat";
 import { clearInjury, getSkillMods, playerCombatStats } from "../systems/progression";
 import { gameState } from "../state/GameState";
 import { bus } from "../systems/bus";
@@ -411,12 +412,33 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
     this.setVelocity(dx * (340 + (mods?.dodgeSpeed ?? 0)), dy * (340 + (mods?.dodgeSpeed ?? 0)));
     audio.sfx("dodge");
     this.puffDust(6);
+    this.spawnDodgeGhost();
+    this.scene.time.delayedCall(90, () => this.spawnDodgeGhost());
     this.scene.time.delayedCall(180, () => {
       if (!this.stillHere()) return;
       this.setVelocity(0, 0);
       if (this.combat === "dodge") this.combat = "idle";
+      this.puffDust(4);
+      sandKick(this.scene, this.x, this.y + 10, Phaser.Math.RadToDeg(Math.atan2(this.facing.y, this.facing.x)));
     });
     return true;
+  }
+
+  private spawnDodgeGhost(): void {
+    const ghost = this.scene.add
+      .image(this.bodyVisual.x, this.bodyVisual.y, this.visKey)
+      .setDepth(this.y - 1)
+      .setAlpha(0.45)
+      .setAngle(this.bodyVisual.angle)
+      .setFlipX(this.bodyVisual.flipX);
+    this.scene.tweens.add({
+      targets: ghost,
+      alpha: 0,
+      scaleX: this.bodyVisual.flipX ? -1.08 : 1.08,
+      scaleY: 1.08,
+      duration: 220,
+      onComplete: () => ghost.destroy(),
+    });
   }
 
   tryParry(): boolean {
@@ -573,7 +595,7 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
     this.lastDamage = dmg;
     this.health = Math.max(0, this.health - dmg);
     this.combat = "hurt";
-    this.flashUntil = now + 120;
+    this.flashUntil = now + 150;
     this.invulnUntil = now + (this.team === "player" ? 420 : 180);
     const angle = Math.atan2(from.y, from.x);
     const k = knock * (1 - this.knockResist);
@@ -799,17 +821,6 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
   }
 
   syncVisuals(now: number): void {
-    this.shadow.setPosition(this.x, this.y + 12);
-    if (this.snareFx) {
-      if (now >= this.snaredUntil || !this.alive) {
-        this.snareFx.destroy();
-        this.snareFx = undefined;
-      } else {
-        this.snareFx.setPosition(this.x, this.y - 6);
-        this.snareFx.setDepth(this.y + 6);
-        this.snareFx.setAlpha(0.55 + 0.4 * Math.sin(now / 90));
-      }
-    }
     const t = this.animT(now);
     const attacking = this.combat === "attack" || this.combat === "special";
     const facingAng = Phaser.Math.RadToDeg(Math.atan2(this.facing.y, this.facing.x));
@@ -818,6 +829,12 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
     let lunge = 0;
     let bodyRot = 0;
     let bob = this.combat === "walk" ? Math.sin(now / 80) * 1.8 : Math.sin(now / 420) * 0.7;
+    if (!attacking && this.combat !== "dodge") {
+      bodyRot += Math.sin(now / 380) * 2.2;
+    }
+    if (this.combat === "walk" && this.body && Math.abs(this.body.velocity.x) > 8) {
+      bodyRot += Math.sign(this.body.velocity.x) * 3;
+    }
     if (attacking) {
       lunge = 6 + easeOutCubic(Math.min(1, t * 2)) * 8;
       bodyRot = this.slashSide * 12 * Math.sin(t * Math.PI);
@@ -850,6 +867,19 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
     this.bodyVisual.setFlipX(this.facing.x < 0);
     this.bodyVisual.setDepth(this.y);
     this.setDepth(this.y);
+    this.shadow.setPosition(this.x, this.y + 12 + bob * 0.4);
+    this.shadow.setScale(1.05 + Math.abs(bob) * 0.04);
+    this.shadow.setAlpha(this.combat === "dodge" ? 0.35 : 0.82);
+    if (this.snareFx) {
+      if (now >= this.snaredUntil || !this.alive) {
+        this.snareFx.destroy();
+        this.snareFx = undefined;
+      } else {
+        this.snareFx.setPosition(this.x, this.y - 6);
+        this.snareFx.setDepth(this.y + 6);
+        this.snareFx.setAlpha(0.55 + 0.4 * Math.sin(now / 90));
+      }
+    }
     if (now < this.perfectFlashUntil) this.bodyVisual.setTint(0xffe08a);
     else if (now < this.unguentFlashUntil) this.bodyVisual.setTint(0xa8d878);
     else if (now < this.flashUntil) this.bodyVisual.setTint(0xffffff);
@@ -876,9 +906,10 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
       this.hpBarFg.setVisible(show);
       if (show) {
         const ratio = Phaser.Math.Clamp(this.health / Math.max(1, this.stats.maxHealth), 0, 1);
+        const inner = 38;
         this.hpBarBg.setPosition(this.x, this.y - 32);
-        this.hpBarFg.setPosition(this.x - 20 + (40 * ratio) / 2, this.y - 32);
-        this.hpBarFg.width = 40 * ratio;
+        this.hpBarFg.setPosition(this.x - inner / 2, this.y - 32);
+        this.hpBarFg.width = inner * ratio;
       }
     }
     if (this.nameTag) {
@@ -1010,7 +1041,10 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
         }
       }
     } else {
+      const idleSway = Math.sin(now / 260) * 4;
       reach = 11 + Math.sin(now / 220) * 0.6;
+      ang += idleSway;
+      ang2 -= idleSway * 0.85;
     }
 
     const bx = hx + this.facing.x * reach + right.x * 6;
@@ -1090,7 +1124,7 @@ export function attachHpBar(scene: Phaser.Scene, f: Fighter, name?: string, styl
   const fill = style?.fill ?? 0xb33a2b;
   const stroke = style?.stroke ?? 0xd4a84b;
   f.hpBarBg = scene.add.rectangle(f.x, f.y - 32, 40, 6, 0x1a1210).setStrokeStyle(1, stroke, 0.85).setDepth(2000);
-  f.hpBarFg = scene.add.rectangle(f.x, f.y - 32, 40, 6, fill).setDepth(2001);
+  f.hpBarFg = scene.add.rectangle(f.x - 19, f.y - 32, 38, 4, fill).setOrigin(0, 0.5).setDepth(2001);
   if (name) {
     f.nameTag = scene.add
       .text(f.x, f.y - 42, name, {

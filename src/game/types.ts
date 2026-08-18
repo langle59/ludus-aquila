@@ -352,6 +352,8 @@ export interface SaveData {
   palUnlocked: boolean;
   palBrought: boolean;
   palName: string;
+  /** Optional test/dev override — pal species independent of pledged house. */
+  palBeastKind?: BeastKind;
   palTint: "house" | "ivory" | "night";
   palTraining: number;
   palPoints: number;

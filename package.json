@@ -6,12 +6,17 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "import:lion": "tsx scripts/import-lion-png.ts",
+    "import:elephant": "tsx scripts/import-elephant-png.ts",
+    "import:beast": "tsx scripts/import-beast-png.ts"
   },
   "dependencies": {
     "phaser": "^3.87.0"
   },
   "devDependencies": {
+    "canvas": "^3.1.0",
+    "tsx": "^4.19.3",
     "typescript": "^5.8.2",
     "vite": "^6.2.2"
   }

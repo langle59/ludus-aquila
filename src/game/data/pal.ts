@@ -66,10 +66,25 @@ export function getPalSkill(id: PalSkillId): PalSkillDef {
 }
 
 export function palKind(save: SaveData = gameState.save): BeastKind {
+  if (save.palBeastKind) return save.palBeastKind;
   return getHouse(save.playerHouse ?? "")?.beastKind ?? "eagle";
 }
 
+const PAL_BEAST_NAMES: Record<BeastKind, string> = {
+  serpent: "Serpent",
+  wolf: "Wolf",
+  bear: "Bear",
+  lion: "Lion",
+  bull: "Bull",
+  boar: "Boar",
+  eagle: "Eagle",
+  tiger: "Tiger",
+  rhino: "Rhino",
+  elephant: "Elephant",
+};
+
 export function palAnimalName(save: SaveData = gameState.save): string {
+  if (save.palBeastKind) return PAL_BEAST_NAMES[save.palBeastKind];
   return getHouse(save.playerHouse ?? "")?.animalName ?? "Eagle";
 }
 
